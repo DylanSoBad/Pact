@@ -3,42 +3,66 @@
 @tailwind utilities;
 
 :root {
-  --color-bg: #000000;
-  --color-panel: #111111;
-  --color-line: #333333;
-  --color-text: #ffffff;
-  --color-muted: #a3a3a3; /* Boosted for 4.5:1 contrast on black */
-  
-  --color-lime: #c8f542;
-  --color-red: #ff3333;
-  --color-amber: #ffaa00;
+  --color-bg: #090a0c;
+  --color-surface: #111215;
+  --color-surface-hover: #17181c;
+  --color-surface-raised: #1c1d22;
+  --color-border: #222328;
+  --color-border-subtle: #1a1b1f;
+  --color-border-hover: #32343b;
 
-  --font-sans: var(--font-ibm-plex-sans), system-ui, sans-serif;
-  --font-mono: var(--font-ibm-plex-mono), monospace;
+  --color-text-primary: #f4f4f6;
+  --color-text-secondary: #93959f;
+  --color-text-muted: #60626c;
+
+  --color-accent: #22c55e;
+  --color-accent-subtle: rgba(34, 197, 94, 0.1);
+  --color-warning: #f59e0b;
+  --color-warning-subtle: rgba(245, 158, 11, 0.1);
+  --color-danger: #ef4444;
+  --color-danger-subtle: rgba(239, 68, 68, 0.1);
+
+  --font-sans: var(--font-ibm-plex-sans), -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  --font-mono: var(--font-ibm-plex-mono), "SFMono-Regular", Consolas, Menlo, monospace;
 }
 
 body {
-  background: var(--color-bg);
-  color: var(--color-text);
+  background-color: var(--color-bg);
+  color: var(--color-text-primary);
   font-family: var(--font-sans);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
 }
 
-/* Brutalist resets */
-* {
-  border-radius: 0 !important;
-  box-shadow: none !important;
+/* Precise hairline border utilities */
+.hairline-b {
+  border-bottom: 1px solid var(--color-border);
+}
+.hairline-t {
+  border-top: 1px solid var(--color-border);
+}
+.hairline {
+  border: 1px solid var(--color-border);
 }
 
-input:focus-visible, 
-button:focus-visible, 
-select:focus-visible, 
-textarea:focus-visible {
-  outline: none !important;
-  box-shadow: 0 0 0 2px var(--color-lime) !important;
+/* Focus styles for keyboard accessibility */
+*:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 1.5px #22c55e !important;
 }
 
-/* Hide scrollbar for tape UI */
+/* Custom minimal scrollbar */
 ::-webkit-scrollbar {
-  width: 0px;
+  width: 5px;
+  height: 5px;
+}
+::-webkit-scrollbar-track {
   background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: #27272a;
+  border-radius: 9999px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: #3f3f46;
 }

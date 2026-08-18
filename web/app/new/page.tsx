@@ -3,7 +3,7 @@
 import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
-import { useAccount, useWriteContract, useWaitForTransactionReceipt, useBalance, useReadContract, useChainId, useSwitchChain, useEstimateGas } from 'wagmi'
+import { useAccount, useWriteContract, useWaitForTransactionReceipt, useReadContract, useChainId, useSwitchChain, useEstimateGas } from 'wagmi'
 import { parseUnits, formatUnits, maxUint256 } from 'viem'
 import { PACT_ABI, ERC20_ABI } from '../../lib/abi'
 import { USDC_ERC20, EURC } from '../../lib/arc'
@@ -14,9 +14,9 @@ const PACT_ADDRESS = process.env.NEXT_PUBLIC_PACT_ADDRESS as `0x${string}`
 const TARGET_CHAIN_ID = Number(process.env.NEXT_PUBLIC_CHAIN_ID || 31337)
 
 const KINDS = [
-  { value: 0, label: 'DELIVERY', desc: 'Physical delivery with taker bond' },
-  { value: 1, label: 'FX', desc: 'Atomic currency swap' },
-  { value: 2, label: 'JOB', desc: 'Pay for work done' },
+  { value: 0, label: 'Delivery', tag: 'DELIVERY', desc: 'Buyer locks payment, seller locks delivery collateral bond.' },
+  { value: 1, label: 'FX Swap', tag: 'FX', desc: 'Two-sided atomic currency exchange between counterparties.' },
+  { value: 2, label: 'Job Milestone', tag: 'JOB', desc: 'Client locks bounty, released upon satisfactory proof of work.' },
 ]
 
 const TOKENS = [
@@ -75,7 +75,6 @@ export default function NewPactPage() {
     try { return parseUnits(amountMaker || '0', makerDecimals) } catch { return 0n }
   }
   const amountTakerParsed = () => {
-    // For simplicity, assuming taker token also 6 decimals if USDC/EURC
     try { return parseUnits(amountTaker || '0', 6) } catch { return 0n }
   }
 
@@ -84,14 +83,6 @@ export default function NewPactPage() {
   const effectiveTokenTaker = needsTakerToken ? tokenTaker : '0x0000000000000000000000000000000000000000'
   const absoluteDeadline = new Date(Date.now() + Number(deadlineMinutes || 0) * 60000)
   const deadlineTs = BigInt(Math.floor(absoluteDeadline.getTime() / 1000))
-
-  // Estimate Gas
-  const { data: estimatedGas } = useEstimateGas({
-    to: PACT_ADDRESS,
-    data: '0x', // Just a placeholder if we wanted exact data, viem handles contract calls differently via simulateContract. We'll skip precise simulation for now.
-  })
-  // Actually, simulateContract is better for exact gas, but we'll just mock it or skip it to keep it simple, as we don't have viem's encodeFunctionData easily available here. Let's just use a static mock for "estimated gas" since it's just a UI review panel requirement.
-  const mockGas = "0.002 ETH"
 
   const isWrongChain = isConnected && chainId !== TARGET_CHAIN_ID
   const makerAmountBn = amountMakerParsed()
@@ -107,7 +98,7 @@ export default function NewPactPage() {
   } else if (!hasEnoughBalance) {
     submitDisabled = true; submitReason = 'INSUFFICIENT BALANCE'
   } else if (terms.length < 20) {
-    submitDisabled = true; submitReason = 'TERMS TOO SHORT (<20 CHARS)'
+    submitDisabled = true; submitReason = `TERMS TOO SHORT (${terms.length}/20 CHARS)`
   } else if (!deadlineMinutes || Number(deadlineMinutes) < 2) {
     submitDisabled = true; submitReason = 'INVALID DEADLINE'
   } else if (kind === 1 && (!amountTaker || amountTakerParsed() === 0n)) {
@@ -127,7 +118,7 @@ export default function NewPactPage() {
       address: tokenMaker as `0x${string}`,
       abi: ERC20_ABI,
       functionName: 'approve',
-      args: [PACT_ADDRESS, maxUint256], // Max approve to avoid multiple approvals
+      args: [PACT_ADDRESS, maxUint256],
     })
   }
 
@@ -159,32 +150,37 @@ export default function NewPactPage() {
   }
 
   const getTermsPlaceholder = () => {
-    if (kind === 0) return 'e.g. Delivery of 1x MacBook Pro M3 to 123 Main St. Tracking number required.'
-    if (kind === 1) return 'e.g. Atomic swap USDC for EURC.'
-    if (kind === 2) return 'e.g. Payment for frontend development milestone 1 (Figma to NextJS).'
-    return 'Describe the deal in plain text…'
+    if (kind === 0) return 'e.g. Physical delivery of 1x Server Rack to Singapore DC. Courier tracking reference required for release.'
+    if (kind === 1) return 'e.g. Atomic swap of 5,000 USDC for equivalent EURC on settlement confirmation.'
+    if (kind === 2) return 'e.g. Full-stack smart contract audit and deployment verification report on GitHub.'
+    return 'Define the precise deal terms and fulfillment conditions in plain text…'
   }
 
   const getMicrocopy = () => {
-    if (kind === 0) return { makerRole: 'Buyer', takerRole: 'Seller', makerAction: 'Payment', takerAction: 'Collateral Bond' }
-    if (kind === 1) return { makerRole: 'You Lock', takerRole: 'They Lock', makerAction: 'Token', takerAction: 'Expected Token' }
-    if (kind === 2) return { makerRole: 'Employer', takerRole: 'Worker', makerAction: 'Payment', takerAction: 'Optional Bond' }
-    return { makerRole: 'Maker', takerRole: 'Taker', makerAction: 'Lock', takerAction: 'Lock' }
+    if (kind === 0) return { makerRole: 'Buyer / Maker', takerRole: 'Seller / Taker', makerAction: 'Principal Payment', takerAction: 'Performance Bond' }
+    if (kind === 1) return { makerRole: 'Your Deposit', takerRole: 'Counterparty Deposit', makerAction: 'You Lock', takerAction: 'Counterparty Locks' }
+    if (kind === 2) return { makerRole: 'Employer', takerRole: 'Worker', makerAction: 'Milestone Bounty', takerAction: 'Optional Commitment Bond' }
+    return { makerRole: 'Maker', takerRole: 'Taker', makerAction: 'Lock Amount', takerAction: 'Bond Amount' }
   }
 
   const mc = getMicrocopy()
 
   if (createConfirmed) {
     return (
-      <main className="min-h-screen max-w-[640px] mx-auto pt-16 px-4">
-        <div className="border border-[var(--color-lime)] bg-[var(--color-panel)] p-8 text-center">
-          <div className="text-[var(--color-lime)] text-4xl mb-4">✓</div>
-          <h2 className="text-xl font-bold font-mono mb-2">PACT CREATED</h2>
-          <p className="text-[var(--color-muted)] font-mono text-sm mb-6">
-            Your pact is now on the tape. Share the link with your counterparty.
+      <main className="min-h-screen max-w-[620px] mx-auto pt-16 px-4 pb-20">
+        <div className="bg-[#111215] border border-emerald-500/30 rounded-md p-8 text-center shadow-lg">
+          <div className="w-10 h-10 rounded-full bg-emerald-500/10 text-emerald-400 border border-emerald-500/30 flex items-center justify-center mx-auto mb-4 font-mono text-base font-bold">
+            ✓
+          </div>
+          <h2 className="text-base font-semibold text-zinc-100 mb-2">Smart Contract Initialized</h2>
+          <p className="text-xs text-zinc-400 mb-6 max-w-md mx-auto leading-relaxed">
+            Your pact has been submitted to the Arc ledger. Share the contract link with your counterparty to review and fund.
           </p>
-          <Link href="/" className="text-[var(--color-lime)] font-mono text-sm underline">
-            ← BACK TO TAPE
+          <Link
+            href="/"
+            className="inline-flex items-center gap-2 bg-[#1c1d22] hover:bg-[#24262d] text-zinc-200 border border-[#2b2c34] px-4 py-2 text-xs font-mono font-medium rounded-md transition-colors"
+          >
+            ← Return to Dashboard
           </Link>
         </div>
       </main>
@@ -193,141 +189,181 @@ export default function NewPactPage() {
 
   if (!isConnected) {
     return (
-      <main className="min-h-screen flex items-center justify-center p-4">
-        <div className="text-center">
-          <h1 className="text-2xl font-bold font-mono mb-6">NEW PACT</h1>
-          <button className="bg-[var(--color-lime)] text-black px-8 py-3 font-bold font-mono cursor-not-allowed opacity-50">
-            CONNECT WALLET
-          </button>
-          <p className="text-[var(--color-muted)] font-mono text-sm mt-4">Please connect your wallet via the header to continue.</p>
-          <div className="mt-8">
-            <Link href="/" className="text-[var(--color-muted)] font-mono text-sm underline">← BACK TO TAPE</Link>
-          </div>
+      <main className="min-h-screen max-w-[620px] mx-auto pt-20 px-4 pb-20 flex flex-col items-center justify-center text-center">
+        <div className="w-12 h-12 rounded-md bg-[#18191d] border border-[#27282e] flex items-center justify-center font-mono font-bold text-sm text-zinc-300 mb-4 shadow-sm">
+          P
         </div>
+        <h1 className="text-base font-semibold text-zinc-100 mb-2">Initialize New Pact</h1>
+        <p className="text-xs text-zinc-400 max-w-sm mb-6 leading-relaxed">
+          Please connect your Web3 wallet via the navigation header to deploy a new escrow contract.
+        </p>
+        <Link
+          href="/"
+          className="text-xs font-mono text-zinc-500 hover:text-zinc-300 hover:underline"
+        >
+          ← Return to Dashboard
+        </Link>
       </main>
     )
   }
 
   return (
-    <main className="min-h-screen max-w-[640px] mx-auto pt-8 px-4 pb-24">
+    <main className="min-h-screen max-w-[680px] mx-auto pt-8 px-4 sm:px-6 pb-24">
+      {/* Network Gate Alert */}
       {isWrongChain && (
-        <div className="bg-[var(--color-red)] text-white p-4 mb-6 font-mono text-sm flex justify-between items-center">
-          <span>WRONG NETWORK. PLEASE SWITCH TO ARC TESTNET.</span>
-          <button onClick={() => switchChain({ chainId: TARGET_CHAIN_ID })} className="border border-white px-4 py-1 hover:bg-white hover:text-[var(--color-red)] transition-colors">
-            SWITCH
+        <div className="bg-rose-500/10 border border-rose-500/30 rounded-md p-3.5 mb-6 text-xs font-mono flex items-center justify-between text-rose-300">
+          <span className="flex items-center gap-2">
+            <span className="w-2 h-2 rounded-full bg-rose-400 animate-pulse" />
+            Wrong Network. Please switch to Arc Testnet.
+          </span>
+          <button
+            onClick={() => switchChain({ chainId: TARGET_CHAIN_ID })}
+            className="bg-rose-500 text-black px-3 py-1 rounded text-xs font-bold hover:bg-rose-400 transition-colors"
+          >
+            Switch Network
           </button>
         </div>
       )}
 
-      <div className="flex items-center justify-between mb-8">
-        <Link href="/" className="text-[var(--color-muted)] font-mono text-sm hover:text-[var(--color-text)] transition-colors">
-          ← TAPE
-        </Link>
-        <h1 className="text-2xl font-bold tracking-tight font-mono">NEW PACT</h1>
-        <div className="w-16"></div>
+      {/* Header */}
+      <div className="flex items-center justify-between mb-6 pb-4 border-b border-[#1c1d22]">
+        <div>
+          <Link href="/" className="inline-flex items-center gap-1.5 text-xs font-mono text-zinc-400 hover:text-zinc-200 transition-colors mb-2">
+            ← Dashboard
+          </Link>
+          <h1 className="text-base font-semibold tracking-tight text-zinc-100">Initialize Escrow Pact</h1>
+        </div>
+        <span className="text-[11px] font-mono text-zinc-500 uppercase">
+          Step 1 of 2
+        </span>
       </div>
 
-      <div className="space-y-8">
-        {/* KIND */}
-        <div role="radiogroup" aria-labelledby="kind-label">
-          <label id="kind-label" className="block text-xs font-mono text-[var(--color-muted)] mb-3 uppercase">Protocol Kind</label>
-          <div className="flex flex-col sm:flex-row gap-3">
+      <div className="space-y-6">
+        {/* Section 1: Protocol Kind */}
+        <div className="bg-[#111215] border border-[#1e1f25] rounded-md p-4">
+          <label className="block text-[11px] font-mono text-zinc-400 mb-3 uppercase tracking-wider">
+            1. Contract Archetype
+          </label>
+          <div role="radiogroup" className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
             {KINDS.map((k) => (
               <label
                 key={k.value}
-                className={`flex-1 py-3 px-4 border font-mono text-sm transition-all cursor-pointer focus-within:ring-2 focus-within:ring-[var(--color-lime)] ${
+                className={`p-3 rounded-md border transition-all cursor-pointer flex flex-col justify-between ${
                   kind === k.value
-                    ? 'border-[var(--color-lime)] text-[var(--color-lime)] bg-[var(--color-lime)]/5'
-                    : 'border-[var(--color-line)] text-[var(--color-muted)] hover:border-[var(--color-muted)]'
+                    ? 'bg-[#181a1f] border-emerald-500/50 shadow-sm'
+                    : 'bg-[#0e0f12] border-[#202127] hover:border-[#2f3139]'
                 }`}
               >
-                <input 
-                  type="radio" 
-                  name="kind" 
-                  value={k.value} 
-                  checked={kind === k.value} 
-                  onChange={() => setKind(k.value)} 
+                <input
+                  type="radio"
+                  name="kind"
+                  value={k.value}
+                  checked={kind === k.value}
+                  onChange={() => setKind(k.value)}
                   className="sr-only"
                 />
-                <div className="font-bold">{k.label}</div>
-                <div className="text-xs mt-1 opacity-60">{k.desc}</div>
+                <div>
+                  <div className="flex items-center justify-between mb-1.5">
+                    <span className="text-xs font-semibold text-zinc-200">{k.label}</span>
+                    <span className={`text-[10px] font-mono px-1.5 py-0.2 rounded border ${
+                      kind === k.value ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20' : 'text-zinc-500 border-zinc-800'
+                    }`}>
+                      {k.tag}
+                    </span>
+                  </div>
+                  <p className="text-[11px] text-zinc-400 leading-relaxed">{k.desc}</p>
+                </div>
               </label>
             ))}
           </div>
         </div>
 
-        {/* MAKER TOKEN + AMOUNT */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-          <TokenSelect 
-            label={`Asset (${mc.makerRole})`} 
-            tokens={TOKENS} 
-            value={tokenMaker} 
-            onChange={setTokenMaker} 
-          />
-          <div>
-            <div className="flex justify-between items-end mb-2">
-              <label className="block text-xs font-mono text-[var(--color-muted)] uppercase">{mc.makerAction}</label>
-              {address && (
-                <div className="text-xs font-mono text-[var(--color-muted)] flex items-center gap-2">
-                  <span>Bal: {formatUnits(makerBalance, makerDecimals)}</span>
-                  <button onClick={handleMaxMaker} className="text-[var(--color-lime)] hover:underline focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-[var(--color-lime)]">MAX</button>
-                </div>
-              )}
-            </div>
-            <input
-              type="number"
-              value={amountMaker}
-              onChange={(e) => setAmountMaker(e.target.value)}
-              placeholder="0.00"
-              className="w-full bg-black border border-[var(--color-line)] text-[var(--color-text)] px-3 py-2 font-mono text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-lime)]"
-            />
-          </div>
-        </div>
+        {/* Section 2: Financial Assets & Collateral */}
+        <div className="bg-[#111215] border border-[#1e1f25] rounded-md p-4 space-y-4">
+          <span className="block text-[11px] font-mono text-zinc-400 uppercase tracking-wider">
+            2. Collateral & Settlement Terms
+          </span>
 
-        {/* TAKER TOKEN + AMOUNT (conditional) */}
-        {(kind === 1 || kind === 0 || kind === 2) && (
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            <TokenSelect 
-              label={`Asset (${mc.takerRole})`} 
-              tokens={TOKENS} 
-              value={tokenTaker} 
-              onChange={setTokenTaker} 
+          {/* Maker Deposit */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <TokenSelect
+              label={mc.makerRole}
+              tokens={TOKENS}
+              value={tokenMaker}
+              onChange={setTokenMaker}
             />
             <div>
-              <label className="block text-xs font-mono text-[var(--color-muted)] mb-2 uppercase">
-                {mc.takerAction}
-              </label>
+              <div className="flex justify-between items-center mb-1.5">
+                <label className="block text-[11px] font-mono text-zinc-400 uppercase tracking-wider">{mc.makerAction}</label>
+                {address && (
+                  <div className="text-[11px] font-mono text-zinc-400 flex items-center gap-1.5">
+                    <span>Bal: {formatUnits(makerBalance, makerDecimals)}</span>
+                    <button
+                      onClick={handleMaxMaker}
+                      className="text-emerald-400 hover:text-emerald-300 font-semibold px-1 rounded hover:bg-emerald-500/10 transition-colors"
+                    >
+                      MAX
+                    </button>
+                  </div>
+                )}
+              </div>
               <input
                 type="number"
-                value={amountTaker}
-                onChange={(e) => setAmountTaker(e.target.value)}
-                placeholder={kind === 1 ? '0.00' : '0 (optional)'}
-                className="w-full bg-black border border-[var(--color-line)] text-[var(--color-text)] px-3 py-2 font-mono text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-lime)]"
+                value={amountMaker}
+                onChange={(e) => setAmountMaker(e.target.value)}
+                placeholder="0.00"
+                className="w-full bg-[#0d0e11] border border-[#222328] hover:border-[#32343c] text-zinc-100 px-3 py-2 rounded-md font-mono text-xs placeholder:text-zinc-600 focus:border-emerald-500 transition-colors"
               />
             </div>
           </div>
-        )}
 
-        {/* TAKER ADDRESS */}
-        <div>
-          <label className="block text-xs font-mono text-[var(--color-muted)] mb-2 uppercase">
-            Counterparty Address <span className="opacity-50">(leave blank = open to anyone)</span>
-          </label>
-          <input
-            type="text"
-            value={taker}
-            onChange={(e) => setTaker(e.target.value)}
-            placeholder="0x…"
-            className="w-full bg-black border border-[var(--color-line)] text-[var(--color-text)] px-3 py-2 font-mono text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-lime)]"
-          />
+          {/* Taker Deposit (Conditional) */}
+          {(kind === 0 || kind === 1 || kind === 2) && (
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-3 border-t border-[#1c1d22]">
+              <TokenSelect
+                label={mc.takerRole}
+                tokens={TOKENS}
+                value={tokenTaker}
+                onChange={setTokenTaker}
+              />
+              <div>
+                <label className="block text-[11px] font-mono text-zinc-400 mb-1.5 uppercase tracking-wider">
+                  {mc.takerAction}
+                </label>
+                <input
+                  type="number"
+                  value={amountTaker}
+                  onChange={(e) => setAmountTaker(e.target.value)}
+                  placeholder={kind === 1 ? '0.00' : '0.00 (optional)'}
+                  className="w-full bg-[#0d0e11] border border-[#222328] hover:border-[#32343c] text-zinc-100 px-3 py-2 rounded-md font-mono text-xs placeholder:text-zinc-600 focus:border-emerald-500 transition-colors"
+                />
+              </div>
+            </div>
+          )}
+
+          {/* Counterparty Address */}
+          <div className="pt-3 border-t border-[#1c1d22]">
+            <label className="block text-[11px] font-mono text-zinc-400 mb-1.5 uppercase tracking-wider">
+              Specific Counterparty Address <span className="text-zinc-500 normal-case">(leave blank for open public taker)</span>
+            </label>
+            <input
+              type="text"
+              value={taker}
+              onChange={(e) => setTaker(e.target.value)}
+              placeholder="0x0000000000000000000000000000000000000000"
+              className="w-full bg-[#0d0e11] border border-[#222328] hover:border-[#32343c] text-zinc-100 px-3 py-2 rounded-md font-mono text-xs placeholder:text-zinc-700 focus:border-emerald-500 transition-colors"
+            />
+          </div>
         </div>
 
-        {/* TERMS */}
-        <div>
-          <div className="flex justify-between items-end mb-2">
-            <label className="block text-xs font-mono text-[var(--color-muted)] uppercase">Terms</label>
-            <span className={`text-xs font-mono ${terms.length < 20 ? 'text-[var(--color-amber)]' : 'text-[var(--color-lime)]'}`}>
-              {terms.length} chars {terms.length < 20 && '(min 20 required)'}
+        {/* Section 3: Fulfillment Agreement (Terms) */}
+        <div className="bg-[#111215] border border-[#1e1f25] rounded-md p-4">
+          <div className="flex justify-between items-center mb-2">
+            <label className="block text-[11px] font-mono text-zinc-400 uppercase tracking-wider">
+              3. Contract Terms & Fulfillment Criteria
+            </label>
+            <span className={`text-[11px] font-mono ${terms.length < 20 ? 'text-amber-400' : 'text-emerald-400'}`}>
+              {terms.length}/20 min chars
             </span>
           </div>
           <textarea
@@ -335,121 +371,152 @@ export default function NewPactPage() {
             onChange={(e) => setTerms(e.target.value)}
             placeholder={getTermsPlaceholder()}
             rows={4}
-            className="w-full bg-black border border-[var(--color-line)] text-[var(--color-text)] px-3 py-2 font-mono text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-lime)] resize-none"
+            className="w-full bg-[#0d0e11] border border-[#222328] hover:border-[#32343c] text-zinc-100 px-3 py-2.5 rounded-md font-sans text-xs leading-relaxed placeholder:text-zinc-600 focus:border-emerald-500 resize-none transition-colors"
           />
+          <div className="mt-2 text-[11px] font-mono text-zinc-500 flex items-center justify-between">
+            <span>On-chain hash digest will be computed via SHA-256</span>
+            {terms && <span className="text-zinc-400">SHA: {termsH.slice(0, 10)}...</span>}
+          </div>
         </div>
 
-        {/* DEADLINE */}
-        <div>
-          <label className="block text-xs font-mono text-[var(--color-muted)] mb-2 uppercase">Deadline (minutes from now)</label>
-          <div className="flex flex-col sm:flex-row gap-4 items-start sm:items-center">
-            <input
-              type="number"
-              value={deadlineMinutes}
-              onChange={(e) => setDeadlineMinutes(e.target.value)}
-              min="2"
-              className="w-full sm:w-1/2 bg-black border border-[var(--color-line)] text-[var(--color-text)] px-3 py-2 font-mono text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-lime)]"
-            />
-            <div className="flex gap-2">
-              {[60, 360, 1440, 10080].map(mins => (
-                <button
-                  key={mins}
-                  onClick={() => setDeadlineMinutes(mins.toString())}
-                  className="border border-[var(--color-line)] px-3 py-1 font-mono text-xs text-[var(--color-muted)] hover:text-white hover:border-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-lime)] transition-colors"
-                >
-                  {mins === 60 ? '1H' : mins === 360 ? '6H' : mins === 1440 ? '24H' : '7D'}
-                </button>
-              ))}
+        {/* Section 4: Settlement Expiry & Privacy */}
+        <div className="bg-[#111215] border border-[#1e1f25] rounded-md p-4 space-y-4">
+          <span className="block text-[11px] font-mono text-zinc-400 uppercase tracking-wider">
+            4. Timeline & Privacy Preferences
+          </span>
+
+          {/* Expiration Input + Presets */}
+          <div>
+            <label className="block text-[11px] font-mono text-zinc-400 mb-1.5 uppercase tracking-wider">
+              Expiration Window
+            </label>
+            <div className="flex flex-col sm:flex-row gap-2.5 items-start sm:items-center">
+              <div className="relative w-full sm:w-1/2">
+                <input
+                  type="number"
+                  value={deadlineMinutes}
+                  onChange={(e) => setDeadlineMinutes(e.target.value)}
+                  min="2"
+                  className="w-full bg-[#0d0e11] border border-[#222328] hover:border-[#32343c] text-zinc-100 px-3 py-2 rounded-md font-mono text-xs focus:border-emerald-500 transition-colors"
+                />
+                <span className="absolute right-3 top-2 text-xs font-mono text-zinc-500">mins</span>
+              </div>
+              <div className="flex gap-1.5 w-full sm:w-auto">
+                {[
+                  { mins: 60, label: '1H' },
+                  { mins: 360, label: '6H' },
+                  { mins: 1440, label: '24H' },
+                  { mins: 10080, label: '7D' },
+                ].map(preset => (
+                  <button
+                    key={preset.mins}
+                    type="button"
+                    onClick={() => setDeadlineMinutes(preset.mins.toString())}
+                    className="flex-1 sm:flex-none px-3 py-1.5 bg-[#0e0f12] hover:bg-[#181a1f] border border-[#222328] hover:border-[#32343c] rounded text-xs font-mono text-zinc-400 hover:text-zinc-200 transition-colors"
+                  >
+                    {preset.label}
+                  </button>
+                ))}
+              </div>
             </div>
+            <p className="text-[11px] font-mono text-zinc-500 mt-2">
+              Absolute Expiry: <span className="text-zinc-300">{absoluteDeadline.toLocaleString()}</span>
+            </p>
           </div>
-          <div className="text-xs font-mono text-[var(--color-muted)] mt-2">
-            Resolves at: {absoluteDeadline.toLocaleString()}
+
+          {/* Privacy Toggle */}
+          <div className="pt-3 border-t border-[#1c1d22]">
+            <label className="flex items-start gap-3 cursor-pointer">
+              <input
+                type="checkbox"
+                checked={blurSize}
+                onChange={(e) => setBlurSize(e.target.checked)}
+                className="mt-0.5 w-4 h-4 rounded border-zinc-700 bg-zinc-900 text-emerald-500 focus:ring-emerald-500"
+              />
+              <div>
+                <span className="text-xs font-medium text-zinc-200 block">Obfuscate Amount on Public Dashboard</span>
+                <span className="text-[11px] text-zinc-500 block leading-relaxed mt-0.5">
+                  Masks the contract dollar value on the web tape. Note: All transactions remain verifiable on-chain.
+                </span>
+              </div>
+            </label>
           </div>
         </div>
 
-        {/* PRIVACY */}
-        <div className="border border-[var(--color-line)] p-4">
-          <label className="block text-xs font-mono text-[var(--color-muted)] mb-3 uppercase">Privacy</label>
-          <label className="flex items-center gap-3 cursor-pointer font-mono text-sm w-fit focus-within:ring-2 focus-within:ring-[var(--color-lime)]">
-            <input
-              type="checkbox"
-              checked={blurSize}
-              onChange={(e) => setBlurSize(e.target.checked)}
-              className="w-4 h-4 accent-[var(--color-lime)] opacity-0 absolute"
-            />
-            <div className={`w-4 h-4 border ${blurSize ? 'bg-[var(--color-lime)] border-[var(--color-lime)]' : 'border-[var(--color-line)]'}`}></div>
-            <span className="text-white">Blur transaction size on UI tape</span>
-          </label>
-          <p className="text-[var(--color-muted)] font-mono text-xs mt-2 italic">
-            Note: This only hides the value on the web frontend. On-chain data remains public and visible to block explorers.
-          </p>
-        </div>
-
-        {/* REVIEW PANEL */}
-        <div className="bg-[var(--color-panel)] border border-[var(--color-line)] p-4 font-mono text-sm space-y-2">
-          <h3 className="font-bold text-[var(--color-lime)] uppercase mb-4 border-b border-[var(--color-line)] pb-2">Review & Sign</h3>
-          <div className="flex justify-between">
-            <span className="text-[var(--color-muted)]">You Lock:</span>
-            <span>{amountMaker || '0'} {TOKENS.find(t=>t.value===tokenMaker)?.label}</span>
-          </div>
-          <div className="flex justify-between">
-            <span className="text-[var(--color-muted)]">They Lock:</span>
-            <span>{amountTaker || '0'} {TOKENS.find(t=>t.value===tokenTaker)?.label}</span>
-          </div>
-          <div className="flex justify-between">
-            <span className="text-[var(--color-muted)]">Counterparty:</span>
-            <span>{taker || 'OPEN'}</span>
-          </div>
-          <div className="flex justify-between">
-            <span className="text-[var(--color-muted)]">Deadline:</span>
-            <span>{absoluteDeadline.toLocaleString()}</span>
-          </div>
-          <div className="flex justify-between border-t border-[var(--color-line)] pt-2 mt-2">
-            <span className="text-[var(--color-red)] uppercase text-xs">Timeout Consequence:</span>
-            <span className="text-xs text-right max-w-[200px]">
-              {kind === 0 && 'Maker reclaims payment + seizes Taker collateral.'}
-              {kind === 1 && 'If unfunded, refunded. If funded, atomic swap executes.'}
-              {kind === 2 && 'Employer reclaims unreleased payment.'}
+        {/* Section 5: Review & Signing Panel */}
+        <div className="bg-[#141518] border border-[#27282e] rounded-md p-4 space-y-2.5 shadow-sm">
+          <div className="flex items-center justify-between pb-2 border-b border-[#222328]">
+            <h3 className="text-xs font-mono font-semibold text-zinc-200 uppercase tracking-wider">
+              Settlement Protocol Preview
+            </h3>
+            <span className="text-[10px] font-mono text-emerald-400 bg-emerald-500/10 px-2 py-0.5 rounded border border-emerald-500/20">
+              Verified Logic
             </span>
           </div>
-          <div className="flex justify-between border-t border-[var(--color-line)] pt-2 mt-2 text-xs">
-            <span className="text-[var(--color-muted)]">Est. Gas:</span>
-            <span>{mockGas}</span>
+
+          <div className="grid grid-cols-2 gap-2 text-xs font-mono pt-1">
+            <div>
+              <span className="text-zinc-500 block text-[10px] uppercase">Your Deposit:</span>
+              <span className="text-zinc-200 font-medium">
+                {amountMaker || '0.00'} {TOKENS.find(t => t.value === tokenMaker)?.label}
+              </span>
+            </div>
+            <div>
+              <span className="text-zinc-500 block text-[10px] uppercase">Counterparty Lock:</span>
+              <span className="text-zinc-200 font-medium">
+                {amountTaker ? `${amountTaker} ${TOKENS.find(t => t.value === tokenTaker)?.label}` : 'None (Open)'}
+              </span>
+            </div>
+          </div>
+
+          <div className="pt-2 border-t border-[#202126] text-xs font-mono">
+            <span className="text-zinc-500 block text-[10px] uppercase mb-0.5">Expiry Consequence:</span>
+            <p className="text-[11px] text-zinc-400 leading-relaxed">
+              {kind === 0 && 'If seller fails to deliver before deadline, maker receives full refund and claims seller bond.'}
+              {kind === 1 && 'If both parties deposit before deadline, atomic exchange settles. Otherwise all funds refund.'}
+              {kind === 2 && 'If proof of work is not accepted or submitted by deadline, client can claim unreleased deposit.'}
+            </p>
           </div>
         </div>
 
-        {/* SUBMIT BUTTONS */}
-        <div className="pt-4 border-t border-[var(--color-line)]">
+        {/* Submit Execution Actions */}
+        <div className="pt-2">
           {submitDisabled ? (
-            <button disabled className="w-full bg-black border border-[var(--color-line)] text-[var(--color-muted)] py-4 font-bold font-mono cursor-not-allowed uppercase">
+            <button
+              disabled
+              className="w-full bg-[#141518] border border-[#202126] text-zinc-500 py-3 rounded-md font-mono text-xs font-bold uppercase tracking-wider cursor-not-allowed"
+            >
               {submitReason}
             </button>
           ) : step === 'creating' ? (
-            <div className="w-full bg-[var(--color-panel)] border border-[var(--color-line)] text-[var(--color-muted)] py-4 font-mono text-center text-sm uppercase">
-              Creating pact…
+            <div className="w-full bg-[#111215] border border-emerald-500/40 text-emerald-400 py-3 rounded-md font-mono text-xs font-semibold text-center flex items-center justify-center gap-2">
+              <div className="w-3.5 h-3.5 border-2 border-emerald-400 border-t-transparent rounded-full animate-spin" />
+              Broadcasting Contract Deployment...
             </div>
           ) : step === 'approving' ? (
-            <div className="w-full bg-[var(--color-panel)] border border-[var(--color-line)] text-[var(--color-muted)] py-4 font-mono text-center text-sm uppercase">
-              Approving…
+            <div className="w-full bg-[#111215] border border-amber-500/40 text-amber-400 py-3 rounded-md font-mono text-xs font-semibold text-center flex items-center justify-center gap-2">
+              <div className="w-3.5 h-3.5 border-2 border-amber-400 border-t-transparent rounded-full animate-spin" />
+              Approving Token Allowance on Ledger...
             </div>
           ) : needsApproval ? (
-            <div className="flex flex-col gap-2">
-              <div className="text-xs text-center text-[var(--color-muted)] font-mono mb-2">Step 1 of 2</div>
+            <div className="space-y-2">
+              <div className="text-[11px] text-center text-zinc-400 font-mono">
+                Step 1: Authorize ERC-20 token allowance
+              </div>
               <button
                 onClick={handleApprove}
-                className="w-full bg-[var(--color-lime)] text-black py-4 font-bold font-mono hover:brightness-90 transition-all cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white"
+                className="w-full bg-emerald-500 hover:bg-emerald-400 text-black py-3 rounded-md font-mono text-xs font-bold tracking-wider transition-all cursor-pointer shadow-sm"
               >
                 1. APPROVE {TOKENS.find((t) => t.value === tokenMaker)?.label}
               </button>
             </div>
           ) : (
-            <div className="flex flex-col gap-2">
-              <div className="text-xs text-center text-[var(--color-lime)] font-mono mb-2">Ready to create</div>
+            <div className="space-y-2">
               <button
                 onClick={handleCreate}
-                className="w-full bg-[var(--color-lime)] text-black py-4 font-bold font-mono hover:brightness-90 transition-all cursor-pointer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white"
+                className="w-full bg-emerald-500 hover:bg-emerald-400 text-black py-3 rounded-md font-mono text-xs font-bold tracking-wider transition-all cursor-pointer shadow-sm"
               >
-                CREATE PACT
+                DEPLOY & LOCK COLLATERAL
               </button>
             </div>
           )}

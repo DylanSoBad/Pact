@@ -48,31 +48,31 @@ export default function TokenSelect({
 
   return (
     <div className="relative" ref={dropdownRef}>
-      <label className="block text-xs font-mono text-[var(--color-muted)] mb-2 uppercase">{label}</label>
+      <label className="block text-[11px] font-mono text-zinc-400 mb-1.5 uppercase tracking-wider">{label}</label>
       <div
         tabIndex={0}
         onKeyDown={handleKeyDown}
         onClick={() => setIsOpen(!isOpen)}
-        className="w-full bg-black border border-[var(--color-line)] text-[var(--color-text)] px-3 py-2 font-mono text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-lime)] cursor-pointer flex justify-between items-center"
+        className="w-full bg-[#111215] border border-[#222328] hover:border-[#32343c] text-zinc-100 px-3 py-2 rounded-md font-mono text-xs cursor-pointer flex justify-between items-center transition-colors shadow-sm"
       >
-        <span>{selectedToken?.label || 'Select Token'}</span>
-        <span className="text-[var(--color-muted)]">▼</span>
+        <span className="font-semibold text-zinc-200">{selectedToken?.label || 'Select Token'}</span>
+        <span className="text-zinc-500 text-[10px]">▼</span>
       </div>
 
       {isOpen && (
-        <div className="absolute z-50 w-full mt-1 bg-black border border-[var(--color-line)] shadow-lg max-h-60 overflow-y-auto">
-          <div className="p-2 border-b border-[var(--color-line)] sticky top-0 bg-black">
+        <div className="absolute z-50 w-full mt-1 bg-[#141518] border border-[#282a30] rounded-md shadow-xl max-h-60 overflow-y-auto">
+          <div className="p-2 border-b border-[#222328] sticky top-0 bg-[#141518]">
             <input
               type="text"
               autoFocus
-              placeholder="Search..."
+              placeholder="Search token..."
               value={search}
               onChange={(e) => setSearch(e.target.value)}
-              className="w-full bg-black border border-[var(--color-line)] text-white px-2 py-1 font-mono text-xs focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-lime)]"
+              className="w-full bg-[#0d0e11] border border-[#222328] text-zinc-100 px-2.5 py-1.5 rounded font-mono text-xs placeholder:text-zinc-600 focus:border-emerald-500"
             />
           </div>
           {filteredTokens.length === 0 ? (
-            <div className="px-3 py-2 text-xs font-mono text-[var(--color-muted)]">No tokens found</div>
+            <div className="px-3 py-2.5 text-xs font-mono text-zinc-500 text-center">No tokens found</div>
           ) : (
             filteredTokens.map(t => (
               <TokenOption
@@ -123,10 +123,12 @@ function TokenOption({ token, address, isSelected, onSelect }: { token: Token; a
           onSelect()
         }
       }}
-      className={`px-3 py-2 font-mono text-sm cursor-pointer flex justify-between items-center hover:bg-[var(--color-line)] focus-visible:bg-[var(--color-line)] focus-visible:outline-none ${isSelected ? 'text-[var(--color-lime)]' : 'text-white'}`}
+      className={`px-3 py-2 font-mono text-xs cursor-pointer flex justify-between items-center transition-colors ${
+        isSelected ? 'bg-emerald-500/10 text-emerald-400 font-semibold' : 'text-zinc-200 hover:bg-[#1c1d22]'
+      }`}
     >
       <span>{token.label}</span>
-      <span className="text-xs text-[var(--color-muted)]">{formattedBal}</span>
+      <span className="text-[11px] text-zinc-400 font-normal">Bal: {formattedBal}</span>
     </div>
   )
 }
