@@ -21,6 +21,11 @@ export const metadata: Metadata = {
     template: "PACT · %s",
   },
   description: "A promise with money locked behind it. Trustless collateral escrow on Circle Arc.",
+  icons: {
+    icon: "/logo.png",
+    shortcut: "/logo.png",
+    apple: "/logo.png",
+  },
 };
 
 export default function RootLayout({
