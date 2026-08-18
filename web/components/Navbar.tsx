@@ -11,12 +11,9 @@ export default function Navbar() {
         <div className="w-7 h-7 rounded-md bg-emerald-500 flex items-center justify-center font-mono font-bold text-xs text-black shadow-sm">
           P
         </div>
-        <div className="leading-tight">
-          <span className="text-sm font-semibold tracking-tight text-zinc-100 group-hover:text-white transition-colors">
-            PACT
-          </span>
-          <span className="text-[10px] text-zinc-500 block font-mono">Arc Testnet</span>
-        </div>
+        <span className="text-sm font-semibold tracking-tight text-zinc-100 group-hover:text-white transition-colors">
+          PACT
+        </span>
       </Link>
 
       {/* Right: Actions */}
