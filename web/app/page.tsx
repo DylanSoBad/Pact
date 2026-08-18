@@ -3,6 +3,7 @@
 import { useState, useEffect, useMemo } from 'react'
 import Link from 'next/link'
 import Navbar from '../components/Navbar'
+import TrustStrip from '../components/TrustStrip'
 import TapeLine from '../components/TapeLine'
 import { fetchPacts, PactData } from '../lib/reads'
 import {
@@ -14,21 +15,46 @@ export default function Home() {
   const [filter, setFilter] = useState('ALL')
   const [pacts, setPacts] = useState<PactData[]>([])
   const [loading, setLoading] = useState(true)
+  const [rpcError, setRpcError] = useState(false)
+  const [lastFetchTime, setLastFetchTime] = useState<number>(Date.now())
+
+  async function loadData() {
+    if (document.hidden) return // Pause polling when tab is hidden
+    try {
+      const data = await fetchPacts()
+      setPacts(data.sort((a, b) => Number(b.id) - Number(a.id)))
+      setRpcError(false)
+      setLastFetchTime(Date.now())
+    } catch {
+      setRpcError(true)
+    } finally {
+      setLoading(false)
+    }
+  }
 
   useEffect(() => {
     let mounted = true
-    async function load() {
-      const data = await fetchPacts()
-      if (mounted) {
-        // Sort descending by ID so newest is at top
-        setPacts(data.sort((a, b) => Number(b.id) - Number(a.id)))
-        setLoading(false)
+    loadData()
+
+    // 10s auto-refresh interval, pausing when tab is hidden
+    const interval = setInterval(() => {
+      if (mounted && !document.hidden) {
+        loadData()
+      }
+    }, 10000)
+
+    const handleVisibilityChange = () => {
+      if (!document.hidden) {
+        loadData()
       }
     }
+    document.addEventListener('visibilitychange', handleVisibilityChange)
 
-    load()
-    const interval = setInterval(load, 3000)
-    return () => { mounted = false; clearInterval(interval) }
+    return () => {
+      mounted = false
+      clearInterval(interval)
+      document.removeEventListener('visibilitychange', handleVisibilityChange)
+    }
   }, [])
 
   const filteredPacts = useMemo(() => {
@@ -50,9 +76,12 @@ export default function Home() {
   }, [pacts])
 
   return (
-    <main className="min-h-screen max-w-[880px] mx-auto pt-8 px-4 sm:px-6 pb-20 flex flex-col">
+    <main className="min-h-screen max-w-[880px] mx-auto pt-6 sm:pt-8 px-3.5 sm:px-6 pb-20 flex flex-col overflow-x-hidden">
       {/* Top Navbar */}
       <Navbar />
+
+      {/* Trust Strip */}
+      <TrustStrip lastUpdated={lastFetchTime} rpcError={rpcError} onRetry={loadData} />
 
       {/* 30-Second Product Primer & Testnet Quickstart */}
       <section className="bg-[#111215] border border-[#1e1f25] rounded-lg p-4 sm:p-5 mb-6 shadow-sm">
@@ -78,7 +107,7 @@ export default function Home() {
           </div>
         </div>
 
-        {/* 3 Steps Visual Breakdown */}
+        {/* 3 Steps Breakdown (1 col on mobile, 3 cols on desktop) */}
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
           <div className="bg-[#0e0f12] border border-[#1c1d22] p-3 rounded-md">
             <div className="flex items-center gap-2 mb-1.5">
@@ -112,8 +141,8 @@ export default function Home() {
         </div>
       </section>
 
-      {/* Protocol Metrics Bar */}
-      <section className="grid grid-cols-3 gap-3 mb-6">
+      {/* Protocol Metrics Bar (1 column on <640px, 3 columns on desktop) */}
+      <section className="grid grid-cols-1 sm:grid-cols-3 gap-3 mb-6">
         <div className="bg-[#111215] border border-[#1e1f25] rounded-md p-3">
           <span className="block text-[11px] font-mono text-zinc-400 uppercase tracking-wider">Total Contracts</span>
           <span className="text-lg font-mono font-bold text-zinc-100">{loading ? '—' : stats.total}</span>
@@ -128,9 +157,9 @@ export default function Home() {
         </div>
       </section>
 
-      {/* Filter Tabs & Ledger Title */}
+      {/* Filter Tabs (Horizontal scroll on mobile, no messy wrap) */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-3">
-        <div className="flex items-center gap-1 p-1 bg-[#111215] border border-[#1e1f25] rounded-md overflow-x-auto">
+        <div className="flex items-center gap-1 p-1 bg-[#111215] border border-[#1e1f25] rounded-md overflow-x-auto whitespace-nowrap max-w-full">
           {[
             { id: 'ALL', label: 'All Pacts' },
             { id: 'DELIVERY', label: 'Delivery' },
@@ -141,7 +170,7 @@ export default function Home() {
             <button
               key={tab.id}
               onClick={() => setFilter(tab.id)}
-              className={`px-3 py-1 text-xs font-mono font-medium rounded transition-colors whitespace-nowrap cursor-pointer ${
+              className={`px-3 py-1 text-xs font-mono font-medium rounded transition-colors whitespace-nowrap shrink-0 cursor-pointer ${
                 filter === tab.id
                   ? 'bg-[#222329] text-zinc-100 shadow-sm'
                   : 'text-zinc-400 hover:text-zinc-200'

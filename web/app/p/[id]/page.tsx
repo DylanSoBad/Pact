@@ -4,6 +4,8 @@ import { useEffect, useState } from 'react'
 import { useParams, useSearchParams } from 'next/navigation'
 import Link from 'next/link'
 import Navbar from '../../../components/Navbar'
+import TrustStrip from '../../../components/TrustStrip'
+import PactStateMachine from '../../../components/PactStateMachine'
 import { useAccount, useWriteContract, useWaitForTransactionReceipt } from 'wagmi'
 import { fetchSinglePact, fetchReputation, PactData } from '../../../lib/reads'
 import { PACT_ABI, ERC20_ABI } from '../../../lib/abi'
@@ -11,10 +13,10 @@ import {
   kindLabel, statusLabel, formatAmount, tokenSymbol, formatDate,
   truncateAddress, isTerminal, isZeroAddress
 } from '../../../lib/format'
-import { verifyTerms, hashTerms } from '../../../lib/terms'
+import { verifyTerms } from '../../../lib/terms'
 import Countdown from '../../../components/Countdown'
 
-const PACT_ADDRESS = process.env.NEXT_PUBLIC_PACT_ADDRESS as `0x${string}`
+const PACT_ADDRESS = (process.env.NEXT_PUBLIC_PACT_ADDRESS || '0x0000000000000000000000000000000000000000') as `0x${string}`
 
 export default function PactDetailPage() {
   const params = useParams()
@@ -31,44 +33,72 @@ export default function PactDetailPage() {
   const [makerRep, setMakerRep] = useState<{ cleared: number; slashed: number; notional: bigint } | null>(null)
   const [copiedHash, setCopiedHash] = useState(false)
   const [copiedShareLink, setCopiedShareLink] = useState(false)
+  const [lastFetchTime, setLastFetchTime] = useState<number>(Date.now())
+  const [rpcError, setRpcError] = useState(false)
 
   const { writeContract, data: txHash, isPending: txPending, error: writeError } = useWriteContract()
   const { isSuccess: txConfirmed, isLoading: txReceiptLoading } = useWaitForTransactionReceipt({ hash: txHash })
 
-  useEffect(() => {
-    let mounted = true
-
-    async function load() {
+  async function loadPactData() {
+    if (document.hidden) return // Pause polling when tab is hidden
+    try {
       const data = await fetchSinglePact(id)
-      if (mounted) {
+      if (data) {
         setPact(data)
-        setLoading(false)
+        setRpcError(false)
+        setLastFetchTime(Date.now())
 
-        if (data && termsParam) {
+        if (termsParam) {
           setTermsVerified(verifyTerms(termsParam, data.termsHash as `0x${string}`))
         }
 
-        if (data) {
-          const rep = await fetchReputation(data.maker as `0x${string}`)
-          if (mounted) setMakerRep(rep)
-        }
+        const rep = await fetchReputation(data.maker as `0x${string}`)
+        setMakerRep(rep)
+      }
+    } catch {
+      setRpcError(true)
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  useEffect(() => {
+    let mounted = true
+    loadPactData()
+
+    // 10s auto-refresh interval, pausing when tab is hidden
+    const interval = setInterval(() => {
+      if (mounted && !document.hidden) {
+        loadPactData()
+      }
+    }, 10000)
+
+    const handleVisibilityChange = () => {
+      if (!document.hidden) {
+        loadPactData()
       }
     }
+    document.addEventListener('visibilitychange', handleVisibilityChange)
 
-    load()
-    const interval = setInterval(load, 3000)
-    return () => { mounted = false; clearInterval(interval) }
+    return () => {
+      mounted = false
+      clearInterval(interval)
+      document.removeEventListener('visibilitychange', handleVisibilityChange)
+    }
   }, [id, termsParam])
 
   useEffect(() => {
     if (txConfirmed) {
-      fetchSinglePact(id).then(setPact)
+      loadPactData()
     }
-  }, [txConfirmed, id])
+  }, [txConfirmed])
 
   const isMaker = address && pact && pact.maker.toLowerCase() === address.toLowerCase()
-  const isTaker = address && pact && pact.taker.toLowerCase() === address.toLowerCase()
-  const isOpenTaker = pact && isZeroAddress(pact.taker)
+  const isTaker = address && pact && (
+    (!isZeroAddress(pact.taker) && pact.taker.toLowerCase() === address.toLowerCase())
+  )
+  const isOpenTaker = pact && isZeroAddress(pact.taker) && !isMaker
+
   const canFund = pact && pact.status === 0 && !isMaker && (isOpenTaker || isTaker)
   const canCancel = pact && pact.status === 0 && isMaker
   const canSubmitProof = pact && pact.status === 2 && isTaker && pact.kind !== 1
@@ -170,8 +200,9 @@ export default function PactDetailPage() {
 
   if (loading) {
     return (
-      <main className="min-h-screen max-w-[720px] mx-auto pt-8 px-4 sm:px-6 pb-20">
+      <main className="min-h-screen max-w-[760px] mx-auto pt-8 px-4 sm:px-6 pb-20">
         <Navbar />
+        <TrustStrip lastUpdated={lastFetchTime} rpcError={rpcError} onRetry={loadPactData} />
         <div className="flex flex-col items-center justify-center py-24 text-xs font-mono text-zinc-400 gap-3">
           <div className="w-4 h-4 border-2 border-emerald-500 border-t-transparent rounded-full animate-spin"></div>
           <span>Retrieving pact #{id} state from Circle Arc Testnet…</span>
@@ -182,8 +213,9 @@ export default function PactDetailPage() {
 
   if (!pact) {
     return (
-      <main className="min-h-screen max-w-[720px] mx-auto pt-8 px-4 sm:px-6 pb-20">
+      <main className="min-h-screen max-w-[760px] mx-auto pt-8 px-4 sm:px-6 pb-20">
         <Navbar />
+        <TrustStrip lastUpdated={lastFetchTime} rpcError={rpcError} onRetry={loadPactData} />
         <div className="bg-[#111215] border border-[#1e1f25] rounded-lg p-8 text-center max-w-md mx-auto shadow-sm">
           <div className="w-10 h-10 rounded-full bg-zinc-900 border border-zinc-800 flex items-center justify-center text-zinc-500 mx-auto mb-3 font-mono text-sm">
             Ø
@@ -198,76 +230,28 @@ export default function PactDetailPage() {
     )
   }
 
-  const displayStatus = pact.status === 2 ? 'ACTIVE' : statusLabel(pact.status)
+  const roleText = isMaker
+    ? 'You are Maker'
+    : isTaker
+    ? 'You are Taker'
+    : isOpenTaker
+    ? 'You are Candidate Taker'
+    : 'You are Observer (Read-only)'
 
-  const getStatusBadge = () => {
-    switch (pact.status) {
-      case 0:
-        return (
-          <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded text-xs font-mono font-semibold bg-zinc-800 text-zinc-300 border border-zinc-700/60">
-            OPEN (AWAITING TAKER)
-          </span>
-        );
-      case 1:
-        return (
-          <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded text-xs font-mono font-semibold bg-zinc-800 text-zinc-300 border border-zinc-700/60">
-            FUNDED
-          </span>
-        );
-      case 2:
-        return (
-          <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded text-xs font-mono font-semibold bg-amber-500/10 text-amber-400 border border-amber-500/25">
-            <span className="w-1.5 h-1.5 rounded-full bg-amber-400 animate-pulse" />
-            ACTIVE ESCROW
-          </span>
-        );
-      case 3:
-        return (
-          <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded text-xs font-mono font-semibold bg-emerald-500/15 text-emerald-300 border border-emerald-500/30">
-            <span className="w-1.5 h-1.5 rounded-full bg-emerald-300 animate-ping" />
-            PROOF SUBMITTED
-          </span>
-        );
-      case 4:
-        return (
-          <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded text-xs font-mono font-semibold bg-emerald-500/10 text-emerald-400 border border-emerald-500/25">
-            <span className="w-1.5 h-1.5 rounded-full bg-emerald-400" />
-            CLEARED / SETTLED
-          </span>
-        );
-      case 5:
-        return (
-          <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded text-xs font-mono font-semibold bg-rose-500/10 text-rose-400 border border-rose-500/25">
-            <span className="w-1.5 h-1.5 rounded-full bg-rose-400" />
-            SLASHED / DEFAULTED
-          </span>
-        );
-      case 6:
-        return (
-          <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded text-xs font-mono font-semibold bg-zinc-800 text-zinc-400 border border-zinc-700/60">
-            EXPIRED
-          </span>
-        );
-      case 7:
-        return (
-          <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded text-xs font-mono font-semibold bg-zinc-800 text-zinc-400 border border-zinc-700/60">
-            CANCELLED
-          </span>
-        );
-      default:
-        return (
-          <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded text-xs font-mono font-semibold bg-zinc-800 text-zinc-300 border border-zinc-700/60">
-            {displayStatus}
-          </span>
-        );
-    }
-  }
+  const roleBadgeColor = isMaker
+    ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/30'
+    : isTaker || isOpenTaker
+    ? 'bg-amber-500/10 text-amber-400 border-amber-500/30'
+    : 'bg-zinc-800/80 text-zinc-400 border-zinc-700/50'
 
   return (
-    <main className="min-h-screen max-w-[720px] mx-auto pt-8 px-4 sm:px-6 pb-20">
+    <main className="min-h-screen max-w-[760px] mx-auto pt-8 px-4 sm:px-6 pb-20">
       <Navbar />
+      
+      {/* Trust Strip */}
+      <TrustStrip lastUpdated={lastFetchTime} rpcError={rpcError} onRetry={loadPactData} />
 
-      {/* Top Breadcrumb & Heading */}
+      {/* Top Breadcrumb, Title & Role Chip */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-6 pb-4 border-b border-[#1c1d22]">
         <div>
           <Link href="/" className="inline-flex items-center gap-1.5 text-xs font-mono text-zinc-400 hover:text-zinc-200 transition-colors mb-1.5">
@@ -282,8 +266,13 @@ export default function PactDetailPage() {
             </span>
           </div>
         </div>
-        <div className="flex items-center gap-2">
-          {getStatusBadge()}
+        <div className="flex flex-wrap items-center gap-2">
+          {/* Role Chip */}
+          <span className={`inline-flex items-center gap-1 px-2.5 py-1 rounded text-xs font-mono font-medium border ${roleBadgeColor}`}>
+            <span className="w-1.5 h-1.5 rounded-full bg-current" />
+            {roleText}
+          </span>
+
           <button
             onClick={handleCopyShareLink}
             className="inline-flex items-center gap-1 bg-[#16171c] hover:bg-[#202127] text-zinc-300 border border-[#27282f] px-3 py-1 text-xs font-mono rounded transition-colors cursor-pointer"
@@ -293,6 +282,9 @@ export default function PactDetailPage() {
           </button>
         </div>
       </div>
+
+      {/* Escrow State Machine Horizontal Stepper */}
+      <PactStateMachine status={pact.status} />
 
       {/* Agreement Terms Verification Section */}
       <div className="bg-[#111215] border border-[#1e1f25] rounded-lg p-4 sm:p-5 mb-6 shadow-sm space-y-3">
@@ -386,6 +378,11 @@ export default function PactDetailPage() {
             muted={pact.blurSize}
           />
         )}
+        {pact.blurSize && (
+          <div className="px-4 py-2 bg-[#0d0e11] text-[11px] font-mono text-zinc-500 italic">
+            ℹ️ Note: Amounts are masked on the web dashboard only. All transactions remain public on-chain.
+          </div>
+        )}
         <DetailRow label="Creation Timestamp" value={formatDate(pact.createdAt)} />
         <div className="flex justify-between items-center py-3 px-4 text-xs font-mono">
           <span className="text-zinc-400 uppercase text-[11px] tracking-wider">Settlement Deadline</span>
@@ -456,7 +453,7 @@ export default function PactDetailPage() {
 
       {/* Pending TX Notice */}
       {(txPending || txReceiptLoading) && (
-        <div className="mb-6 p-3 rounded-md bg-amber-500/10 border border-amber-500/30 text-amber-300 text-xs font-mono flex flex-col gap-1">
+        <div className="mb-6 p-3.5 rounded-md bg-amber-500/10 border border-amber-500/30 text-amber-300 text-xs font-mono flex flex-col gap-1.5">
           <div className="flex items-center gap-2">
             <div className="w-3.5 h-3.5 border-2 border-amber-400 border-t-transparent rounded-full animate-spin" />
             <span>Confirming transaction on Circle Arc Testnet...</span>
@@ -477,87 +474,141 @@ export default function PactDetailPage() {
       {/* Revert / Error Alert */}
       {writeError && (
         <div className="mb-6 p-3.5 rounded-md bg-rose-500/10 border border-rose-500/30 text-rose-300 text-xs font-mono">
-          <span className="font-bold block mb-1">Transaction Failed:</span>
-          <span>{writeError.message}</span>
+          <span className="font-bold block mb-1">Transaction failed:</span>
+          <span>{writeError.message || 'Error executing contract method.'}</span>
         </div>
       )}
 
-      {/* Contract Lifecycle Actions */}
+      {/* Action Hierarchy: Exactly ONE primary action for the role + status, secondary actions below */}
       {isConnected && !isTerminal(pact.status) && (
-        <div className="space-y-3 pt-2">
-          {canFund && (
-            <button
-              onClick={handleFund}
-              disabled={txPending || txReceiptLoading}
-              className="w-full bg-emerald-500 hover:bg-emerald-400 text-black py-3 rounded-md font-mono text-xs font-bold uppercase tracking-wider transition-all cursor-pointer shadow-sm disabled:opacity-50"
-            >
-              {pact.amountTaker > 0n
-                ? `Deposit & Fund ($${formatAmount(pact.amountTaker)} ${tokenSymbol(pact.tokenTaker)} Collateral)`
-                : 'Accept & Fund Escrow (No Bond Required)'}
-            </button>
-          )}
+        <div className="space-y-4 pt-2">
+          {/* Primary Action Box */}
+          <div className="bg-[#111215] border border-[#222328] rounded-lg p-4 space-y-3 shadow-sm">
+            <span className="text-[11px] font-mono text-zinc-400 uppercase tracking-wider block">
+              Primary Action for Your Role ({roleText})
+            </span>
 
-          {canCancel && (
-            <button
-              onClick={handleCancel}
-              disabled={txPending || txReceiptLoading}
-              className="w-full bg-[#16171c] hover:bg-[#202127] border border-[#27282f] hover:border-zinc-500 text-zinc-300 py-3 rounded-md font-mono text-xs font-medium transition-colors cursor-pointer disabled:opacity-50"
-            >
-              Cancel Pact (Reclaim Funds)
-            </button>
-          )}
+            {/* 1. If Candidate Taker / Taker and Status is 0 (OPEN) */}
+            {canFund && (
+              <div>
+                <button
+                  onClick={handleFund}
+                  disabled={txPending || txReceiptLoading}
+                  className="w-full bg-emerald-500 hover:bg-emerald-400 text-black py-3 rounded-md font-mono text-xs font-bold uppercase tracking-wider transition-all cursor-pointer shadow-sm disabled:opacity-50"
+                >
+                  {pact.amountTaker > 0n
+                    ? `Deposit & Fund ($${formatAmount(pact.amountTaker)} ${tokenSymbol(pact.tokenTaker)} Collateral)`
+                    : 'Accept & Fund Escrow (No Bond Required)'}
+                </button>
+                <p className="text-[11px] text-zinc-500 mt-2 text-center">
+                  Depositing locks your bond and advances the pact to ACTIVE state.
+                </p>
+              </div>
+            )}
 
-          {canSubmitProof && (
-            <div className="bg-[#111215] border border-[#1e1f25] rounded-lg p-4 space-y-3">
-              <label className="block text-[11px] font-mono text-zinc-400 uppercase tracking-wider">
-                Submit Fulfillment Proof Reference (URL / ID)
-              </label>
-              <input
-                type="text"
-                value={proofInput}
-                onChange={(e) => setProofInput(e.target.value)}
-                placeholder="e.g. https://github.com/org/repo/pull/1 or Tracking #849204"
-                className="w-full bg-[#0d0e11] border border-[#222328] hover:border-[#32343c] text-zinc-100 px-3 py-2 rounded-md font-mono text-xs focus:border-emerald-500 transition-colors"
-              />
+            {/* 2. If Maker and Status is 0 (OPEN) */}
+            {isMaker && pact.status === 0 && (
+              <div className="text-center py-2">
+                <p className="text-xs text-zinc-400 mb-1">Waiting for counterparty to accept & fund the pact.</p>
+                <p className="text-[11px] text-zinc-500">Share the link with your taker to proceed.</p>
+              </div>
+            )}
+
+            {/* 3. If Taker and Status is 2 (ACTIVE) -> Submit Proof */}
+            {canSubmitProof && (
+              <div className="space-y-2.5">
+                <label className="block text-[11px] font-mono text-zinc-400">
+                  Enter Proof Reference URL or Courier Tracking:
+                </label>
+                <input
+                  type="text"
+                  value={proofInput}
+                  onChange={(e) => setProofInput(e.target.value)}
+                  placeholder="e.g. https://github.com/org/repo/pull/1 or Tracking #849204"
+                  className="w-full bg-[#0d0e11] border border-[#222328] hover:border-[#32343c] text-zinc-100 px-3 py-2 rounded-md font-mono text-xs focus:border-emerald-500 transition-colors"
+                />
+                <button
+                  onClick={handleSubmitProof}
+                  disabled={!proofInput || txPending || txReceiptLoading}
+                  className="w-full bg-emerald-500 hover:bg-emerald-400 disabled:bg-zinc-800 disabled:text-zinc-500 text-black py-2.5 rounded-md font-mono text-xs font-bold uppercase tracking-wider transition-all cursor-pointer"
+                >
+                  Submit Cryptographic Proof
+                </button>
+              </div>
+            )}
+
+            {/* 4. If Maker and Status is 3 (PROOF IN) -> Release Escrow & Settle */}
+            {canRelease && pact.status === 3 && (
+              <div>
+                <button
+                  onClick={handleRelease}
+                  disabled={txPending || txReceiptLoading}
+                  className="w-full bg-emerald-500 hover:bg-emerald-400 text-black py-3 rounded-md font-mono text-xs font-bold uppercase tracking-wider transition-all cursor-pointer shadow-sm disabled:opacity-50"
+                >
+                  Release Escrow & Settle Funds
+                </button>
+                <p className="text-[11px] text-zinc-500 mt-2 text-center">
+                  Releases payment to the taker and returns all collateral bonds.
+                </p>
+              </div>
+            )}
+
+            {/* 5. If Maker and Status is 2 (ACTIVE) in Delivery/Job */}
+            {canRelease && pact.status === 2 && pact.kind !== 1 && (
+              <div>
+                <button
+                  onClick={handleRelease}
+                  disabled={txPending || txReceiptLoading}
+                  className="w-full bg-emerald-500 hover:bg-emerald-400 text-black py-3 rounded-md font-mono text-xs font-bold uppercase tracking-wider transition-all cursor-pointer shadow-sm disabled:opacity-50"
+                >
+                  Release Escrow & Settle Early
+                </button>
+              </div>
+            )}
+
+            {/* 6. If Deadline passed on Active/ProofIn pact */}
+            {canExpire && (
+              <div>
+                <button
+                  onClick={handleExpire}
+                  disabled={txPending || txReceiptLoading}
+                  className="w-full bg-rose-500/10 hover:bg-rose-500/20 text-rose-300 border border-rose-500/30 py-3 rounded-md font-mono text-xs font-semibold transition-colors cursor-pointer disabled:opacity-50"
+                >
+                  Trigger Expiry Timeout Settlement
+                </button>
+              </div>
+            )}
+
+            {/* Observer state */}
+            {!canFund && !isMaker && !canSubmitProof && !canRelease && !canExpire && (
+              <p className="text-xs text-zinc-500 text-center py-1">
+                You are viewing this contract as an observer. Connect as Maker or Taker to execute actions.
+              </p>
+            )}
+          </div>
+
+          {/* Secondary Action (Cancel / Reject) */}
+          <div className="flex flex-wrap gap-2 pt-1">
+            {canCancel && (
               <button
-                onClick={handleSubmitProof}
-                disabled={!proofInput || txPending || txReceiptLoading}
-                className="w-full bg-emerald-500 hover:bg-emerald-400 disabled:bg-zinc-800 disabled:text-zinc-500 text-black py-2.5 rounded-md font-mono text-xs font-bold uppercase tracking-wider transition-all cursor-pointer"
+                onClick={handleCancel}
+                disabled={txPending || txReceiptLoading}
+                className="w-full bg-[#16171c] hover:bg-[#202127] border border-[#27282f] hover:border-zinc-500 text-zinc-300 py-2.5 rounded-md font-mono text-xs font-medium transition-colors cursor-pointer disabled:opacity-50"
               >
-                Submit Proof Hash
+                Cancel Pact (Reclaim Funds)
               </button>
-            </div>
-          )}
+            )}
 
-          {canReject && (
-            <button
-              onClick={handleReject}
-              disabled={txPending || txReceiptLoading}
-              className="w-full bg-rose-500/10 hover:bg-rose-500/20 text-rose-300 border border-rose-500/30 py-3 rounded-md font-mono text-xs font-semibold transition-colors cursor-pointer disabled:opacity-50"
-            >
-              Reject Proof (Trigger Slash / Dispute)
-            </button>
-          )}
-
-          {canRelease && (
-            <button
-              onClick={handleRelease}
-              disabled={txPending || txReceiptLoading}
-              className="w-full bg-emerald-500 hover:bg-emerald-400 text-black py-3 rounded-md font-mono text-xs font-bold uppercase tracking-wider transition-all cursor-pointer shadow-sm disabled:opacity-50"
-            >
-              Release Escrow & Settle Payout
-            </button>
-          )}
-
-          {canExpire && (
-            <button
-              onClick={handleExpire}
-              disabled={txPending || txReceiptLoading}
-              className="w-full bg-rose-500/10 hover:bg-rose-500/20 text-rose-300 border border-rose-500/30 py-3 rounded-md font-mono text-xs font-semibold transition-colors cursor-pointer disabled:opacity-50"
-            >
-              Trigger Expiry Timeout Settlement
-            </button>
-          )}
+            {canReject && (
+              <button
+                onClick={handleReject}
+                disabled={txPending || txReceiptLoading}
+                className="w-full bg-rose-500/10 hover:bg-rose-500/20 text-rose-300 border border-rose-500/30 py-2.5 rounded-md font-mono text-xs font-medium transition-colors cursor-pointer disabled:opacity-50"
+              >
+                Reject Proof (Trigger Dispute / Slashed State)
+              </button>
+            )}
+          </div>
         </div>
       )}
     </main>
