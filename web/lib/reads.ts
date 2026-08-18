@@ -170,10 +170,14 @@ export async function fetchReputation(address: `0x${string}`): Promise<{
       ] as any,
     })
 
+    const r0 = results?.[0]
+    const r1 = results?.[1]
+    const r2 = results?.[2]
+
     return {
-      cleared: results[0].status === 'success' ? Number(results[0].result) : 0,
-      slashed: results[1].status === 'success' ? Number(results[1].result) : 0,
-      notional: results[2].status === 'success' ? (results[2].result as bigint) : 0n,
+      cleared: r0?.status === 'success' ? Number(r0.result) : 0,
+      slashed: r1?.status === 'success' ? Number(r1.result) : 0,
+      notional: r2?.status === 'success' ? (r2.result as bigint) : 0n,
     }
   } catch {
     return { cleared: 0, slashed: 0, notional: 0n }

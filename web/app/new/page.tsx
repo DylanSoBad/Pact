@@ -47,14 +47,26 @@ export default function NewPactPage() {
   const { isSuccess: createConfirmed } = useWaitForTransactionReceipt({ hash: createTxHash })
 
   // Balances
-  const { data: makerBal } = useBalance({ address, token: tokenMaker as `0x${string}` })
-  const makerDecimals = makerBal?.decimals || 6
+  const { data: makerBalData } = useReadContract({
+    address: tokenMaker as `0x${string}`,
+    abi: ERC20_ABI,
+    functionName: 'balanceOf',
+    args: address ? [address] : undefined,
+    query: { enabled: !!address },
+  })
+  const { data: makerDecimalsData } = useReadContract({
+    address: tokenMaker as `0x${string}`,
+    abi: ERC20_ABI,
+    functionName: 'decimals',
+  })
+  const makerDecimals = Number(makerDecimalsData ?? 6)
+  const makerBalance = (makerBalData as bigint) ?? 0n
   
   const { data: allowanceData } = useReadContract({
     address: tokenMaker as `0x${string}`,
     abi: ERC20_ABI,
     functionName: 'allowance',
-    args: [address as `0x${string}`, PACT_ADDRESS],
+    args: address ? [address, PACT_ADDRESS] : undefined,
     query: { enabled: !!address }
   })
   const currentAllowance = (allowanceData as bigint) || 0n
@@ -83,7 +95,7 @@ export default function NewPactPage() {
 
   const isWrongChain = isConnected && chainId !== TARGET_CHAIN_ID
   const makerAmountBn = amountMakerParsed()
-  const hasEnoughBalance = makerBal ? makerAmountBn <= makerBal.value : false
+  const hasEnoughBalance = address ? makerAmountBn <= makerBalance : false
   const needsApproval = makerAmountBn > currentAllowance
 
   // Validation
@@ -141,8 +153,8 @@ export default function NewPactPage() {
   }
 
   const handleMaxMaker = () => {
-    if (makerBal) {
-      setAmountMaker(formatUnits(makerBal.value, makerBal.decimals))
+    if (address && makerBalance > 0n) {
+      setAmountMaker(formatUnits(makerBalance, makerDecimals))
     }
   }
 
@@ -255,9 +267,9 @@ export default function NewPactPage() {
           <div>
             <div className="flex justify-between items-end mb-2">
               <label className="block text-xs font-mono text-[var(--color-muted)] uppercase">{mc.makerAction}</label>
-              {makerBal && (
+              {address && (
                 <div className="text-xs font-mono text-[var(--color-muted)] flex items-center gap-2">
-                  <span>Bal: {formatUnits(makerBal.value, makerBal.decimals)}</span>
+                  <span>Bal: {formatUnits(makerBalance, makerDecimals)}</span>
                   <button onClick={handleMaxMaker} className="text-[var(--color-lime)] hover:underline focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-[var(--color-lime)]">MAX</button>
                 </div>
               )}

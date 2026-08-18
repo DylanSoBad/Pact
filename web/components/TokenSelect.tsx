@@ -1,8 +1,9 @@
 'use client'
 
 import { useState, useRef, useEffect } from 'react'
-import { useBalance, useAccount } from 'wagmi'
-import { formatAmount, tokenSymbol } from '../lib/format'
+import { useAccount, useReadContract } from 'wagmi'
+import { formatUnits } from 'viem'
+import { ERC20_ABI } from '../lib/abi'
 
 type Token = { value: string; label: string }
 
@@ -21,17 +22,6 @@ export default function TokenSelect({
   const [isOpen, setIsOpen] = useState(false)
   const [search, setSearch] = useState('')
   const dropdownRef = useRef<HTMLDivElement>(null)
-
-  // Use wagmi to fetch balance for the currently selected token to display in the dropdown
-  // Actually, doing useBalance dynamically for multiple tokens in a dropdown might require multiple hooks.
-  // Instead, we'll fetch balance for the currently selected token in the parent component and pass it down,
-  // or fetch balance for all tokens here.
-  // To keep it simple and accurate, we will just use a custom hook or loop in parent.
-  // Wait, requirement 1: "hiện balance, accessible bằng bàn phím"
-  // Let's implement useBalance per token. In React, we can't map over hooks.
-  // So let's build a sub-component for the list items if we want balances, 
-  // or we just fetch the selected balance in the main form, and in the dropdown we just show the tokens.
-  // Let's create a TokenOption component to fetch balance.
 
   useEffect(() => {
     function handleClickOutside(event: MouseEvent) {
@@ -105,12 +95,23 @@ export default function TokenSelect({
 }
 
 function TokenOption({ token, address, isSelected, onSelect }: { token: Token; address?: `0x${string}`; isSelected: boolean; onSelect: () => void }) {
-  const { data: bal } = useBalance({
-    address,
-    token: token.value as `0x${string}`,
+  const { data: balanceData } = useReadContract({
+    address: token.value as `0x${string}`,
+    abi: ERC20_ABI,
+    functionName: 'balanceOf',
+    args: address ? [address] : undefined,
+    query: { enabled: !!address },
   })
 
-  const formattedBal = bal ? (Number(bal.value) / 10**bal.decimals).toLocaleString(undefined, { maximumFractionDigits: 4 }) : '0'
+  const { data: decimalsData } = useReadContract({
+    address: token.value as `0x${string}`,
+    abi: ERC20_ABI,
+    functionName: 'decimals',
+  })
+
+  const decimals = Number(decimalsData ?? 6)
+  const balance = (balanceData as bigint) ?? 0n
+  const formattedBal = Number(formatUnits(balance, decimals)).toLocaleString(undefined, { maximumFractionDigits: 4 })
 
   return (
     <div
