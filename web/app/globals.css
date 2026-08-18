@@ -19,7 +19,7 @@ body {
 
 /* ─── Selection ─── */
 ::selection {
-  background: rgba(16, 185, 129, 0.2);
+  background: rgba(16, 185, 129, 0.25);
   color: #fff;
 }
 
@@ -27,35 +27,169 @@ body {
 *:focus-visible {
   outline: none;
   box-shadow: 0 0 0 2px rgba(16, 185, 129, 0.4);
-  border-radius: 4px;
+  border-radius: 6px;
 }
 
 /* ─── Scrollbar ─── */
 ::-webkit-scrollbar { width: 4px; height: 4px; }
 ::-webkit-scrollbar-track { background: transparent; }
 ::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.08); border-radius: 99px; }
-::-webkit-scrollbar-thumb:hover { background: rgba(255,255,255,0.14); }
+::-webkit-scrollbar-thumb:hover { background: rgba(255,255,255,0.16); }
 
-/* ─── Animations ─── */
+/* ─── Keyframe Animations ─── */
 @keyframes enter {
-  from { opacity: 0; transform: translateY(8px); }
-  to   { opacity: 1; transform: translateY(0); }
+  from { opacity: 0; transform: translateY(10px) scale(0.99); }
+  to   { opacity: 1; transform: translateY(0) scale(1); }
 }
 @keyframes pulse-soft {
-  0%, 100% { opacity: 1; }
-  50%      { opacity: 0.5; }
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50%      { opacity: 0.4; transform: scale(0.9); }
 }
-.animate-enter { animation: enter 0.4s ease-out both; }
-.animate-enter-delay { animation: enter 0.4s 0.1s ease-out both; }
+@keyframes ripple {
+  0% {
+    transform: scale(0);
+    opacity: 0.6;
+  }
+  100% {
+    transform: scale(2.5);
+    opacity: 0;
+  }
+}
+@keyframes shine-sweep {
+  0% {
+    transform: translateX(-150%) skewX(-20deg);
+  }
+  100% {
+    transform: translateX(250%) skewX(-20deg);
+  }
+}
+@keyframes click-pop {
+  0% { transform: scale(1); }
+  40% { transform: scale(0.94); }
+  100% { transform: scale(1); }
+}
+
+.animate-enter { animation: enter 0.4s cubic-bezier(0.16, 1, 0.3, 1) both; }
+.animate-enter-delay { animation: enter 0.4s 0.1s cubic-bezier(0.16, 1, 0.3, 1) both; }
 .animate-pulse-soft { animation: pulse-soft 2.5s ease-in-out infinite; }
 
-/* ─── Surface layers ─── */
+/* ─── Interactive Button Design System ─── */
+
+/* Primary Button (White Solid with dynamic sheen & spring physics) */
+.btn-primary {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  background-color: #ffffff;
+  color: #000000;
+  font-weight: 500;
+  border-radius: 10px;
+  cursor: pointer;
+  user-select: none;
+  transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+  box-shadow: 0 1px 3px rgba(0,0,0,0.1), 0 0 0 1px rgba(255,255,255,0.1);
+}
+
+.btn-primary:hover {
+  background-color: #f4f4f5;
+  transform: translateY(-1.5px);
+  box-shadow: 0 6px 24px -4px rgba(255, 255, 255, 0.2), 0 0 0 1px rgba(255,255,255,0.25);
+}
+
+.btn-primary:active {
+  transform: translateY(0.5px) scale(0.96);
+  box-shadow: 0 1px 2px rgba(0,0,0,0.1);
+}
+
+/* Light beam sweep across button */
+.btn-primary::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 60%;
+  height: 100%;
+  background: linear-gradient(
+    90deg,
+    rgba(255,255,255,0) 0%,
+    rgba(255,255,255,0.4) 50%,
+    rgba(255,255,255,0) 100%
+  );
+  transform: translateX(-150%) skewX(-20deg);
+  transition: transform 0.6s ease;
+  pointer-events: none;
+}
+
+.btn-primary:hover::after {
+  transform: translateX(250%) skewX(-20deg);
+}
+
+/* Secondary / Ghost Interactive Button */
+.btn-ghost {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 10px;
+  cursor: pointer;
+  user-select: none;
+  transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.btn-ghost:hover {
+  background: rgba(255, 255, 255, 0.07);
+  border-color: rgba(255, 255, 255, 0.18);
+  transform: translateY(-1px);
+  color: #ffffff;
+}
+
+.btn-ghost:active {
+  transform: translateY(0.5px) scale(0.96);
+  background: rgba(255, 255, 255, 0.1);
+}
+
+/* Interactive Pills & Tabs */
+.pill-interactive {
+  position: relative;
+  cursor: pointer;
+  user-select: none;
+  transition: all 0.18s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.pill-interactive:hover {
+  transform: translateY(-1px);
+}
+
+.pill-interactive:active {
+  transform: translateY(0.5px) scale(0.94);
+}
+
+/* Interactive Card Row on Hover & Click */
+.row-interactive {
+  transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.row-interactive:hover {
+  background: rgba(255, 255, 255, 0.03);
+  transform: translateX(3px);
+}
+
+.row-interactive:active {
+  transform: scale(0.99) translateX(1px);
+  background: rgba(255, 255, 255, 0.045);
+}
+
+/* Surface layers */
 .surface-0 { background: rgba(255,255,255,0.02); }
 .surface-1 { background: rgba(255,255,255,0.035); }
 .surface-2 { background: rgba(255,255,255,0.05); }
 
-/* ─── Subtle separator ─── */
+/* Subtle separator */
 .separator {
   height: 1px;
-  background: linear-gradient(90deg, transparent, rgba(255,255,255,0.06), transparent);
+  background: linear-gradient(90deg, transparent, rgba(255,255,255,0.07), transparent);
 }

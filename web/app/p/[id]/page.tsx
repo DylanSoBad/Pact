@@ -113,8 +113,11 @@ export default function PactDetailPage() {
             <span className={`text-[12px] font-medium ${roleCol}`}>{role}</span>
           </div>
         </div>
-        <button onClick={copyShare} className="text-[12px] text-zinc-600 hover:text-zinc-400 transition-colors cursor-pointer mt-6">
-          {copiedShare ? 'Copied' : 'Share'}
+        <button
+          onClick={copyShare}
+          className="btn-ghost px-3 py-1 text-[12px] text-zinc-400 mt-6"
+        >
+          {copiedShare ? 'Copied ✓' : 'Share 🔗'}
         </button>
       </div>
 
@@ -143,8 +146,10 @@ export default function PactDetailPage() {
           <div className="flex gap-2">
             <input value={verifyInput} onChange={e => setVerifyInput(e.target.value)} placeholder="Paste terms…"
               className="flex-1 bg-white/[0.03] border border-white/[0.06] text-white px-3.5 py-2 rounded-xl text-[13px] placeholder:text-zinc-700" />
-            <button onClick={() => { if (pact && verifyInput) setTermsVerified(verifyTerms(verifyInput, pact.termsHash as `0x${string}`)) }}
-              className="bg-white/[0.06] hover:bg-white/[0.1] text-zinc-300 px-4 py-2 rounded-xl text-[13px] cursor-pointer transition-colors">
+            <button
+              onClick={() => { if (pact && verifyInput) setTermsVerified(verifyTerms(verifyInput, pact.termsHash as `0x${string}`)) }}
+              className="btn-ghost px-4 py-2 text-[13px] text-zinc-300"
+            >
               Check
             </button>
           </div>
@@ -205,12 +210,12 @@ export default function PactDetailPage() {
       )}
       {writeError && <p className="mb-6 text-[13px] text-rose-400">{writeError.message || 'Failed'}</p>}
 
-      {/* Actions */}
+      {/* Actions with rich micro-animations */}
       {isConnected && !isTerminal(pact.status) && (
         <div className="space-y-3">
           {canFund && (
             <button onClick={doFund} disabled={busy}
-              className="w-full bg-white text-black py-3 rounded-xl text-[14px] font-medium hover:bg-zinc-200 transition-colors cursor-pointer disabled:opacity-50">
+              className="btn-primary w-full py-3 text-[14px]">
               {pact.amountTaker > 0n ? `Fund (${formatAmount(pact.amountTaker)} ${tokenSymbol(pact.tokenTaker)})` : 'Accept & fund'}
             </button>
           )}
@@ -220,32 +225,32 @@ export default function PactDetailPage() {
               <input value={proofInput} onChange={e => setProofInput(e.target.value)} placeholder="Proof reference…"
                 className="w-full bg-white/[0.03] border border-white/[0.06] text-white px-3.5 py-2.5 rounded-xl text-[14px] placeholder:text-zinc-700" />
               <button onClick={doProof} disabled={!proofInput || busy}
-                className="w-full bg-white text-black py-3 rounded-xl text-[14px] font-medium hover:bg-zinc-200 transition-colors cursor-pointer disabled:opacity-50 disabled:bg-white/[0.04] disabled:text-zinc-600">
+                className="btn-primary w-full py-3 text-[14px]">
                 Submit proof
               </button>
             </div>
           )}
           {canRelease && (
             <button onClick={doRelease} disabled={busy}
-              className="w-full bg-white text-black py-3 rounded-xl text-[14px] font-medium hover:bg-zinc-200 transition-colors cursor-pointer disabled:opacity-50">
+              className="btn-primary w-full py-3 text-[14px]">
               Release & settle
             </button>
           )}
           {canExpire && (
             <button onClick={doExpire} disabled={busy}
-              className="w-full bg-white/[0.04] text-rose-400 border border-rose-500/20 py-2.5 rounded-xl text-[13px] hover:bg-rose-500/[0.08] transition-colors cursor-pointer disabled:opacity-50">
+              className="btn-ghost w-full text-rose-400 border-rose-500/20 py-2.5 text-[13px] hover:bg-rose-500/[0.08]">
               Trigger expiry
             </button>
           )}
           {canCancel && (
             <button onClick={doCancel} disabled={busy}
-              className="w-full bg-white/[0.04] text-zinc-400 py-2.5 rounded-xl text-[13px] hover:bg-white/[0.06] transition-colors cursor-pointer disabled:opacity-50">
+              className="btn-ghost w-full text-zinc-400 py-2.5 text-[13px]">
               Cancel pact
             </button>
           )}
           {canReject && (
             <button onClick={doReject} disabled={busy}
-              className="w-full bg-white/[0.04] text-rose-400 border border-rose-500/20 py-2.5 rounded-xl text-[13px] hover:bg-rose-500/[0.08] transition-colors cursor-pointer disabled:opacity-50">
+              className="btn-ghost w-full text-rose-400 border-rose-500/20 py-2.5 text-[13px] hover:bg-rose-500/[0.08]">
               Reject proof
             </button>
           )}

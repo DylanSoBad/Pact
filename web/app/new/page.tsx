@@ -127,8 +127,8 @@ export default function NewPactPage() {
               <p className="text-[12px] text-zinc-500 mb-2">Share with counterparty</p>
               <div className="flex gap-2">
                 <input readOnly value={shareUrl} className="flex-1 bg-white/[0.04] border border-white/[0.06] text-zinc-300 px-3 py-2 rounded-lg text-[12px] font-mono select-all" />
-                <button onClick={copyLink} className="bg-white text-black px-4 py-2 rounded-lg text-[12px] font-medium hover:bg-zinc-200 transition-colors cursor-pointer whitespace-nowrap">
-                  {copiedLink ? 'Copied' : 'Copy'}
+                <button onClick={copyLink} className="btn-primary px-4 py-2 text-[12px]">
+                  {copiedLink ? 'Copied ✓' : 'Copy'}
                 </button>
               </div>
             </div>
@@ -137,17 +137,17 @@ export default function NewPactPage() {
           <div className="flex flex-col sm:flex-row items-center justify-center gap-3">
             {createdPactId ? (
               <Link href={`/p/${createdPactId}?terms=${encodeURIComponent(terms)}`}
-                className="bg-white text-black px-6 py-2.5 text-[13px] font-medium rounded-lg hover:bg-zinc-200 transition-colors">
+                className="btn-primary px-6 py-2.5 text-[13px]">
                 Open pact →
               </Link>
             ) : (
-              <Link href="/" className="bg-white text-black px-6 py-2.5 text-[13px] font-medium rounded-lg hover:bg-zinc-200 transition-colors">
+              <Link href="/" className="btn-primary px-6 py-2.5 text-[13px]">
                 Dashboard →
               </Link>
             )}
             {createTxHash && (
               <a href={`https://testnet.arcscan.app/tx/${createTxHash}`} target="_blank" rel="noreferrer"
-                className="text-[13px] text-zinc-500 hover:text-zinc-300 transition-colors">
+                className="btn-ghost px-4 py-2.5 text-[13px] text-zinc-400">
                 View transaction ↗
               </a>
             )}
@@ -179,7 +179,7 @@ export default function NewPactPage() {
         <div className="rounded-lg bg-rose-500/[0.08] border border-rose-500/20 p-3.5 mb-6 text-[13px] flex items-center justify-between text-rose-300">
           <span>Wrong network</span>
           <button onClick={() => switchChain({ chainId: TARGET_CHAIN_ID })}
-            className="bg-rose-500 text-black px-3.5 py-1 rounded-lg text-[12px] font-medium hover:bg-rose-400 transition-colors cursor-pointer">
+            className="btn-primary bg-rose-500 text-black px-3.5 py-1 rounded-lg text-[12px]">
             Switch
           </button>
         </div>
@@ -189,7 +189,7 @@ export default function NewPactPage() {
         <div className="rounded-lg bg-amber-500/[0.08] border border-amber-500/20 p-3.5 mb-6 text-[13px] flex items-center justify-between text-amber-300">
           <span>No {tokenLabel} balance</span>
           <a href="https://faucet.circle.com/" target="_blank" rel="noreferrer"
-            className="bg-amber-400 text-black px-3.5 py-1 rounded-lg text-[12px] font-medium hover:bg-amber-300 transition-colors">
+            className="btn-primary bg-amber-400 text-black px-3.5 py-1 rounded-lg text-[12px]">
             Get test tokens ↗
           </a>
         </div>
@@ -201,8 +201,8 @@ export default function NewPactPage() {
           <Link href="/" className="text-[13px] text-zinc-600 hover:text-zinc-400 transition-colors">← Back</Link>
           <h1 className="text-[20px] font-semibold text-white tracking-[-0.01em] mt-1">New pact</h1>
         </div>
-        <button onClick={fillDemo} className="text-[12px] text-zinc-600 hover:text-zinc-400 transition-colors cursor-pointer">
-          Demo ↓
+        <button onClick={fillDemo} className="btn-ghost px-3 py-1 text-[12px] text-zinc-400">
+          Fill Demo ↓
         </button>
       </div>
 
@@ -212,8 +212,10 @@ export default function NewPactPage() {
           <label className="text-[13px] text-zinc-500 block mb-3">Type</label>
           <div className="grid grid-cols-3 gap-2">
             {KINDS.map(k => (
-              <label key={k.value} className={`p-3.5 rounded-xl cursor-pointer transition-all text-center ${
-                kind === k.value ? 'bg-white/[0.08] ring-1 ring-white/[0.12]' : 'bg-white/[0.02] hover:bg-white/[0.04]'
+              <label key={k.value} className={`pill-interactive p-3.5 rounded-xl cursor-pointer transition-all text-center ${
+                kind === k.value
+                  ? 'bg-white/[0.1] ring-1 ring-white/20 shadow-sm'
+                  : 'bg-white/[0.02] hover:bg-white/[0.05]'
               }`}>
                 <input type="radio" name="kind" value={k.value} checked={kind === k.value} onChange={() => setKind(k.value)} className="sr-only" />
                 <span className={`text-[13px] font-medium block mb-0.5 ${kind === k.value ? 'text-white' : 'text-zinc-400'}`}>{k.label}</span>
@@ -235,7 +237,7 @@ export default function NewPactPage() {
                   <span className="text-[11px] text-zinc-600">
                     {formatUnits(makerBalance, makerDecimals)}{' '}
                     <button onClick={() => { if (makerBalance > 0n) setAmountMaker(formatUnits(makerBalance, makerDecimals)) }}
-                      className="text-emerald-500 hover:text-emerald-400 cursor-pointer">max</button>
+                      className="text-emerald-500 hover:text-emerald-400 cursor-pointer font-medium active:scale-90 transition-transform">max</button>
                   </span>
                 )}
               </div>
@@ -287,14 +289,14 @@ export default function NewPactPage() {
               className="flex-1 bg-white/[0.03] border border-white/[0.06] hover:border-white/[0.1] text-white px-3.5 py-2.5 rounded-xl text-[14px] focus:border-emerald-500/50 transition-colors" />
             {[{ m: 60, l: '1h' }, { m: 360, l: '6h' }, { m: 1440, l: '24h' }, { m: 10080, l: '7d' }].map(p => (
               <button key={p.m} type="button" onClick={() => setDeadlineMinutes(p.m.toString())}
-                className="px-3 py-2.5 bg-white/[0.03] border border-white/[0.06] hover:border-white/[0.1] rounded-xl text-[13px] text-zinc-400 hover:text-white transition-colors cursor-pointer">
+                className="pill-interactive px-3 py-2.5 bg-white/[0.03] border border-white/[0.06] hover:border-white/[0.12] rounded-xl text-[13px] text-zinc-400 hover:text-white transition-all">
                 {p.l}
               </button>
             ))}
           </div>
           <p className="text-[11px] text-zinc-600 mt-1.5">{deadline.toLocaleString()}</p>
 
-          <label className="flex items-center gap-2.5 mt-4 cursor-pointer">
+          <label className="flex items-center gap-2.5 mt-4 cursor-pointer select-none">
             <input type="checkbox" checked={blurSize} onChange={e => setBlurSize(e.target.checked)}
               className="w-4 h-4 rounded border-zinc-700 bg-transparent text-emerald-500 focus:ring-emerald-500/30" />
             <span className="text-[13px] text-zinc-400">Hide amounts on public dashboard</span>
@@ -315,7 +317,7 @@ export default function NewPactPage() {
           <p className="text-[13px] text-rose-400">{approveError?.message || createError?.message || 'Transaction failed'}</p>
         )}
 
-        {/* Submit */}
+        {/* Submit with rich micro-animations */}
         <div>
           {disabled ? (
             <button disabled className="w-full bg-white/[0.04] text-zinc-600 py-3 rounded-xl text-[14px] cursor-not-allowed">{reason}</button>
@@ -332,12 +334,12 @@ export default function NewPactPage() {
           ) : needsApproval ? (
             <div>
               <p className="text-[12px] text-zinc-600 text-center mb-2">Step 1 of 2 — approve {tokenLabel}</p>
-              <button onClick={doApprove} className="w-full bg-white text-black py-3 rounded-xl text-[14px] font-medium hover:bg-zinc-200 transition-colors cursor-pointer">
+              <button onClick={doApprove} className="btn-primary w-full py-3 text-[14px]">
                 Approve {tokenLabel}
               </button>
             </div>
           ) : (
-            <button onClick={doCreate} className="w-full bg-white text-black py-3 rounded-xl text-[14px] font-medium hover:bg-zinc-200 transition-colors cursor-pointer">
+            <button onClick={doCreate} className="btn-primary w-full py-3 text-[14px]">
               Create pact
             </button>
           )}

@@ -8,10 +8,10 @@ export default function ConnectButton() {
       {({ isConnected, show, truncatedAddress, ensName }) => (
         <button
           onClick={show}
-          className={`px-4 py-[7px] text-[13px] font-medium rounded-lg border transition-all cursor-pointer ${
+          className={`btn-ghost px-4 py-[7px] text-[13px] font-medium transition-all ${
             isConnected
-              ? 'bg-transparent text-zinc-300 border-zinc-800 hover:border-zinc-600'
-              : 'bg-transparent text-zinc-400 border-zinc-800 hover:border-zinc-600 hover:text-zinc-200'
+              ? 'text-zinc-200 border-zinc-700/60 bg-white/[0.04]'
+              : 'text-zinc-400 border-zinc-800 hover:text-zinc-100'
           }`}
         >
           {isConnected ? (ensName ?? truncatedAddress) : "Connect"}

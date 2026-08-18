@@ -76,7 +76,7 @@ export default function Home() {
         </p>
       </div>
 
-      {/* Stats — inline, not cards */}
+      {/* Stats — inline */}
       <div className="flex items-center gap-6 mb-8 text-[14px] animate-enter-delay">
         <div>
           <span className="text-zinc-500">Total</span>
@@ -94,16 +94,21 @@ export default function Home() {
         </div>
       </div>
 
-      {/* Filters */}
-      <div className="flex items-center gap-1 mb-6 overflow-x-auto pb-1">
+      {/* Filters with pill click micro-animations */}
+      <div className="flex items-center gap-1.5 mb-6 overflow-x-auto pb-1 animate-enter-delay">
         {filters.map(f => (
-          <button key={f.id} onClick={() => setFilter(f.id)}
-            className={`px-3.5 py-1.5 text-[13px] rounded-lg transition-colors whitespace-nowrap cursor-pointer ${
+          <button
+            key={f.id}
+            onClick={() => setFilter(f.id)}
+            className={`pill-interactive px-3.5 py-1.5 text-[13px] rounded-lg transition-all ${
               filter === f.id
-                ? 'bg-white/[0.08] text-white'
-                : 'text-zinc-500 hover:text-zinc-300 hover:bg-white/[0.03]'
-            }`}>
-            {f.id === 'LIVE' && filter !== 'LIVE' && <span className="inline-block w-[5px] h-[5px] rounded-full bg-amber-400 mr-1.5 align-middle" />}
+                ? 'bg-white/[0.12] text-white shadow-sm ring-1 ring-white/10'
+                : 'text-zinc-500 hover:text-zinc-200 hover:bg-white/[0.04]'
+            }`}
+          >
+            {f.id === 'LIVE' && filter !== 'LIVE' && (
+              <span className="inline-block w-[5px] h-[5px] rounded-full bg-amber-400 mr-1.5 align-middle animate-pulse-soft" />
+            )}
             {f.label}
           </button>
         ))}
@@ -121,13 +126,15 @@ export default function Home() {
           <p className="text-[13px] text-zinc-600 mb-6">
             {filter === 'ALL' ? 'Create the first escrow pact to get started.' : `No pacts match this filter.`}
           </p>
-          <Link href="/new"
-            className="bg-white text-black px-5 py-2 text-[13px] font-medium rounded-lg hover:bg-zinc-200 transition-colors">
+          <Link
+            href="/new"
+            className="btn-primary px-5 py-2.5 text-[13px]"
+          >
             Create pact
           </Link>
         </div>
       ) : (
-        <div className="animate-enter-delay">
+        <div className="animate-enter-delay space-y-1">
           {filtered.map(p => {
             const amt = p.kind === 1
               ? `${formatAmount(p.amountMaker)} ${tokenSymbol(p.tokenMaker)} ↔ ${formatAmount(p.amountTaker)} ${tokenSymbol(p.tokenTaker)}`
