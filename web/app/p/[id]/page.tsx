@@ -36,6 +36,12 @@ export default function PactDetailPage() {
   const [lastFetchTime, setLastFetchTime] = useState<number>(Date.now())
   const [rpcError, setRpcError] = useState(false)
 
+  useEffect(() => {
+    if (id) {
+      document.title = `PACT · #${id.toString().padStart(4, '0')}`
+    }
+  }, [id])
+
   const { writeContract, data: txHash, isPending: txPending, error: writeError } = useWriteContract()
   const { isSuccess: txConfirmed, isLoading: txReceiptLoading } = useWaitForTransactionReceipt({ hash: txHash })
 
@@ -200,7 +206,7 @@ export default function PactDetailPage() {
 
   if (loading) {
     return (
-      <main className="min-h-screen max-w-[760px] mx-auto pt-8 px-4 sm:px-6 pb-20">
+      <main className="min-h-screen max-w-[760px] mx-auto pt-6 sm:pt-8 px-3.5 sm:px-6 pb-20 overflow-x-hidden">
         <Navbar />
         <TrustStrip lastUpdated={lastFetchTime} rpcError={rpcError} onRetry={loadPactData} />
         <div className="flex flex-col items-center justify-center py-24 text-xs font-mono text-zinc-400 gap-3">
@@ -213,7 +219,7 @@ export default function PactDetailPage() {
 
   if (!pact) {
     return (
-      <main className="min-h-screen max-w-[760px] mx-auto pt-8 px-4 sm:px-6 pb-20">
+      <main className="min-h-screen max-w-[760px] mx-auto pt-6 sm:pt-8 px-3.5 sm:px-6 pb-20 overflow-x-hidden">
         <Navbar />
         <TrustStrip lastUpdated={lastFetchTime} rpcError={rpcError} onRetry={loadPactData} />
         <div className="bg-[#111215] border border-[#1e1f25] rounded-lg p-8 text-center max-w-md mx-auto shadow-sm">
@@ -245,7 +251,7 @@ export default function PactDetailPage() {
     : 'bg-zinc-800/80 text-zinc-400 border-zinc-700/50'
 
   return (
-    <main className="min-h-screen max-w-[760px] mx-auto pt-8 px-4 sm:px-6 pb-20">
+    <main className="min-h-screen max-w-[760px] mx-auto pt-6 sm:pt-8 px-3.5 sm:px-6 pb-20 overflow-x-hidden">
       <Navbar />
       
       {/* Trust Strip */}

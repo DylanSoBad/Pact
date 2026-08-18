@@ -16,8 +16,11 @@ const plexSans = IBM_Plex_Sans({
 });
 
 export const metadata: Metadata = {
-  title: "PACT",
-  description: "A promise with money locked behind it.",
+  title: {
+    default: "PACT · Escrows",
+    template: "PACT · %s",
+  },
+  description: "A promise with money locked behind it. Trustless collateral escrow on Circle Arc.",
 };
 
 export default function RootLayout({

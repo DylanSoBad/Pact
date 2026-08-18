@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import Navbar from '../../components/Navbar'
 import TrustStrip from '../../components/TrustStrip'
+import ConnectButton from '../../components/ConnectButton'
 import { useAccount, useWriteContract, useWaitForTransactionReceipt, useReadContract, useChainId, useSwitchChain } from 'wagmi'
 import { parseUnits, formatUnits, maxUint256, decodeEventLog } from 'viem'
 import { PACT_ABI, ERC20_ABI } from '../../lib/abi'
@@ -44,6 +45,10 @@ export default function NewPactPage() {
   const [step, setStep] = useState<'form' | 'approving' | 'creating' | 'done'>('form')
   const [createdPactId, setCreatedPactId] = useState<number | null>(null)
   const [copiedLink, setCopiedLink] = useState(false)
+
+  useEffect(() => {
+    document.title = 'PACT · New'
+  }, [])
 
   const { writeContract: writeApprove, data: approveTxHash, isPending: approvePending, error: approveError } = useWriteContract()
   const { writeContract: writeCreate, data: createTxHash, isPending: createPending, error: createError } = useWriteContract()
@@ -220,29 +225,29 @@ export default function NewPactPage() {
     }
   }
 
-  // --- Success Landing State ---
+  // --- Success Landing State (Big Success Card) ---
   if (step === 'done' && createConfirmed) {
     return (
       <main className="min-h-screen max-w-[680px] mx-auto pt-6 sm:pt-8 px-3.5 sm:px-6 pb-20 overflow-x-hidden">
         <Navbar />
         <TrustStrip />
         <div className="bg-[#111215] border border-emerald-500/40 rounded-lg p-6 sm:p-8 text-center shadow-xl">
-          <div className="w-12 h-12 rounded-full bg-emerald-500/10 text-emerald-400 border border-emerald-500/30 flex items-center justify-center mx-auto mb-4 font-mono text-lg font-bold">
+          <div className="w-14 h-14 rounded-full bg-emerald-500/10 text-emerald-400 border border-emerald-500/30 flex items-center justify-center mx-auto mb-4 font-mono text-xl font-bold">
             ✓
           </div>
-          <span className="text-[10px] font-mono uppercase tracking-wider text-emerald-400 bg-emerald-500/10 px-2 py-0.5 rounded border border-emerald-500/20">
-            Escrow Initialized
+          <span className="text-[10px] font-mono uppercase tracking-wider text-emerald-400 bg-emerald-500/10 px-2.5 py-0.5 rounded border border-emerald-500/20">
+            Escrow Contract Initialized
           </span>
-          <h2 className="text-lg font-semibold text-zinc-100 mt-2 mb-1">
-            Pact {createdPactId ? `#${createdPactId.toString().padStart(4, '0')}` : 'Created'} Deployed on Arc Testnet
+          <h2 className="text-xl font-semibold text-zinc-100 mt-2 mb-1.5">
+            Pact {createdPactId ? `#${createdPactId.toString().padStart(4, '0')}` : 'Created'} Live on Arc
           </h2>
           <p className="text-xs text-zinc-400 mb-6 max-w-md mx-auto leading-relaxed">
-            Your collateral of <strong className="text-zinc-200">{amountMaker} {selectedTokenLabel}</strong> is locked in the smart contract.
+            Your principal collateral of <strong className="text-zinc-200">{amountMaker} {selectedTokenLabel}</strong> is now securely locked on-chain.
           </p>
 
           {/* Shareable Link Box */}
           {createdPactId && (
-            <div className="bg-[#0c0d10] border border-[#202126] p-4 rounded-md mb-6 text-left space-y-2">
+            <div className="bg-[#0c0d10] border border-[#202126] p-4 rounded-md mb-6 text-left space-y-2.5">
               <div className="flex items-center justify-between">
                 <span className="text-[11px] font-mono text-zinc-400 uppercase tracking-wider">
                   🔗 Shareable Counterparty Link
@@ -258,32 +263,32 @@ export default function NewPactPage() {
                 />
                 <button
                   onClick={handleCopyShareableLink}
-                  className="bg-emerald-500 hover:bg-emerald-400 text-black px-3.5 py-2 rounded text-xs font-mono font-bold whitespace-nowrap transition-colors cursor-pointer"
+                  className="bg-emerald-500 hover:bg-emerald-400 text-black px-4 py-2 rounded text-xs font-mono font-bold whitespace-nowrap transition-colors cursor-pointer"
                 >
-                  {copiedLink ? '✓ Copied' : 'Copy Link'}
+                  {copiedLink ? '✓ Copied' : 'Copy link'}
                 </button>
               </div>
               <p className="text-[11px] text-zinc-500">
-                Send this link to your counterparty so they can review the plaintext terms, verify the SHA-256 hash, and deposit their bond.
+                Share this link with your counterparty so they can verify the agreement text and deposit their collateral.
               </p>
             </div>
           )}
 
-          {/* Action Navigation */}
+          {/* Primary Action Buttons */}
           <div className="flex flex-col sm:flex-row items-center justify-center gap-3">
             {createdPactId ? (
               <Link
                 href={`/p/${createdPactId}?terms=${encodeURIComponent(terms)}`}
                 className="w-full sm:w-auto inline-flex items-center justify-center gap-1.5 bg-emerald-500 hover:bg-emerald-400 text-black px-6 py-2.5 text-xs font-mono font-bold rounded-md transition-all shadow-sm"
               >
-                Inspect Pact #{createdPactId} Details →
+                Open Pact #{createdPactId} →
               </Link>
             ) : (
               <Link
                 href="/"
                 className="w-full sm:w-auto inline-flex items-center justify-center gap-1.5 bg-emerald-500 hover:bg-emerald-400 text-black px-6 py-2.5 text-xs font-mono font-bold rounded-md transition-all shadow-sm"
               >
-                Go to Tape Dashboard →
+                Go to Dashboard →
               </Link>
             )}
 
@@ -303,26 +308,27 @@ export default function NewPactPage() {
     )
   }
 
-  // --- Disconnected State ---
+  // --- Disconnected State with Clickable Connect Button on the Page ---
   if (!isConnected) {
     return (
       <main className="min-h-screen max-w-[680px] mx-auto pt-6 sm:pt-8 px-3.5 sm:px-6 pb-20 overflow-x-hidden">
         <Navbar />
         <TrustStrip />
         <div className="bg-[#111215] border border-[#1e1f25] rounded-lg p-8 text-center max-w-md mx-auto shadow-sm">
-          <div className="w-10 h-10 rounded-full bg-zinc-900 border border-zinc-800 flex items-center justify-center text-zinc-400 mx-auto mb-3 font-mono font-bold text-xs">
+          <div className="w-12 h-12 rounded-full bg-zinc-900 border border-zinc-800 flex items-center justify-center text-zinc-400 mx-auto mb-4 font-mono font-bold text-sm">
             🔒
           </div>
-          <h2 className="text-sm font-semibold text-zinc-100 mb-1.5">Connect Wallet to Deploy Pact</h2>
+          <h2 className="text-base font-semibold text-zinc-100 mb-1.5">Connect Wallet to Deploy Pact</h2>
           <p className="text-xs text-zinc-400 mb-6 leading-relaxed">
-            Pact requires a Web3 wallet connected to Circle Arc Testnet (5042002) to lock escrow collateral.
+            Connect your Web3 wallet on Circle Arc Testnet to deposit collateral and create an immutable pact.
           </p>
-          <div className="flex flex-col gap-3">
+          <div className="flex flex-col items-center gap-3">
+            <ConnectButton />
             <Link
               href="/"
-              className="text-xs font-mono text-zinc-500 hover:text-zinc-300 hover:underline"
+              className="text-xs font-mono text-zinc-500 hover:text-zinc-300 hover:underline mt-2"
             >
-              ← Back to Ledger Dashboard
+              ← Back to Dashboard
             </Link>
           </div>
         </div>
@@ -598,15 +604,15 @@ export default function NewPactPage() {
               <div>
                 <span className="text-xs font-medium text-zinc-200 block">Obfuscate Amount on Public Dashboard</span>
                 <span className="text-[11px] text-zinc-500 block leading-relaxed mt-0.5">
-                  Masks the contract dollar value on the public tape. Note: All transactions remain verifiable on-chain.
+                  Masks the contract dollar value on the public ledger. Note: All transactions remain verifiable on-chain.
                 </span>
               </div>
             </label>
           </div>
         </div>
 
-        {/* Section 5: Settlement Preview Card */}
-        <div className="bg-[#141518] border border-[#27282e] rounded-md p-4 space-y-2.5 shadow-sm">
+        {/* Section 5: Pre-Deploy Settlement Review Panel */}
+        <div className="bg-[#141518] border border-[#27282e] rounded-md p-4 space-y-3 shadow-sm">
           <div className="flex items-center justify-between pb-2 border-b border-[#222328]">
             <h3 className="text-xs font-mono font-semibold text-zinc-200 uppercase tracking-wider">
               Settlement Protocol Preview
@@ -616,17 +622,29 @@ export default function NewPactPage() {
             </span>
           </div>
 
-          <div className="grid grid-cols-2 gap-2 text-xs font-mono pt-1">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs font-mono pt-1">
             <div>
-              <span className="text-zinc-500 block text-[10px] uppercase">Your Deposit:</span>
+              <span className="text-zinc-500 block text-[10px] uppercase">What Will Be Locked:</span>
               <span className="text-zinc-200 font-medium">
                 {amountMaker || '0.00'} {selectedTokenLabel}
               </span>
             </div>
             <div>
-              <span className="text-zinc-500 block text-[10px] uppercase">Counterparty Lock:</span>
+              <span className="text-zinc-500 block text-[10px] uppercase">Counterparty:</span>
               <span className="text-zinc-200 font-medium">
-                {amountTaker ? `${amountTaker} ${TOKENS.find(t => t.value === tokenTaker)?.label}` : 'None (Open)'}
+                {taker ? `${taker.slice(0, 6)}…${taker.slice(-4)}` : 'Open (Public Counterparty)'}
+              </span>
+            </div>
+            <div>
+              <span className="text-zinc-500 block text-[10px] uppercase">Expiry Local Time:</span>
+              <span className="text-zinc-300 font-medium">
+                {absoluteDeadline.toLocaleDateString()} {absoluteDeadline.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+              </span>
+            </div>
+            <div>
+              <span className="text-zinc-500 block text-[10px] uppercase">Required Signatures:</span>
+              <span className="text-zinc-300 font-medium">
+                {needsApproval ? '2 signatures (Approve + Deploy)' : '1 signature (Deploy)'}
               </span>
             </div>
           </div>

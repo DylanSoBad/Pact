@@ -17,6 +17,11 @@ export default function Home() {
   const [loading, setLoading] = useState(true)
   const [rpcError, setRpcError] = useState(false)
   const [lastFetchTime, setLastFetchTime] = useState<number>(Date.now())
+  const [showHelpDrawer, setShowHelpDrawer] = useState(false)
+
+  useEffect(() => {
+    document.title = 'PACT · Escrows'
+  }, [])
 
   async function loadData() {
     if (document.hidden) return // Pause polling when tab is hidden
@@ -76,7 +81,7 @@ export default function Home() {
   }, [pacts])
 
   return (
-    <main className="min-h-screen max-w-[880px] mx-auto pt-6 sm:pt-8 px-3.5 sm:px-6 pb-20 flex flex-col overflow-x-hidden">
+    <main className="min-h-screen max-w-[880px] mx-auto pt-6 sm:pt-8 px-3.5 sm:px-6 pb-20 flex flex-col overflow-x-hidden relative">
       {/* Top Navbar */}
       <Navbar />
 
@@ -87,9 +92,17 @@ export default function Home() {
       <section className="bg-[#111215] border border-[#1e1f25] rounded-lg p-4 sm:p-5 mb-6 shadow-sm">
         <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 pb-4 mb-4 border-b border-[#1c1d22]">
           <div>
-            <span className="text-[10px] font-mono font-semibold uppercase tracking-wider text-emerald-400 bg-emerald-500/10 px-2 py-0.5 rounded border border-emerald-500/20">
-              Protocol Overview (30s)
-            </span>
+            <div className="flex items-center gap-2">
+              <span className="text-[10px] font-mono font-semibold uppercase tracking-wider text-emerald-400 bg-emerald-500/10 px-2 py-0.5 rounded border border-emerald-500/20">
+                Protocol Overview (30s)
+              </span>
+              <button
+                onClick={() => setShowHelpDrawer(true)}
+                className="text-[11px] font-mono text-zinc-400 hover:text-emerald-400 transition-colors underline cursor-pointer"
+              >
+                How it Works Drawer ℹ
+              </button>
+            </div>
             <h2 className="text-sm font-semibold text-zinc-100 mt-2">
               Trustless Bilateral Escrow & Atomic Settlement on Arc
             </h2>
@@ -214,14 +227,14 @@ export default function Home() {
             <p className="text-sm font-medium text-zinc-300 mb-1">No pact records found</p>
             <p className="text-xs text-zinc-500 mb-4 max-w-sm">
               {filter === 'ALL'
-                ? 'No smart contracts have been initialized on the tape yet. Create the first one to start.'
+                ? 'No smart contracts have been initialized yet. Deploy the first escrow pact to start.'
                 : `No pacts currently match the "${filter}" filter criteria.`}
             </p>
             <Link
               href="/new"
-              className="inline-flex items-center gap-1 text-xs font-mono font-medium text-emerald-400 hover:text-emerald-300 hover:underline"
+              className="inline-flex items-center gap-1.5 bg-emerald-500 hover:bg-emerald-400 text-black px-4 py-2 text-xs font-mono font-bold rounded-md transition-all shadow-sm cursor-pointer"
             >
-              Initialize new pact →
+              + Initialize First Pact →
             </Link>
           </div>
         ) : (
@@ -247,6 +260,67 @@ export default function Home() {
           })
         )}
       </div>
+
+      {/* Help Slide-Over Drawer on / */}
+      {showHelpDrawer && (
+        <div className="fixed inset-0 z-50 flex justify-end bg-black/70 backdrop-blur-sm transition-opacity">
+          <div className="w-full max-w-md bg-[#111215] border-l border-[#222328] h-full p-6 overflow-y-auto flex flex-col justify-between shadow-2xl">
+            <div className="space-y-5">
+              <div className="flex items-center justify-between pb-4 border-b border-[#1c1d22]">
+                <div className="flex items-center gap-2">
+                  <span className="w-2 h-2 rounded-full bg-emerald-400" />
+                  <h3 className="text-sm font-semibold text-zinc-100">PACT Protocol Guide</h3>
+                </div>
+                <button
+                  onClick={() => setShowHelpDrawer(false)}
+                  className="text-zinc-400 hover:text-zinc-100 font-mono text-sm px-2 py-1 rounded bg-[#18191d] border border-[#27282e] cursor-pointer"
+                >
+                  ✕
+                </button>
+              </div>
+
+              <div className="space-y-4 text-xs font-mono text-zinc-300">
+                <div className="bg-[#0c0d10] p-3.5 rounded-md border border-[#1e1f25]">
+                  <h4 className="font-bold text-emerald-400 mb-1">Archetype 0: Delivery Escrow</h4>
+                  <p className="text-zinc-400 leading-relaxed text-[11px]">
+                    Buyer locks payment collateral. Seller locks a performance bond. Seller delivers physical goods and submits tracking proof. Buyer inspects and releases payment.
+                  </p>
+                </div>
+
+                <div className="bg-[#0c0d10] p-3.5 rounded-md border border-[#1e1f25]">
+                  <h4 className="font-bold text-emerald-400 mb-1">Archetype 1: FX Swap</h4>
+                  <p className="text-zinc-400 leading-relaxed text-[11px]">
+                    Two-party atomic currency swap (e.g. USDC ↔ EURC). Both parties lock requested assets, and settlement executes simultaneously.
+                  </p>
+                </div>
+
+                <div className="bg-[#0c0d10] p-3.5 rounded-md border border-[#1e1f25]">
+                  <h4 className="font-bold text-emerald-400 mb-1">Archetype 2: Job Milestone</h4>
+                  <p className="text-zinc-400 leading-relaxed text-[11px]">
+                    Client locks bounty. Worker submits proof of completion (e.g. PR URL, audit report hash). Client approves and triggers payout release.
+                  </p>
+                </div>
+
+                <div className="bg-[#0c0d10] p-3.5 rounded-md border border-[#1e1f25]">
+                  <h4 className="font-bold text-amber-400 mb-1">Automated Timeout Resolution</h4>
+                  <p className="text-zinc-400 leading-relaxed text-[11px]">
+                    If a counterparty fails to fulfill or release by the deadline timestamp, the contract can be triggered to refund or slash according to deterministic code.
+                  </p>
+                </div>
+              </div>
+            </div>
+
+            <div className="pt-6 border-t border-[#1c1d22]">
+              <button
+                onClick={() => setShowHelpDrawer(false)}
+                className="w-full bg-emerald-500 hover:bg-emerald-400 text-black py-2.5 rounded-md font-mono text-xs font-bold transition-colors cursor-pointer"
+              >
+                Close Guide
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </main>
   )
 }
