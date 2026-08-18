@@ -18,9 +18,7 @@ export default function Home() {
   const [rpcError, setRpcError] = useState(false)
   const [lastFetchTime, setLastFetchTime] = useState<number>(Date.now())
 
-  useEffect(() => {
-    document.title = 'PACT · Escrows'
-  }, [])
+  useEffect(() => { document.title = 'PACT · Escrows' }, [])
 
   async function loadData() {
     if (document.hidden) return
@@ -29,151 +27,121 @@ export default function Home() {
       setPacts(data.sort((a, b) => Number(b.id) - Number(a.id)))
       setRpcError(false)
       setLastFetchTime(Date.now())
-    } catch {
-      setRpcError(true)
-    } finally {
-      setLoading(false)
-    }
+    } catch { setRpcError(true) }
+    finally { setLoading(false) }
   }
 
   useEffect(() => {
-    let mounted = true
-    loadData()
-
-    const interval = setInterval(() => {
-      if (mounted && !document.hidden) loadData()
-    }, 10000)
-
-    const onVis = () => { if (!document.hidden) loadData() }
-    document.addEventListener('visibilitychange', onVis)
-
-    return () => {
-      mounted = false
-      clearInterval(interval)
-      document.removeEventListener('visibilitychange', onVis)
-    }
+    let ok = true; loadData()
+    const iv = setInterval(() => { if (ok && !document.hidden) loadData() }, 10000)
+    const vis = () => { if (!document.hidden) loadData() }
+    document.addEventListener('visibilitychange', vis)
+    return () => { ok = false; clearInterval(iv); document.removeEventListener('visibilitychange', vis) }
   }, [])
 
-  const filtered = useMemo(() => {
-    return pacts.filter(p => {
+  const filtered = useMemo(() =>
+    pacts.filter(p => {
       if (filter === 'ALL') return true
       if (filter === 'LIVE') return p.status === 2
       if (filter === 'DELIVERY') return p.kind === 0
       if (filter === 'FX') return p.kind === 1
       if (filter === 'JOB') return p.kind === 2
       return true
-    })
-  }, [pacts, filter])
+    }), [pacts, filter])
 
-  const stats = useMemo(() => ({
-    total: pacts.length,
-    live: pacts.filter(p => p.status === 2).length,
-    cleared: pacts.filter(p => p.status === 4).length,
-  }), [pacts])
+  const total = pacts.length
+  const live = pacts.filter(p => p.status === 2).length
+  const cleared = pacts.filter(p => p.status === 4).length
+
+  const filters = [
+    { id: 'ALL', label: 'All' },
+    { id: 'DELIVERY', label: 'Delivery' },
+    { id: 'FX', label: 'FX' },
+    { id: 'JOB', label: 'Job' },
+    { id: 'LIVE', label: 'Live' },
+  ]
 
   return (
-    <main className="min-h-screen max-w-[820px] mx-auto pt-6 sm:pt-8 px-4 sm:px-6 pb-20 overflow-x-hidden">
+    <main className="min-h-screen max-w-[780px] mx-auto px-5 sm:px-8 pb-24 overflow-x-hidden">
       <Navbar />
       <TrustStrip lastUpdated={lastFetchTime} rpcError={rpcError} onRetry={loadData} />
 
-      {/* Hero text */}
-      <div className="mb-8 animate-fade-in">
-        <h1 className="text-lg sm:text-xl font-semibold text-zinc-100 tracking-tight mb-1">
-          Escrow Dashboard
+      {/* Hero */}
+      <div className="mb-10 animate-enter">
+        <h1 className="text-[22px] sm:text-[26px] font-semibold text-white tracking-[-0.02em] mb-2">
+          Escrow contracts
         </h1>
-        <p className="text-sm text-zinc-500 max-w-lg">
-          Lock crypto into trustless bilateral contracts with verifiable terms, collateral bonds, and automatic settlement.
+        <p className="text-[15px] text-zinc-500 leading-relaxed max-w-md">
+          Lock funds into bilateral agreements with verifiable terms and automatic settlement.
         </p>
       </div>
 
-      {/* Stats bar — 1 col mobile, 3 col desktop */}
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mb-6">
-        <StatCard label="Total" value={loading ? '—' : stats.total} />
-        <StatCard label="Active" value={loading ? '—' : stats.live} accent="amber" />
-        <StatCard label="Cleared" value={loading ? '—' : stats.cleared} accent="emerald" />
+      {/* Stats — inline, not cards */}
+      <div className="flex items-center gap-6 mb-8 text-[14px] animate-enter-delay">
+        <div>
+          <span className="text-zinc-500">Total</span>
+          <span className="ml-2 text-white font-semibold tabular-nums">{loading ? '–' : total}</span>
+        </div>
+        <span className="text-zinc-800">·</span>
+        <div>
+          <span className="text-zinc-500">Active</span>
+          <span className="ml-2 text-amber-400 font-semibold tabular-nums">{loading ? '–' : live}</span>
+        </div>
+        <span className="text-zinc-800">·</span>
+        <div>
+          <span className="text-zinc-500">Settled</span>
+          <span className="ml-2 text-emerald-400 font-semibold tabular-nums">{loading ? '–' : cleared}</span>
+        </div>
       </div>
 
-      {/* Filter row — horizontal scroll, no wrap */}
-      <div className="flex items-center gap-1.5 mb-4 overflow-x-auto pb-1">
-        {[
-          { id: 'ALL', label: 'All' },
-          { id: 'DELIVERY', label: 'Delivery' },
-          { id: 'FX', label: 'FX Swap' },
-          { id: 'JOB', label: 'Job' },
-          { id: 'LIVE', label: 'Live' },
-        ].map(tab => (
-          <button
-            key={tab.id}
-            onClick={() => setFilter(tab.id)}
-            className={`px-3 py-1.5 text-xs font-mono rounded-md transition-colors whitespace-nowrap shrink-0 cursor-pointer ${
-              filter === tab.id
-                ? 'bg-zinc-800 text-zinc-100'
-                : 'text-zinc-500 hover:text-zinc-300 hover:bg-zinc-800/40'
-            }`}
-          >
-            {tab.id === 'LIVE' && <span className="inline-block w-1.5 h-1.5 rounded-full bg-amber-400 mr-1.5 align-middle" />}
-            {tab.label}
+      {/* Filters */}
+      <div className="flex items-center gap-1 mb-6 overflow-x-auto pb-1">
+        {filters.map(f => (
+          <button key={f.id} onClick={() => setFilter(f.id)}
+            className={`px-3.5 py-1.5 text-[13px] rounded-lg transition-colors whitespace-nowrap cursor-pointer ${
+              filter === f.id
+                ? 'bg-white/[0.08] text-white'
+                : 'text-zinc-500 hover:text-zinc-300 hover:bg-white/[0.03]'
+            }`}>
+            {f.id === 'LIVE' && filter !== 'LIVE' && <span className="inline-block w-[5px] h-[5px] rounded-full bg-amber-400 mr-1.5 align-middle" />}
+            {f.label}
           </button>
         ))}
       </div>
 
-      {/* Ledger */}
-      <div className="rounded-lg border border-zinc-800/60 overflow-hidden bg-zinc-900/30">
-        {loading ? (
-          <div className="flex items-center justify-center py-20 text-zinc-500 font-mono text-xs gap-2">
-            <div className="w-4 h-4 border-2 border-emerald-500 border-t-transparent rounded-full animate-spin" />
-            Reading on-chain ledger…
-          </div>
-        ) : filtered.length === 0 ? (
-          <div className="flex flex-col items-center justify-center py-20 text-center px-4">
-            <div className="w-10 h-10 rounded-full bg-zinc-800 border border-zinc-700 flex items-center justify-center text-zinc-500 mb-3 font-mono text-sm">
-              Ø
-            </div>
-            <p className="text-sm text-zinc-300 mb-1">No pacts found</p>
-            <p className="text-xs text-zinc-500 mb-5 max-w-xs">
-              {filter === 'ALL'
-                ? 'No contracts deployed yet. Create the first one.'
-                : `No pacts match the "${filter}" filter.`}
-            </p>
-            <Link
-              href="/new"
-              className="inline-flex items-center gap-1.5 bg-emerald-500 hover:bg-emerald-400 text-black px-4 py-2 text-xs font-mono font-bold rounded-md transition-colors"
-            >
-              + Create Pact
-            </Link>
-          </div>
-        ) : (
-          filtered.map(p => {
+      {/* Content */}
+      {loading ? (
+        <div className="flex items-center justify-center py-24 text-[14px] text-zinc-600 gap-3">
+          <div className="w-4 h-4 border-[1.5px] border-emerald-500 border-t-transparent rounded-full animate-spin" />
+          Loading contracts…
+        </div>
+      ) : filtered.length === 0 ? (
+        <div className="flex flex-col items-center justify-center py-24 text-center animate-enter">
+          <p className="text-[15px] text-zinc-400 mb-1">No contracts yet</p>
+          <p className="text-[13px] text-zinc-600 mb-6">
+            {filter === 'ALL' ? 'Create the first escrow pact to get started.' : `No pacts match this filter.`}
+          </p>
+          <Link href="/new"
+            className="bg-white text-black px-5 py-2 text-[13px] font-medium rounded-lg hover:bg-zinc-200 transition-colors">
+            Create pact
+          </Link>
+        </div>
+      ) : (
+        <div className="animate-enter-delay">
+          {filtered.map(p => {
             const amt = p.kind === 1
               ? `${formatAmount(p.amountMaker)} ${tokenSymbol(p.tokenMaker)} ↔ ${formatAmount(p.amountTaker)} ${tokenSymbol(p.tokenTaker)}`
               : `${formatAmount(p.amountMaker)} ${tokenSymbol(p.tokenMaker)}`
             return (
-              <TapeLine
-                key={p.id}
-                pact={{
-                  id: p.id,
-                  time: formatTimestamp(p.updatedAt),
-                  kind: kindLabel(p.kind),
-                  status: p.status === 2 ? 'LIVE' : statusLabel(p.status),
-                  amount: amt,
-                  address: truncateAddress(p.maker),
-                  blurSize: p.blurSize,
-                }}
-              />
+              <TapeLine key={p.id} pact={{
+                id: p.id, time: formatTimestamp(p.updatedAt), kind: kindLabel(p.kind),
+                status: p.status === 2 ? 'LIVE' : statusLabel(p.status),
+                amount: amt, address: truncateAddress(p.maker), blurSize: p.blurSize,
+              }} />
             )
-          })
-        )}
-      </div>
+          })}
+        </div>
+      )}
     </main>
-  )
-}
-
-function StatCard({ label, value, accent }: { label: string; value: string | number; accent?: 'emerald' | 'amber' }) {
-  const valueColor = accent === 'emerald' ? 'text-emerald-400' : accent === 'amber' ? 'text-amber-400' : 'text-zinc-100'
-  return (
-    <div className="bg-zinc-900/40 border border-zinc-800/60 rounded-lg px-4 py-3">
-      <span className="block text-[11px] font-mono text-zinc-500 uppercase tracking-wider mb-0.5">{label}</span>
-      <span className={`text-lg font-mono font-bold ${valueColor}`}>{value}</span>
-    </div>
   )
 }

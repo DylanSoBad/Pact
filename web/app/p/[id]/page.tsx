@@ -9,10 +9,7 @@ import PactStateMachine from '../../../components/PactStateMachine'
 import { useAccount, useWriteContract, useWaitForTransactionReceipt } from 'wagmi'
 import { fetchSinglePact, fetchReputation, PactData } from '../../../lib/reads'
 import { PACT_ABI, ERC20_ABI } from '../../../lib/abi'
-import {
-  kindLabel, statusLabel, formatAmount, tokenSymbol, formatDate,
-  truncateAddress, isTerminal, isZeroAddress
-} from '../../../lib/format'
+import { kindLabel, formatAmount, tokenSymbol, formatDate, truncateAddress, isTerminal, isZeroAddress } from '../../../lib/format'
 import { verifyTerms } from '../../../lib/terms'
 import Countdown from '../../../components/Countdown'
 
@@ -31,35 +28,33 @@ export default function PactDetailPage() {
   const [verifyInput, setVerifyInput] = useState(termsParam || '')
   const [termsVerified, setTermsVerified] = useState<boolean | null>(null)
   const [makerRep, setMakerRep] = useState<{ cleared: number; slashed: number; notional: bigint } | null>(null)
-  const [copiedShareLink, setCopiedShareLink] = useState(false)
-  const [lastFetchTime, setLastFetchTime] = useState<number>(Date.now())
+  const [copiedShare, setCopiedShare] = useState(false)
+  const [lastFetch, setLastFetch] = useState(Date.now())
   const [rpcError, setRpcError] = useState(false)
 
   useEffect(() => { if (id) document.title = `PACT · #${id.toString().padStart(4, '0')}` }, [id])
 
   const { writeContract, data: txHash, isPending: txPending, error: writeError } = useWriteContract()
-  const { isSuccess: txConfirmed, isLoading: txReceiptLoading } = useWaitForTransactionReceipt({ hash: txHash })
+  const { isSuccess: txConfirmed, isLoading: txWaiting } = useWaitForTransactionReceipt({ hash: txHash })
 
   async function load() {
     if (document.hidden) return
     try {
-      const data = await fetchSinglePact(id)
-      if (data) {
-        setPact(data); setRpcError(false); setLastFetchTime(Date.now())
-        if (termsParam) setTermsVerified(verifyTerms(termsParam, data.termsHash as `0x${string}`))
-        const rep = await fetchReputation(data.maker as `0x${string}`)
-        setMakerRep(rep)
+      const d = await fetchSinglePact(id)
+      if (d) { setPact(d); setRpcError(false); setLastFetch(Date.now())
+        if (termsParam) setTermsVerified(verifyTerms(termsParam, d.termsHash as `0x${string}`))
+        setMakerRep(await fetchReputation(d.maker as `0x${string}`))
       }
     } catch { setRpcError(true) }
     finally { setLoading(false) }
   }
 
   useEffect(() => {
-    let mounted = true; load()
-    const interval = setInterval(() => { if (mounted && !document.hidden) load() }, 10000)
-    const onVis = () => { if (!document.hidden) load() }
-    document.addEventListener('visibilitychange', onVis)
-    return () => { mounted = false; clearInterval(interval); document.removeEventListener('visibilitychange', onVis) }
+    let ok = true; load()
+    const iv = setInterval(() => { if (ok && !document.hidden) load() }, 10000)
+    const vis = () => { if (!document.hidden) load() }
+    document.addEventListener('visibilitychange', vis)
+    return () => { ok = false; clearInterval(iv); document.removeEventListener('visibilitychange', vis) }
   }, [id, termsParam])
 
   useEffect(() => { if (txConfirmed) load() }, [txConfirmed])
@@ -70,241 +65,188 @@ export default function PactDetailPage() {
 
   const canFund = pact && pact.status === 0 && !isMaker && (isOpenTaker || isTaker)
   const canCancel = pact && pact.status === 0 && isMaker
-  const canSubmitProof = pact && pact.status === 2 && isTaker && pact.kind !== 1
+  const canProof = pact && pact.status === 2 && isTaker && pact.kind !== 1
   const canReject = pact && pact.status === 3 && isMaker && pact.kind !== 1
-  const canRelease = pact && (
-    (pact.kind === 1 && pact.status === 2 && (isMaker || isTaker)) ||
-    (pact.kind !== 1 && (pact.status === 2 || pact.status === 3) && isMaker)
-  )
-  const deadlinePassed = pact && Number(pact.deadline) < Math.floor(Date.now() / 1000)
-  const canExpire = pact && deadlinePassed && !isTerminal(pact.status) && (pact.status === 0 || pact.status === 2 || pact.status === 3)
+  const canRelease = pact && ((pact.kind === 1 && pact.status === 2 && (isMaker || isTaker)) || (pact.kind !== 1 && (pact.status === 2 || pact.status === 3) && isMaker))
+  const expired = pact && Number(pact.deadline) < Math.floor(Date.now() / 1000)
+  const canExpire = pact && expired && !isTerminal(pact.status) && [0, 2, 3].includes(pact.status)
 
-  const doFund = () => {
-    if (!pact) return
-    if (pact.amountTaker > 0n) {
-      writeContract({ address: pact.tokenTaker as `0x${string}`, abi: ERC20_ABI, functionName: 'approve', args: [PACT_ADDRESS, pact.amountTaker] })
-    }
-    writeContract({ address: PACT_ADDRESS, abi: PACT_ABI, functionName: 'fund', args: [BigInt(id)] })
-  }
+  const doFund = () => { if (!pact) return; if (pact.amountTaker > 0n) writeContract({ address: pact.tokenTaker as `0x${string}`, abi: ERC20_ABI, functionName: 'approve', args: [PACT_ADDRESS, pact.amountTaker] }); writeContract({ address: PACT_ADDRESS, abi: PACT_ABI, functionName: 'fund', args: [BigInt(id)] }) }
   const doCancel = () => writeContract({ address: PACT_ADDRESS, abi: PACT_ABI, functionName: 'cancel', args: [BigInt(id)] })
-  const doProof = () => {
-    if (!proofInput) return
-    const encoder = new TextEncoder()
-    const bytes = encoder.encode(proofInput)
-    import('viem').then(({ keccak256, toHex }) => {
-      const hash = keccak256(toHex(bytes))
-      writeContract({ address: PACT_ADDRESS, abi: PACT_ABI, functionName: 'submitProof', args: [BigInt(id), hash] })
-    })
-  }
+  const doProof = () => { if (!proofInput) return; import('viem').then(({ keccak256, toHex }) => { writeContract({ address: PACT_ADDRESS, abi: PACT_ABI, functionName: 'submitProof', args: [BigInt(id), keccak256(toHex(new TextEncoder().encode(proofInput)))] }) }) }
   const doReject = () => writeContract({ address: PACT_ADDRESS, abi: PACT_ABI, functionName: 'reject', args: [BigInt(id)] })
   const doRelease = () => writeContract({ address: PACT_ADDRESS, abi: PACT_ABI, functionName: 'release', args: [BigInt(id)] })
   const doExpire = () => writeContract({ address: PACT_ADDRESS, abi: PACT_ABI, functionName: 'expire', args: [BigInt(id)] })
 
-  const copyShareLink = () => {
-    navigator.clipboard.writeText(typeof window !== 'undefined' ? window.location.href : '')
-    setCopiedShareLink(true); setTimeout(() => setCopiedShareLink(false), 2500)
-  }
+  const copyShare = () => { navigator.clipboard.writeText(typeof window !== 'undefined' ? window.location.href : ''); setCopiedShare(true); setTimeout(() => setCopiedShare(false), 2e3) }
 
-  if (loading) {
-    return (
-      <main className="min-h-screen max-w-[700px] mx-auto pt-6 sm:pt-8 px-4 sm:px-6 pb-20 overflow-x-hidden">
-        <Navbar />
-        <TrustStrip lastUpdated={lastFetchTime} rpcError={rpcError} onRetry={load} />
-        <div className="flex flex-col items-center justify-center py-24 text-xs font-mono text-zinc-500 gap-3">
-          <div className="w-4 h-4 border-2 border-emerald-500 border-t-transparent rounded-full animate-spin" />
-          Loading pact #{id}…
-        </div>
-      </main>
-    )
-  }
+  if (loading) return (
+    <main className="min-h-screen max-w-[660px] mx-auto px-5 sm:px-8 pb-20"><Navbar /><TrustStrip lastUpdated={lastFetch} rpcError={rpcError} onRetry={load} />
+      <div className="flex items-center justify-center py-24 text-[14px] text-zinc-600 gap-3"><div className="w-4 h-4 border-[1.5px] border-emerald-500 border-t-transparent rounded-full animate-spin" />Loading…</div>
+    </main>
+  )
 
-  if (!pact) {
-    return (
-      <main className="min-h-screen max-w-[700px] mx-auto pt-6 sm:pt-8 px-4 sm:px-6 pb-20 overflow-x-hidden">
-        <Navbar />
-        <TrustStrip lastUpdated={lastFetchTime} rpcError={rpcError} onRetry={load} />
-        <div className="rounded-lg border border-zinc-800 bg-zinc-900/40 p-8 text-center max-w-sm mx-auto">
-          <p className="text-sm text-zinc-300 mb-1">Pact #{id} not found</p>
-          <Link href="/" className="text-xs font-mono text-emerald-400 hover:underline">← Dashboard</Link>
-        </div>
-      </main>
-    )
-  }
+  if (!pact) return (
+    <main className="min-h-screen max-w-[660px] mx-auto px-5 sm:px-8 pb-20"><Navbar /><TrustStrip lastUpdated={lastFetch} rpcError={rpcError} onRetry={load} />
+      <div className="text-center py-20"><p className="text-[15px] text-zinc-400 mb-2">Pact #{id} not found</p><Link href="/" className="text-[13px] text-emerald-400 hover:text-emerald-300">← Dashboard</Link></div>
+    </main>
+  )
 
-  const roleText = isMaker ? 'Maker' : isTaker ? 'Taker' : isOpenTaker ? 'Candidate Taker' : 'Observer'
-  const roleColor = isMaker ? 'text-emerald-400 bg-emerald-500/10 border-emerald-500/25' :
-    (isTaker || isOpenTaker) ? 'text-amber-400 bg-amber-500/10 border-amber-500/25' :
-    'text-zinc-400 bg-zinc-800/60 border-zinc-700/40'
+  const role = isMaker ? 'Maker' : isTaker ? 'Taker' : isOpenTaker ? 'Candidate' : 'Observer'
+  const roleCol = isMaker ? 'text-emerald-400' : (isTaker || isOpenTaker) ? 'text-amber-400' : 'text-zinc-500'
+  const busy = txPending || txWaiting
 
   return (
-    <main className="min-h-screen max-w-[700px] mx-auto pt-6 sm:pt-8 px-4 sm:px-6 pb-20 overflow-x-hidden">
+    <main className="min-h-screen max-w-[660px] mx-auto px-5 sm:px-8 pb-20 overflow-x-hidden">
       <Navbar />
-      <TrustStrip lastUpdated={lastFetchTime} rpcError={rpcError} onRetry={load} />
+      <TrustStrip lastUpdated={lastFetch} rpcError={rpcError} onRetry={load} />
 
       {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-5 pb-4 border-b border-zinc-800/50">
+      <div className="flex items-start justify-between mb-8 animate-enter">
         <div>
-          <Link href="/" className="text-xs font-mono text-zinc-500 hover:text-zinc-300 transition-colors">← Back</Link>
-          <div className="flex items-center gap-2.5 mt-1">
-            <h1 className="text-base font-semibold text-zinc-100">Pact #{id.toString().padStart(4, '0')}</h1>
-            <span className="text-[11px] font-mono text-zinc-500 bg-zinc-800/60 px-2 py-0.5 rounded border border-zinc-700/40">{kindLabel(pact.kind)}</span>
+          <Link href="/" className="text-[13px] text-zinc-600 hover:text-zinc-400 transition-colors">← Back</Link>
+          <div className="flex items-center gap-3 mt-1">
+            <h1 className="text-[20px] font-semibold text-white tracking-[-0.01em]">
+              #{id.toString().padStart(4, '0')}
+            </h1>
+            <span className="text-[12px] text-zinc-600">{kindLabel(pact.kind)}</span>
+            <span className={`text-[12px] font-medium ${roleCol}`}>{role}</span>
           </div>
         </div>
-        <div className="flex items-center gap-2">
-          <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded text-[11px] font-mono font-medium border ${roleColor}`}>
-            <span className="w-1.5 h-1.5 rounded-full bg-current" />{roleText}
-          </span>
-          <button onClick={copyShareLink}
-            className="text-[11px] font-mono text-zinc-500 hover:text-zinc-300 bg-zinc-800/40 border border-zinc-700/40 px-2.5 py-1 rounded transition-colors cursor-pointer">
-            {copiedShareLink ? '✓ Copied' : 'Share'}
-          </button>
-        </div>
+        <button onClick={copyShare} className="text-[12px] text-zinc-600 hover:text-zinc-400 transition-colors cursor-pointer mt-6">
+          {copiedShare ? 'Copied' : 'Share'}
+        </button>
       </div>
 
       {/* State machine */}
-      <PactStateMachine status={pact.status} />
-
-      {/* Terms verification */}
-      <div className="rounded-lg border border-zinc-800/60 bg-zinc-900/30 p-4 mb-5">
-        <div className="flex items-center justify-between mb-3">
-          <span className="text-[11px] font-mono text-zinc-500 uppercase tracking-wider">Terms</span>
-          {termsVerified === true && <span className="text-[10px] font-mono text-emerald-400">✓ Verified</span>}
-          {termsVerified === false && <span className="text-[10px] font-mono text-rose-400">✗ Mismatch</span>}
-        </div>
-        {termsParam ? (
-          <div className="bg-zinc-900 border border-zinc-800 rounded-md p-3 text-xs text-zinc-300 leading-relaxed">
-            &ldquo;{decodeURIComponent(termsParam)}&rdquo;
-          </div>
-        ) : (
-          <div className="flex gap-2">
-            <input type="text" value={verifyInput} onChange={e => setVerifyInput(e.target.value)}
-              placeholder="Paste terms to verify…"
-              className="w-full bg-zinc-900 border border-zinc-800 text-zinc-200 px-3 py-1.5 rounded text-xs font-mono placeholder:text-zinc-700 focus:border-emerald-500" />
-            <button type="button" onClick={() => { if (pact && verifyInput) setTermsVerified(verifyTerms(verifyInput, pact.termsHash as `0x${string}`)) }}
-              className="bg-zinc-800 hover:bg-zinc-700 text-zinc-200 border border-zinc-700 px-3 py-1.5 rounded text-xs font-mono whitespace-nowrap cursor-pointer transition-colors">
-              Verify
-            </button>
-          </div>
-        )}
+      <div className="animate-enter-delay">
+        <PactStateMachine status={pact.status} />
       </div>
 
-      {/* Detail rows */}
-      <div className="rounded-lg border border-zinc-800/60 bg-zinc-900/30 overflow-hidden mb-5 divide-y divide-zinc-800/40">
-        <Row label="Maker" value={truncateAddress(pact.maker)} link={`https://testnet.arcscan.app/address/${pact.maker}`} tag={isMaker ? 'You' : undefined} />
-        <Row label="Taker" value={isZeroAddress(pact.taker) ? 'Open' : truncateAddress(pact.taker)}
-          link={!isZeroAddress(pact.taker) ? `https://testnet.arcscan.app/address/${pact.taker}` : undefined} tag={isTaker ? 'You' : undefined} />
-        <Row label="Locked" value={pact.blurSize ? 'Hidden' : `${formatAmount(pact.amountMaker)} ${tokenSymbol(pact.tokenMaker)}`} muted={pact.blurSize} />
-        {pact.amountTaker > 0n && (
-          <Row label={pact.kind === 1 ? 'Counter lock' : 'Bond'} value={pact.blurSize ? 'Hidden' : `${formatAmount(pact.amountTaker)} ${tokenSymbol(pact.tokenTaker)}`} muted={pact.blurSize} />
-        )}
-        <Row label="Created" value={formatDate(pact.createdAt)} />
-        <div className="flex justify-between items-center py-2.5 px-4 text-xs font-mono">
+      {/* Terms */}
+      {termsParam && (
+        <div className="mb-8">
+          <div className="flex items-center justify-between mb-2">
+            <span className="text-[13px] text-zinc-500">Terms</span>
+            {termsVerified === true && <span className="text-[11px] text-emerald-400">✓ Verified</span>}
+            {termsVerified === false && <span className="text-[11px] text-rose-400">✗ Mismatch</span>}
+          </div>
+          <p className="surface-1 rounded-xl p-4 text-[13px] text-zinc-300 leading-relaxed">
+            &ldquo;{decodeURIComponent(termsParam)}&rdquo;
+          </p>
+        </div>
+      )}
+
+      {!termsParam && (
+        <div className="mb-8">
+          <span className="text-[13px] text-zinc-500 block mb-2">Verify terms</span>
+          <div className="flex gap-2">
+            <input value={verifyInput} onChange={e => setVerifyInput(e.target.value)} placeholder="Paste terms…"
+              className="flex-1 bg-white/[0.03] border border-white/[0.06] text-white px-3.5 py-2 rounded-xl text-[13px] placeholder:text-zinc-700" />
+            <button onClick={() => { if (pact && verifyInput) setTermsVerified(verifyTerms(verifyInput, pact.termsHash as `0x${string}`)) }}
+              className="bg-white/[0.06] hover:bg-white/[0.1] text-zinc-300 px-4 py-2 rounded-xl text-[13px] cursor-pointer transition-colors">
+              Check
+            </button>
+          </div>
+          {termsVerified !== null && (
+            <p className={`text-[12px] mt-2 ${termsVerified ? 'text-emerald-400' : 'text-rose-400'}`}>
+              {termsVerified ? '✓ Hash matches' : '✗ Hash mismatch'}
+            </p>
+          )}
+        </div>
+      )}
+
+      {/* Details */}
+      <div className="space-y-3 mb-8 text-[13px]">
+        <Row label="Maker" val={truncateAddress(pact.maker)} link={`https://testnet.arcscan.app/address/${pact.maker}`} tag={isMaker ? 'you' : undefined} />
+        <Row label="Taker" val={isZeroAddress(pact.taker) ? 'Open' : truncateAddress(pact.taker)}
+          link={!isZeroAddress(pact.taker) ? `https://testnet.arcscan.app/address/${pact.taker}` : undefined} tag={isTaker ? 'you' : undefined} />
+        <div className="separator" />
+        <Row label="Locked" val={pact.blurSize ? 'Hidden' : `${formatAmount(pact.amountMaker)} ${tokenSymbol(pact.tokenMaker)}`} dim={pact.blurSize} />
+        {pact.amountTaker > 0n && <Row label={pact.kind === 1 ? 'Counter' : 'Bond'} val={pact.blurSize ? 'Hidden' : `${formatAmount(pact.amountTaker)} ${tokenSymbol(pact.tokenTaker)}`} dim={pact.blurSize} />}
+        <div className="separator" />
+        <Row label="Created" val={formatDate(pact.createdAt)} />
+        <div className="flex justify-between items-center">
           <span className="text-zinc-500">Deadline</span>
-          <span className={deadlinePassed ? 'text-rose-400' : 'text-zinc-300'}>
+          <span className={expired ? 'text-rose-400' : 'text-zinc-200'}>
             {formatDate(pact.deadline)}
-            {!isTerminal(pact.status) && <span className="text-emerald-400 ml-1.5">(<Countdown deadlineTs={pact.deadline} />)</span>}
+            {!isTerminal(pact.status) && <span className="text-emerald-400 ml-2 text-[12px]"><Countdown deadlineTs={pact.deadline} /></span>}
           </span>
         </div>
       </div>
 
       {/* Hashes */}
-      <div className="rounded-lg border border-zinc-800/60 bg-zinc-900/30 p-4 mb-5">
-        <span className="text-[11px] font-mono text-zinc-500 uppercase tracking-wider block mb-2">Hashes</span>
-        <div className="bg-zinc-900 border border-zinc-800 rounded-md p-2 text-[11px] font-mono text-zinc-400 break-all select-all mb-2">
-          <span className="text-zinc-600">terms: </span>{pact.termsHash}
+      <div className="mb-8">
+        <span className="text-[12px] text-zinc-600 block mb-2">Hashes</span>
+        <div className="font-mono text-[11px] text-zinc-600 break-all space-y-1.5 surface-1 rounded-xl p-3.5">
+          <div><span className="text-zinc-700">terms:</span> {pact.termsHash}</div>
+          {pact.proofHash !== '0x0000000000000000000000000000000000000000000000000000000000000000' && (
+            <div><span className="text-zinc-700">proof:</span> <span className="text-emerald-500">{pact.proofHash}</span></div>
+          )}
         </div>
-        {pact.proofHash !== '0x0000000000000000000000000000000000000000000000000000000000000000' && (
-          <div className="bg-zinc-900 border border-zinc-800 rounded-md p-2 text-[11px] font-mono text-emerald-400 break-all select-all">
-            <span className="text-zinc-600">proof: </span>{pact.proofHash}
-          </div>
-        )}
       </div>
 
-      {/* Maker reputation */}
+      {/* Reputation */}
       {makerRep && (
-        <div className="grid grid-cols-3 gap-2 mb-5">
-          <div className="bg-zinc-900/40 border border-zinc-800/60 rounded-md p-2.5 text-center">
-            <span className="text-[10px] font-mono text-zinc-600 block uppercase">Cleared</span>
-            <span className="text-sm font-mono font-bold text-emerald-400">{makerRep.cleared}</span>
-          </div>
-          <div className="bg-zinc-900/40 border border-zinc-800/60 rounded-md p-2.5 text-center">
-            <span className="text-[10px] font-mono text-zinc-600 block uppercase">Slashed</span>
-            <span className="text-sm font-mono font-bold text-rose-400">{makerRep.slashed}</span>
-          </div>
-          <div className="bg-zinc-900/40 border border-zinc-800/60 rounded-md p-2.5 text-center">
-            <span className="text-[10px] font-mono text-zinc-600 block uppercase">Volume</span>
-            <span className="text-sm font-mono font-bold text-zinc-200">${formatAmount(makerRep.notional)}</span>
-          </div>
+        <div className="flex items-center gap-6 mb-8 text-[13px]">
+          <div><span className="text-zinc-500">Cleared</span><span className="ml-2 text-emerald-400 font-semibold">{makerRep.cleared}</span></div>
+          <div><span className="text-zinc-500">Slashed</span><span className="ml-2 text-rose-400 font-semibold">{makerRep.slashed}</span></div>
+          <div><span className="text-zinc-500">Volume</span><span className="ml-2 text-zinc-200 font-semibold">${formatAmount(makerRep.notional)}</span></div>
         </div>
       )}
 
-      {/* TX pending */}
-      {(txPending || txReceiptLoading) && (
-        <div className="mb-5 p-3 rounded-md bg-amber-500/8 border border-amber-500/25 text-amber-300 text-xs font-mono flex items-center gap-2">
-          <div className="w-3.5 h-3.5 border-2 border-amber-400 border-t-transparent rounded-full animate-spin" />
-          Confirming on Arc Testnet…
-          {txHash && <a href={`https://testnet.arcscan.app/tx/${txHash}`} target="_blank" rel="noreferrer" className="text-zinc-500 hover:text-amber-400 underline ml-auto">tx ↗</a>}
+      {/* TX status */}
+      {busy && (
+        <div className="mb-6 text-[13px] text-amber-400 flex items-center gap-2">
+          <div className="w-3.5 h-3.5 border-[1.5px] border-amber-400 border-t-transparent rounded-full animate-spin" />
+          Confirming…
+          {txHash && <a href={`https://testnet.arcscan.app/tx/${txHash}`} target="_blank" rel="noreferrer" className="text-zinc-600 hover:text-amber-400 ml-auto">tx ↗</a>}
         </div>
       )}
-
-      {/* Error */}
-      {writeError && (
-        <div className="mb-5 p-3 rounded-md bg-rose-500/8 border border-rose-500/25 text-rose-300 text-xs font-mono">
-          {writeError.message || 'Transaction failed'}
-        </div>
-      )}
+      {writeError && <p className="mb-6 text-[13px] text-rose-400">{writeError.message || 'Failed'}</p>}
 
       {/* Actions */}
       {isConnected && !isTerminal(pact.status) && (
         <div className="space-y-3">
           {canFund && (
-            <button onClick={doFund} disabled={txPending || txReceiptLoading}
-              className="w-full bg-emerald-500 hover:bg-emerald-400 text-black py-3 rounded-md font-mono text-xs font-bold transition-colors cursor-pointer disabled:opacity-50">
-              {pact.amountTaker > 0n ? `Deposit & Fund (${formatAmount(pact.amountTaker)} ${tokenSymbol(pact.tokenTaker)})` : 'Accept & Fund'}
+            <button onClick={doFund} disabled={busy}
+              className="w-full bg-white text-black py-3 rounded-xl text-[14px] font-medium hover:bg-zinc-200 transition-colors cursor-pointer disabled:opacity-50">
+              {pact.amountTaker > 0n ? `Fund (${formatAmount(pact.amountTaker)} ${tokenSymbol(pact.tokenTaker)})` : 'Accept & fund'}
             </button>
           )}
-
-          {isMaker && pact.status === 0 && (
-            <p className="text-xs text-zinc-500 text-center py-2">Waiting for counterparty to fund.</p>
-          )}
-
-          {canSubmitProof && (
+          {isMaker && pact.status === 0 && <p className="text-[13px] text-zinc-600 text-center py-2">Waiting for counterparty.</p>}
+          {canProof && (
             <div className="space-y-2">
-              <input type="text" value={proofInput} onChange={e => setProofInput(e.target.value)}
-                placeholder="Proof reference (URL, tracking #)…"
-                className="w-full bg-zinc-900 border border-zinc-800 text-zinc-100 px-3 py-2 rounded-md font-mono text-xs placeholder:text-zinc-700 focus:border-emerald-500 transition-colors" />
-              <button onClick={doProof} disabled={!proofInput || txPending}
-                className="w-full bg-emerald-500 hover:bg-emerald-400 disabled:bg-zinc-800 disabled:text-zinc-500 text-black py-2.5 rounded-md font-mono text-xs font-bold transition-colors cursor-pointer">
-                Submit Proof
+              <input value={proofInput} onChange={e => setProofInput(e.target.value)} placeholder="Proof reference…"
+                className="w-full bg-white/[0.03] border border-white/[0.06] text-white px-3.5 py-2.5 rounded-xl text-[14px] placeholder:text-zinc-700" />
+              <button onClick={doProof} disabled={!proofInput || busy}
+                className="w-full bg-white text-black py-3 rounded-xl text-[14px] font-medium hover:bg-zinc-200 transition-colors cursor-pointer disabled:opacity-50 disabled:bg-white/[0.04] disabled:text-zinc-600">
+                Submit proof
               </button>
             </div>
           )}
-
           {canRelease && (
-            <button onClick={doRelease} disabled={txPending || txReceiptLoading}
-              className="w-full bg-emerald-500 hover:bg-emerald-400 text-black py-3 rounded-md font-mono text-xs font-bold transition-colors cursor-pointer disabled:opacity-50">
-              Release & Settle
+            <button onClick={doRelease} disabled={busy}
+              className="w-full bg-white text-black py-3 rounded-xl text-[14px] font-medium hover:bg-zinc-200 transition-colors cursor-pointer disabled:opacity-50">
+              Release & settle
             </button>
           )}
-
           {canExpire && (
-            <button onClick={doExpire} disabled={txPending || txReceiptLoading}
-              className="w-full bg-rose-500/10 hover:bg-rose-500/15 text-rose-300 border border-rose-500/25 py-2.5 rounded-md font-mono text-xs font-medium transition-colors cursor-pointer disabled:opacity-50">
-              Trigger Expiry
+            <button onClick={doExpire} disabled={busy}
+              className="w-full bg-white/[0.04] text-rose-400 border border-rose-500/20 py-2.5 rounded-xl text-[13px] hover:bg-rose-500/[0.08] transition-colors cursor-pointer disabled:opacity-50">
+              Trigger expiry
             </button>
           )}
-
-          {/* Secondary */}
           {canCancel && (
-            <button onClick={doCancel} disabled={txPending || txReceiptLoading}
-              className="w-full bg-zinc-800/40 hover:bg-zinc-800 border border-zinc-700/40 text-zinc-300 py-2.5 rounded-md font-mono text-xs transition-colors cursor-pointer disabled:opacity-50">
-              Cancel Pact
+            <button onClick={doCancel} disabled={busy}
+              className="w-full bg-white/[0.04] text-zinc-400 py-2.5 rounded-xl text-[13px] hover:bg-white/[0.06] transition-colors cursor-pointer disabled:opacity-50">
+              Cancel pact
             </button>
           )}
           {canReject && (
-            <button onClick={doReject} disabled={txPending || txReceiptLoading}
-              className="w-full bg-rose-500/10 hover:bg-rose-500/15 text-rose-300 border border-rose-500/25 py-2.5 rounded-md font-mono text-xs transition-colors cursor-pointer disabled:opacity-50">
-              Reject Proof
+            <button onClick={doReject} disabled={busy}
+              className="w-full bg-white/[0.04] text-rose-400 border border-rose-500/20 py-2.5 rounded-xl text-[13px] hover:bg-rose-500/[0.08] transition-colors cursor-pointer disabled:opacity-50">
+              Reject proof
             </button>
           )}
         </div>
@@ -313,15 +255,13 @@ export default function PactDetailPage() {
   )
 }
 
-function Row({ label, value, link, tag, muted }: { label: string; value: string; link?: string; tag?: string; muted?: boolean }) {
+function Row({ label, val, link, tag, dim }: { label: string; val: string; link?: string; tag?: string; dim?: boolean }) {
   return (
-    <div className="flex justify-between items-center py-2.5 px-4 text-xs font-mono">
+    <div className="flex justify-between items-center">
       <span className="text-zinc-500">{label}</span>
-      <span className={`flex items-center gap-1.5 ${muted ? 'text-zinc-600 italic' : 'text-zinc-300'}`}>
-        {link ? (
-          <a href={link} target="_blank" rel="noreferrer" className="hover:text-emerald-400 transition-colors">{value} ↗</a>
-        ) : value}
-        {tag && <span className="text-emerald-400 text-[10px] font-medium">{tag}</span>}
+      <span className={`flex items-center gap-1.5 ${dim ? 'text-zinc-600 italic' : 'text-zinc-200'}`}>
+        {link ? <a href={link} target="_blank" rel="noreferrer" className="hover:text-emerald-400 transition-colors">{val} ↗</a> : val}
+        {tag && <span className="text-[11px] text-emerald-400">{tag}</span>}
       </span>
     </div>
   )
