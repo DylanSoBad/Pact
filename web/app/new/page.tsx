@@ -6,6 +6,7 @@ import Navbar from '../../components/Navbar'
 import TrustStrip from '../../components/TrustStrip'
 import ConnectButton from '../../components/ConnectButton'
 import { useAccount, useWriteContract, useWaitForTransactionReceipt, useReadContract, useChainId, useSwitchChain } from 'wagmi'
+import { useModal } from 'connectkit'
 import { parseUnits, formatUnits, maxUint256, decodeEventLog } from 'viem'
 import { PACT_ABI, ERC20_ABI } from '../../lib/abi'
 import { USDC_ERC20, EURC } from '../../lib/arc'
@@ -27,6 +28,7 @@ const TOKENS = [
 
 export default function NewPactPage() {
   const { address, isConnected } = useAccount()
+  const { setOpen: openModal } = useModal()
   const chainId = useChainId()
   const { switchChain } = useSwitchChain()
 
@@ -69,13 +71,13 @@ export default function NewPactPage() {
 
   const isWrongChain = isConnected && chainId !== TARGET_CHAIN_ID
   const makerBn = parseMaker()
-  const hasBalance = address ? makerBn <= makerBalance : false
-  const needsApproval = makerBn > currentAllowance
+  const hasBalance = address ? makerBn <= makerBalance : true
+  const needsApproval = isConnected && makerBn > currentAllowance
   const tokenLabel = TOKENS.find(t => t.value === tokenMaker)?.label || 'tokens'
 
   let disabled = false, reason = ''
   if (!amountMaker || makerBn === 0n) { disabled = true; reason = 'Enter an amount' }
-  else if (!hasBalance) { disabled = true; reason = `Not enough ${tokenLabel}` }
+  else if (isConnected && !hasBalance) { disabled = true; reason = `Not enough ${tokenLabel}` }
   else if (terms.length < 20) { disabled = true; reason = `${20 - terms.length} more characters needed` }
   else if (!deadlineMinutes || Number(deadlineMinutes) < 2) { disabled = true; reason = 'Set a deadline' }
   else if (kind === 1 && (!amountTaker || parseTaker() === 0n)) { disabled = true; reason = 'Enter counterparty amount' }
@@ -101,7 +103,15 @@ export default function NewPactPage() {
         makerBn, kind === 1 ? parseTaker() : (amountTaker ? parseTaker() : 0n), deadlineTs, termsH, blurSize] })
   }
 
-  const fillDemo = () => { setKind(0); setTokenMaker(USDC_ERC20); setTokenTaker(USDC_ERC20); setAmountMaker('10'); setAmountTaker('2'); setTerms('Delivery of 1x Server Hardware unit to Singapore DC. Courier tracking reference required upon fulfillment.'); setDeadlineMinutes('60') }
+  const fillDemo = () => {
+    setKind(0)
+    setTokenMaker(USDC_ERC20)
+    setTokenTaker(USDC_ERC20)
+    setAmountMaker('10')
+    setAmountTaker('2')
+    setTerms('Delivery of 1x Server Hardware unit to Singapore DC. Courier tracking reference required upon fulfillment.')
+    setDeadlineMinutes('60')
+  }
 
   const shareUrl = createdPactId ? `${typeof window !== 'undefined' ? window.location.origin : ''}/p/${createdPactId}?terms=${encodeURIComponent(terms)}` : ''
   const copyLink = () => { if (shareUrl) { navigator.clipboard.writeText(shareUrl); setCopiedLink(true); setTimeout(() => setCopiedLink(false), 2500) } }
@@ -152,20 +162,6 @@ export default function NewPactPage() {
               </a>
             )}
           </div>
-        </div>
-      </main>
-    )
-  }
-
-  // ── Not connected ──
-  if (!isConnected) {
-    return (
-      <main className="min-h-screen max-w-[580px] mx-auto px-5 sm:px-8 pb-20 overflow-x-hidden">
-        <Navbar /><TrustStrip />
-        <div className="text-center py-20 animate-enter">
-          <h2 className="text-[17px] font-semibold text-white mb-2">Connect to create a pact</h2>
-          <p className="text-[14px] text-zinc-500 mb-6">You'll need a wallet on Arc Testnet.</p>
-          <ConnectButton />
         </div>
       </main>
     )
@@ -319,7 +315,14 @@ export default function NewPactPage() {
 
         {/* Submit with rich micro-animations */}
         <div>
-          {disabled ? (
+          {!isConnected ? (
+            <button
+              onClick={() => openModal(true)}
+              className="btn-primary w-full py-3 text-[14px]"
+            >
+              Connect wallet to deploy
+            </button>
+          ) : disabled ? (
             <button disabled className="w-full bg-white/[0.04] text-zinc-600 py-3 rounded-xl text-[14px] cursor-not-allowed">{reason}</button>
           ) : step === 'creating' || createPending || createReceiptLoading ? (
             <div className="w-full py-3 rounded-xl text-[14px] text-center text-emerald-400 flex items-center justify-center gap-2">
