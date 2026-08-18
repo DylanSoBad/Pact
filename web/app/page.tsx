@@ -2,8 +2,8 @@
 
 import { useState, useEffect, useMemo } from 'react'
 import Link from 'next/link'
+import Navbar from '../components/Navbar'
 import TapeLine from '../components/TapeLine'
-import ConnectButton from '../components/ConnectButton'
 import { fetchPacts, PactData } from '../lib/reads'
 import {
   kindLabel, statusLabel, formatAmount, tokenSymbol,
@@ -51,33 +51,66 @@ export default function Home() {
 
   return (
     <main className="min-h-screen max-w-[880px] mx-auto pt-8 px-4 sm:px-6 pb-20 flex flex-col">
-      {/* Top Header */}
-      <header className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-6 mb-6 border-b border-[#1c1d22]">
-        <div className="flex items-center gap-3">
-          <div className="w-7 h-7 rounded-md bg-[#18191d] border border-[#27282e] flex items-center justify-center font-mono font-bold text-xs text-zinc-100 shadow-sm">
-            P
-          </div>
+      {/* Top Navbar */}
+      <Navbar />
+
+      {/* 30-Second Product Primer & Testnet Quickstart */}
+      <section className="bg-[#111215] border border-[#1e1f25] rounded-lg p-4 sm:p-5 mb-6 shadow-sm">
+        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 pb-4 mb-4 border-b border-[#1c1d22]">
           <div>
-            <div className="flex items-center gap-2">
-              <h1 className="text-sm font-semibold tracking-tight text-zinc-100">PACT PROTOCOL</h1>
-              <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-mono font-medium text-emerald-400 bg-emerald-500/10 border border-emerald-500/20">
-                <span className="w-1 h-1 rounded-full bg-emerald-400" />
-                Arc Testnet
-              </span>
-            </div>
-            <p className="text-xs text-zinc-400 mt-0.5">Trustless collateral escrow and atomic settlement ledger</p>
+            <span className="text-[10px] font-mono font-semibold uppercase tracking-wider text-emerald-400 bg-emerald-500/10 px-2 py-0.5 rounded border border-emerald-500/20">
+              Protocol Overview (30s)
+            </span>
+            <h2 className="text-sm font-semibold text-zinc-100 mt-2">
+              Trustless Bilateral Escrow & Atomic Settlement on Arc
+            </h2>
+            <p className="text-xs text-zinc-400 mt-1 max-w-xl leading-relaxed">
+              PACT allows counterparties to lock crypto assets into immutable smart contracts tied to verifiable terms, counterparty bonds, and automatic timeout resolution.
+            </p>
+          </div>
+          <div className="flex flex-col sm:flex-row gap-2 shrink-0">
+            <Link
+              href="/new"
+              className="inline-flex items-center justify-center gap-1.5 bg-emerald-500 hover:bg-emerald-400 text-black px-4 py-2 text-xs font-mono font-bold rounded-md transition-all shadow-sm cursor-pointer"
+            >
+              ⚡ Test Happy Path (3 min) →
+            </Link>
           </div>
         </div>
-        <div className="flex items-center gap-3">
-          <ConnectButton />
-          <Link
-            href="/new"
-            className="inline-flex items-center gap-1.5 bg-emerald-500 hover:bg-emerald-400 text-black px-3.5 py-1.5 text-xs font-mono font-bold rounded-md transition-all shadow-sm cursor-pointer"
-          >
-            <span>+</span> NEW PACT
-          </Link>
+
+        {/* 3 Steps Visual Breakdown */}
+        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+          <div className="bg-[#0e0f12] border border-[#1c1d22] p-3 rounded-md">
+            <div className="flex items-center gap-2 mb-1.5">
+              <span className="w-5 h-5 rounded-full bg-emerald-500/10 text-emerald-400 font-mono text-[10px] font-bold flex items-center justify-center border border-emerald-500/20">1</span>
+              <span className="text-xs font-medium text-zinc-200">Create & Lock</span>
+            </div>
+            <p className="text-[11px] text-zinc-400 leading-relaxed">
+              Maker deposits USDC/EURC into smart contract and binds SHA-256 agreement terms.
+            </p>
+          </div>
+
+          <div className="bg-[#0e0f12] border border-[#1c1d22] p-3 rounded-md">
+            <div className="flex items-center gap-2 mb-1.5">
+              <span className="w-5 h-5 rounded-full bg-amber-500/10 text-amber-400 font-mono text-[10px] font-bold flex items-center justify-center border border-amber-500/20">2</span>
+              <span className="text-xs font-medium text-zinc-200">Fulfill & Bond</span>
+            </div>
+            <p className="text-[11px] text-zinc-400 leading-relaxed">
+              Taker deposits collateral bond and submits cryptographic delivery/proof reference.
+            </p>
+          </div>
+
+          <div className="bg-[#0e0f12] border border-[#1c1d22] p-3 rounded-md">
+            <div className="flex items-center gap-2 mb-1.5">
+              <span className="w-5 h-5 rounded-full bg-zinc-800 text-zinc-300 font-mono text-[10px] font-bold flex items-center justify-center border border-zinc-700">3</span>
+              <span className="text-xs font-medium text-zinc-200">Release or Settle</span>
+            </div>
+            <p className="text-[11px] text-zinc-400 leading-relaxed">
+              Maker releases payout upon satisfaction, or automated expiry refunds/slashes on timeout.
+            </p>
+          </div>
         </div>
-      </header>
+      </section>
 
       {/* Protocol Metrics Bar */}
       <section className="grid grid-cols-3 gap-3 mb-6">
@@ -119,7 +152,7 @@ export default function Home() {
           ))}
         </div>
         <span className="text-xs font-mono text-zinc-500 hidden sm:inline-block">
-          Auto-refreshing every 3s
+          Live sync on Arc Testnet
         </span>
       </div>
 
