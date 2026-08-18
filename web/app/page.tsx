@@ -17,14 +17,13 @@ export default function Home() {
   const [loading, setLoading] = useState(true)
   const [rpcError, setRpcError] = useState(false)
   const [lastFetchTime, setLastFetchTime] = useState<number>(Date.now())
-  const [showHelpDrawer, setShowHelpDrawer] = useState(false)
 
   useEffect(() => {
     document.title = 'PACT · Escrows'
   }, [])
 
   async function loadData() {
-    if (document.hidden) return // Pause polling when tab is hidden
+    if (document.hidden) return
     try {
       const data = await fetchPacts()
       setPacts(data.sort((a, b) => Number(b.id) - Number(a.id)))
@@ -41,31 +40,24 @@ export default function Home() {
     let mounted = true
     loadData()
 
-    // 10s auto-refresh interval, pausing when tab is hidden
     const interval = setInterval(() => {
-      if (mounted && !document.hidden) {
-        loadData()
-      }
+      if (mounted && !document.hidden) loadData()
     }, 10000)
 
-    const handleVisibilityChange = () => {
-      if (!document.hidden) {
-        loadData()
-      }
-    }
-    document.addEventListener('visibilitychange', handleVisibilityChange)
+    const onVis = () => { if (!document.hidden) loadData() }
+    document.addEventListener('visibilitychange', onVis)
 
     return () => {
       mounted = false
       clearInterval(interval)
-      document.removeEventListener('visibilitychange', handleVisibilityChange)
+      document.removeEventListener('visibilitychange', onVis)
     }
   }, [])
 
-  const filteredPacts = useMemo(() => {
+  const filtered = useMemo(() => {
     return pacts.filter(p => {
       if (filter === 'ALL') return true
-      if (filter === 'LIVE') return p.status === 2 // Status.LIVE
+      if (filter === 'LIVE') return p.status === 2
       if (filter === 'DELIVERY') return p.kind === 0
       if (filter === 'FX') return p.kind === 1
       if (filter === 'JOB') return p.kind === 2
@@ -73,176 +65,88 @@ export default function Home() {
     })
   }, [pacts, filter])
 
-  const stats = useMemo(() => {
-    const total = pacts.length
-    const live = pacts.filter(p => p.status === 2).length
-    const cleared = pacts.filter(p => p.status === 4).length
-    return { total, live, cleared }
-  }, [pacts])
+  const stats = useMemo(() => ({
+    total: pacts.length,
+    live: pacts.filter(p => p.status === 2).length,
+    cleared: pacts.filter(p => p.status === 4).length,
+  }), [pacts])
 
   return (
-    <main className="min-h-screen max-w-[880px] mx-auto pt-6 sm:pt-8 px-3.5 sm:px-6 pb-20 flex flex-col overflow-x-hidden relative">
-      {/* Top Navbar */}
+    <main className="min-h-screen max-w-[820px] mx-auto pt-6 sm:pt-8 px-4 sm:px-6 pb-20 overflow-x-hidden">
       <Navbar />
-
-      {/* Trust Strip */}
       <TrustStrip lastUpdated={lastFetchTime} rpcError={rpcError} onRetry={loadData} />
 
-      {/* 30-Second Product Primer & Testnet Quickstart */}
-      <section className="bg-[#111215] border border-[#1e1f25] rounded-lg p-4 sm:p-5 mb-6 shadow-sm">
-        <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 pb-4 mb-4 border-b border-[#1c1d22]">
-          <div>
-            <div className="flex items-center gap-2">
-              <span className="text-[10px] font-mono font-semibold uppercase tracking-wider text-emerald-400 bg-emerald-500/10 px-2 py-0.5 rounded border border-emerald-500/20">
-                Protocol Overview (30s)
-              </span>
-              <button
-                onClick={() => setShowHelpDrawer(true)}
-                className="text-[11px] font-mono text-zinc-400 hover:text-emerald-400 transition-colors underline cursor-pointer"
-              >
-                How it Works Drawer ℹ
-              </button>
-            </div>
-            <h2 className="text-sm font-semibold text-zinc-100 mt-2">
-              Trustless Bilateral Escrow & Atomic Settlement on Arc
-            </h2>
-            <p className="text-xs text-zinc-400 mt-1 max-w-xl leading-relaxed">
-              PACT allows counterparties to lock crypto assets into immutable smart contracts tied to verifiable terms, counterparty bonds, and automatic timeout resolution.
-            </p>
-          </div>
-          <div className="flex flex-col sm:flex-row gap-2 shrink-0">
-            <Link
-              href="/new"
-              className="inline-flex items-center justify-center gap-1.5 bg-emerald-500 hover:bg-emerald-400 text-black px-4 py-2 text-xs font-mono font-bold rounded-md transition-all shadow-sm cursor-pointer"
-            >
-              ⚡ Test Happy Path (3 min) →
-            </Link>
-          </div>
-        </div>
-
-        {/* 3 Steps Breakdown (1 col on mobile, 3 cols on desktop) */}
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-          <div className="bg-[#0e0f12] border border-[#1c1d22] p-3 rounded-md">
-            <div className="flex items-center gap-2 mb-1.5">
-              <span className="w-5 h-5 rounded-full bg-emerald-500/10 text-emerald-400 font-mono text-[10px] font-bold flex items-center justify-center border border-emerald-500/20">1</span>
-              <span className="text-xs font-medium text-zinc-200">Create & Lock</span>
-            </div>
-            <p className="text-[11px] text-zinc-400 leading-relaxed">
-              Maker deposits USDC/EURC into smart contract and binds SHA-256 agreement terms.
-            </p>
-          </div>
-
-          <div className="bg-[#0e0f12] border border-[#1c1d22] p-3 rounded-md">
-            <div className="flex items-center gap-2 mb-1.5">
-              <span className="w-5 h-5 rounded-full bg-amber-500/10 text-amber-400 font-mono text-[10px] font-bold flex items-center justify-center border border-amber-500/20">2</span>
-              <span className="text-xs font-medium text-zinc-200">Fulfill & Bond</span>
-            </div>
-            <p className="text-[11px] text-zinc-400 leading-relaxed">
-              Taker deposits collateral bond and submits cryptographic delivery/proof reference.
-            </p>
-          </div>
-
-          <div className="bg-[#0e0f12] border border-[#1c1d22] p-3 rounded-md">
-            <div className="flex items-center gap-2 mb-1.5">
-              <span className="w-5 h-5 rounded-full bg-zinc-800 text-zinc-300 font-mono text-[10px] font-bold flex items-center justify-center border border-zinc-700">3</span>
-              <span className="text-xs font-medium text-zinc-200">Release or Settle</span>
-            </div>
-            <p className="text-[11px] text-zinc-400 leading-relaxed">
-              Maker releases payout upon satisfaction, or automated expiry refunds/slashes on timeout.
-            </p>
-          </div>
-        </div>
-      </section>
-
-      {/* Protocol Metrics Bar (1 column on <640px, 3 columns on desktop) */}
-      <section className="grid grid-cols-1 sm:grid-cols-3 gap-3 mb-6">
-        <div className="bg-[#111215] border border-[#1e1f25] rounded-md p-3">
-          <span className="block text-[11px] font-mono text-zinc-400 uppercase tracking-wider">Total Contracts</span>
-          <span className="text-lg font-mono font-bold text-zinc-100">{loading ? '—' : stats.total}</span>
-        </div>
-        <div className="bg-[#111215] border border-[#1e1f25] rounded-md p-3">
-          <span className="block text-[11px] font-mono text-zinc-400 uppercase tracking-wider">Active Escrows</span>
-          <span className="text-lg font-mono font-bold text-amber-400">{loading ? '—' : stats.live}</span>
-        </div>
-        <div className="bg-[#111215] border border-[#1e1f25] rounded-md p-3">
-          <span className="block text-[11px] font-mono text-zinc-400 uppercase tracking-wider">Cleared & Settled</span>
-          <span className="text-lg font-mono font-bold text-emerald-400">{loading ? '—' : stats.cleared}</span>
-        </div>
-      </section>
-
-      {/* Filter Tabs (Horizontal scroll on mobile, no messy wrap) */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-3">
-        <div className="flex items-center gap-1 p-1 bg-[#111215] border border-[#1e1f25] rounded-md overflow-x-auto whitespace-nowrap max-w-full">
-          {[
-            { id: 'ALL', label: 'All Pacts' },
-            { id: 'DELIVERY', label: 'Delivery' },
-            { id: 'FX', label: 'FX Swap' },
-            { id: 'JOB', label: 'Job' },
-            { id: 'LIVE', label: '● Live' },
-          ].map(tab => (
-            <button
-              key={tab.id}
-              onClick={() => setFilter(tab.id)}
-              className={`px-3 py-1 text-xs font-mono font-medium rounded transition-colors whitespace-nowrap shrink-0 cursor-pointer ${
-                filter === tab.id
-                  ? 'bg-[#222329] text-zinc-100 shadow-sm'
-                  : 'text-zinc-400 hover:text-zinc-200'
-              }`}
-            >
-              {tab.label}
-            </button>
-          ))}
-        </div>
-        <span className="text-xs font-mono text-zinc-500 hidden sm:inline-block">
-          Live sync on Arc Testnet
-        </span>
+      {/* Hero text */}
+      <div className="mb-8 animate-fade-in">
+        <h1 className="text-lg sm:text-xl font-semibold text-zinc-100 tracking-tight mb-1">
+          Escrow Dashboard
+        </h1>
+        <p className="text-sm text-zinc-500 max-w-lg">
+          Lock crypto into trustless bilateral contracts with verifiable terms, collateral bonds, and automatic settlement.
+        </p>
       </div>
 
-      {/* Main Ledger Table */}
-      <div className="bg-[#111215] border border-[#1e1f25] rounded-md overflow-hidden flex flex-col flex-1 shadow-sm">
-        {/* Table Header */}
-        <div className="hidden sm:flex items-center justify-between py-2.5 px-4 bg-[#0d0e11] border-b border-[#1c1d22] text-[11px] font-mono text-zinc-400 uppercase tracking-wider">
-          <div className="flex items-center gap-4">
-            <span className="w-12">Pact</span>
-            <span className="w-20">Type</span>
-            <span>Status</span>
-          </div>
-          <div className="flex items-center gap-6">
-            <span>Collateral / Lock</span>
-            <span className="w-24 text-right">Counterparty</span>
-          </div>
-        </div>
+      {/* Stats bar — 1 col mobile, 3 col desktop */}
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 mb-6">
+        <StatCard label="Total" value={loading ? '—' : stats.total} />
+        <StatCard label="Active" value={loading ? '—' : stats.live} accent="amber" />
+        <StatCard label="Cleared" value={loading ? '—' : stats.cleared} accent="emerald" />
+      </div>
 
-        {/* Ledger Rows */}
+      {/* Filter row — horizontal scroll, no wrap */}
+      <div className="flex items-center gap-1.5 mb-4 overflow-x-auto pb-1">
+        {[
+          { id: 'ALL', label: 'All' },
+          { id: 'DELIVERY', label: 'Delivery' },
+          { id: 'FX', label: 'FX Swap' },
+          { id: 'JOB', label: 'Job' },
+          { id: 'LIVE', label: 'Live' },
+        ].map(tab => (
+          <button
+            key={tab.id}
+            onClick={() => setFilter(tab.id)}
+            className={`px-3 py-1.5 text-xs font-mono rounded-md transition-colors whitespace-nowrap shrink-0 cursor-pointer ${
+              filter === tab.id
+                ? 'bg-zinc-800 text-zinc-100'
+                : 'text-zinc-500 hover:text-zinc-300 hover:bg-zinc-800/40'
+            }`}
+          >
+            {tab.id === 'LIVE' && <span className="inline-block w-1.5 h-1.5 rounded-full bg-amber-400 mr-1.5 align-middle" />}
+            {tab.label}
+          </button>
+        ))}
+      </div>
+
+      {/* Ledger */}
+      <div className="rounded-lg border border-zinc-800/60 overflow-hidden bg-zinc-900/30">
         {loading ? (
-          <div className="flex items-center justify-center py-24 text-zinc-400 font-mono text-xs gap-3">
-            <div className="w-4 h-4 border-2 border-emerald-500 border-t-transparent rounded-full animate-spin"></div>
-            <span>Reading on-chain ledger...</span>
+          <div className="flex items-center justify-center py-20 text-zinc-500 font-mono text-xs gap-2">
+            <div className="w-4 h-4 border-2 border-emerald-500 border-t-transparent rounded-full animate-spin" />
+            Reading on-chain ledger…
           </div>
-        ) : filteredPacts.length === 0 ? (
+        ) : filtered.length === 0 ? (
           <div className="flex flex-col items-center justify-center py-20 text-center px-4">
-            <div className="w-10 h-10 rounded-full bg-zinc-900 border border-zinc-800 flex items-center justify-center text-zinc-500 mb-3 font-mono text-sm">
+            <div className="w-10 h-10 rounded-full bg-zinc-800 border border-zinc-700 flex items-center justify-center text-zinc-500 mb-3 font-mono text-sm">
               Ø
             </div>
-            <p className="text-sm font-medium text-zinc-300 mb-1">No pact records found</p>
-            <p className="text-xs text-zinc-500 mb-4 max-w-sm">
+            <p className="text-sm text-zinc-300 mb-1">No pacts found</p>
+            <p className="text-xs text-zinc-500 mb-5 max-w-xs">
               {filter === 'ALL'
-                ? 'No smart contracts have been initialized yet. Deploy the first escrow pact to start.'
-                : `No pacts currently match the "${filter}" filter criteria.`}
+                ? 'No contracts deployed yet. Create the first one.'
+                : `No pacts match the "${filter}" filter.`}
             </p>
             <Link
               href="/new"
-              className="inline-flex items-center gap-1.5 bg-emerald-500 hover:bg-emerald-400 text-black px-4 py-2 text-xs font-mono font-bold rounded-md transition-all shadow-sm cursor-pointer"
+              className="inline-flex items-center gap-1.5 bg-emerald-500 hover:bg-emerald-400 text-black px-4 py-2 text-xs font-mono font-bold rounded-md transition-colors"
             >
-              + Initialize First Pact →
+              + Create Pact
             </Link>
           </div>
         ) : (
-          filteredPacts.map((p) => {
-            const amountDisplay = p.kind === 1
-              ? `$${formatAmount(p.amountMaker)} ${tokenSymbol(p.tokenMaker)} ↔ $${formatAmount(p.amountTaker)} ${tokenSymbol(p.tokenTaker)}`
-              : `$${formatAmount(p.amountMaker)} ${tokenSymbol(p.tokenMaker)}`
-
+          filtered.map(p => {
+            const amt = p.kind === 1
+              ? `${formatAmount(p.amountMaker)} ${tokenSymbol(p.tokenMaker)} ↔ ${formatAmount(p.amountTaker)} ${tokenSymbol(p.tokenTaker)}`
+              : `${formatAmount(p.amountMaker)} ${tokenSymbol(p.tokenMaker)}`
             return (
               <TapeLine
                 key={p.id}
@@ -251,7 +155,7 @@ export default function Home() {
                   time: formatTimestamp(p.updatedAt),
                   kind: kindLabel(p.kind),
                   status: p.status === 2 ? 'LIVE' : statusLabel(p.status),
-                  amount: amountDisplay,
+                  amount: amt,
                   address: truncateAddress(p.maker),
                   blurSize: p.blurSize,
                 }}
@@ -260,67 +164,16 @@ export default function Home() {
           })
         )}
       </div>
-
-      {/* Help Slide-Over Drawer on / */}
-      {showHelpDrawer && (
-        <div className="fixed inset-0 z-50 flex justify-end bg-black/70 backdrop-blur-sm transition-opacity">
-          <div className="w-full max-w-md bg-[#111215] border-l border-[#222328] h-full p-6 overflow-y-auto flex flex-col justify-between shadow-2xl">
-            <div className="space-y-5">
-              <div className="flex items-center justify-between pb-4 border-b border-[#1c1d22]">
-                <div className="flex items-center gap-2">
-                  <span className="w-2 h-2 rounded-full bg-emerald-400" />
-                  <h3 className="text-sm font-semibold text-zinc-100">PACT Protocol Guide</h3>
-                </div>
-                <button
-                  onClick={() => setShowHelpDrawer(false)}
-                  className="text-zinc-400 hover:text-zinc-100 font-mono text-sm px-2 py-1 rounded bg-[#18191d] border border-[#27282e] cursor-pointer"
-                >
-                  ✕
-                </button>
-              </div>
-
-              <div className="space-y-4 text-xs font-mono text-zinc-300">
-                <div className="bg-[#0c0d10] p-3.5 rounded-md border border-[#1e1f25]">
-                  <h4 className="font-bold text-emerald-400 mb-1">Archetype 0: Delivery Escrow</h4>
-                  <p className="text-zinc-400 leading-relaxed text-[11px]">
-                    Buyer locks payment collateral. Seller locks a performance bond. Seller delivers physical goods and submits tracking proof. Buyer inspects and releases payment.
-                  </p>
-                </div>
-
-                <div className="bg-[#0c0d10] p-3.5 rounded-md border border-[#1e1f25]">
-                  <h4 className="font-bold text-emerald-400 mb-1">Archetype 1: FX Swap</h4>
-                  <p className="text-zinc-400 leading-relaxed text-[11px]">
-                    Two-party atomic currency swap (e.g. USDC ↔ EURC). Both parties lock requested assets, and settlement executes simultaneously.
-                  </p>
-                </div>
-
-                <div className="bg-[#0c0d10] p-3.5 rounded-md border border-[#1e1f25]">
-                  <h4 className="font-bold text-emerald-400 mb-1">Archetype 2: Job Milestone</h4>
-                  <p className="text-zinc-400 leading-relaxed text-[11px]">
-                    Client locks bounty. Worker submits proof of completion (e.g. PR URL, audit report hash). Client approves and triggers payout release.
-                  </p>
-                </div>
-
-                <div className="bg-[#0c0d10] p-3.5 rounded-md border border-[#1e1f25]">
-                  <h4 className="font-bold text-amber-400 mb-1">Automated Timeout Resolution</h4>
-                  <p className="text-zinc-400 leading-relaxed text-[11px]">
-                    If a counterparty fails to fulfill or release by the deadline timestamp, the contract can be triggered to refund or slash according to deterministic code.
-                  </p>
-                </div>
-              </div>
-            </div>
-
-            <div className="pt-6 border-t border-[#1c1d22]">
-              <button
-                onClick={() => setShowHelpDrawer(false)}
-                className="w-full bg-emerald-500 hover:bg-emerald-400 text-black py-2.5 rounded-md font-mono text-xs font-bold transition-colors cursor-pointer"
-              >
-                Close Guide
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
     </main>
+  )
+}
+
+function StatCard({ label, value, accent }: { label: string; value: string | number; accent?: 'emerald' | 'amber' }) {
+  const valueColor = accent === 'emerald' ? 'text-emerald-400' : accent === 'amber' ? 'text-amber-400' : 'text-zinc-100'
+  return (
+    <div className="bg-zinc-900/40 border border-zinc-800/60 rounded-lg px-4 py-3">
+      <span className="block text-[11px] font-mono text-zinc-500 uppercase tracking-wider mb-0.5">{label}</span>
+      <span className={`text-lg font-mono font-bold ${valueColor}`}>{value}</span>
+    </div>
   )
 }

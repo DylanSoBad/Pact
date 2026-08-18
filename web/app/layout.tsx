@@ -4,13 +4,13 @@ import "./globals.css";
 import Web3Provider from "../components/Web3Provider";
 
 const plexMono = IBM_Plex_Mono({
-  variable: "--font-mono",
+  variable: "--font-ibm-plex-mono",
   subsets: ["latin"],
   weight: ["400", "500", "700"],
 });
 
 const plexSans = IBM_Plex_Sans({
-  variable: "--font-sans",
+  variable: "--font-ibm-plex-sans",
   subsets: ["latin"],
   weight: ["400", "500", "600", "700"],
 });

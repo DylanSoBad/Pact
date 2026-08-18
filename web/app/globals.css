@@ -1,31 +1,32 @@
-@tailwind base;
-@tailwind components;
-@tailwind utilities;
+@import "tailwindcss";
 
-:root {
-  --color-bg: #090a0c;
-  --color-surface: #111215;
-  --color-surface-hover: #17181c;
-  --color-surface-raised: #1c1d22;
-  --color-border: #222328;
-  --color-border-subtle: #1a1b1f;
-  --color-border-hover: #32343b;
+@theme {
+  --color-bg: #08090b;
+  --color-surface: #101114;
+  --color-surface-hover: #16171c;
+  --color-surface-raised: #1c1d23;
+  --color-border: #1e2028;
+  --color-border-subtle: #161820;
+  --color-border-hover: #2c2e38;
 
-  --color-text-primary: #f4f4f6;
-  --color-text-secondary: #93959f;
-  --color-text-muted: #60626c;
+  --color-text-primary: #f0f0f4;
+  --color-text-secondary: #8c8e98;
+  --color-text-muted: #55575f;
 
   --color-accent: #22c55e;
-  --color-accent-subtle: rgba(34, 197, 94, 0.1);
-  --color-warning: #f59e0b;
-  --color-warning-subtle: rgba(245, 158, 11, 0.1);
+  --color-accent-dim: #16a34a;
+  --color-accent-subtle: oklch(0.65 0.15 145 / 0.12);
+
+  --color-warn: #f59e0b;
+  --color-warn-subtle: oklch(0.7 0.14 80 / 0.12);
   --color-danger: #ef4444;
-  --color-danger-subtle: rgba(239, 68, 68, 0.1);
+  --color-danger-subtle: oklch(0.6 0.2 25 / 0.12);
 
   --font-sans: var(--font-ibm-plex-sans), -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
   --font-mono: var(--font-ibm-plex-mono), "SFMono-Regular", Consolas, Menlo, monospace;
 }
 
+/* ─── Base ─── */
 body {
   background-color: var(--color-bg);
   color: var(--color-text-primary);
@@ -34,35 +35,26 @@ body {
   -moz-osx-font-smoothing: grayscale;
 }
 
-/* Precise hairline border utilities */
-.hairline-b {
-  border-bottom: 1px solid var(--color-border);
-}
-.hairline-t {
-  border-top: 1px solid var(--color-border);
-}
-.hairline {
-  border: 1px solid var(--color-border);
-}
-
-/* Focus styles for keyboard accessibility */
+/* ─── Focus ring ─── */
 *:focus-visible {
   outline: none;
-  box-shadow: 0 0 0 1.5px #22c55e !important;
+  box-shadow: 0 0 0 2px var(--color-accent);
 }
 
-/* Custom minimal scrollbar */
-::-webkit-scrollbar {
-  width: 5px;
-  height: 5px;
+/* ─── Scrollbar ─── */
+::-webkit-scrollbar { width: 5px; height: 5px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: #27272a; border-radius: 9999px; }
+::-webkit-scrollbar-thumb:hover { background: #3f3f46; }
+
+/* ─── Animations ─── */
+@keyframes fade-in {
+  from { opacity: 0; transform: translateY(6px); }
+  to   { opacity: 1; transform: translateY(0); }
 }
-::-webkit-scrollbar-track {
-  background: transparent;
+@keyframes pulse-dot {
+  0%, 100% { opacity: 1; }
+  50%      { opacity: .4; }
 }
-::-webkit-scrollbar-thumb {
-  background: #27272a;
-  border-radius: 9999px;
-}
-::-webkit-scrollbar-thumb:hover {
-  background: #3f3f46;
-}
+.animate-fade-in { animation: fade-in .35s ease-out both; }
+.animate-pulse-dot { animation: pulse-dot 2s ease-in-out infinite; }
