@@ -7,6 +7,7 @@ export const config = createConfig(
     appName: 'Pact',
     walletConnectProjectId: process.env.NEXT_PUBLIC_WC_PROJECT_ID || 'demo_project_id',
     chains: [arcTestnet],
+    enableAaveAccount: false,
     transports: {
       [arcTestnet.id]: http(),
     },

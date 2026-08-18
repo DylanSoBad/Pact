@@ -11,6 +11,7 @@ import {
   truncateAddress, statusColor, isTerminal, isZeroAddress
 } from '../../../lib/format'
 import { verifyTerms } from '../../../lib/terms'
+import Countdown from '../../../components/Countdown'
 
 const PACT_ADDRESS = process.env.NEXT_PUBLIC_PACT_ADDRESS as `0x${string}`
 
@@ -211,7 +212,12 @@ export default function PactDetailPage() {
           />
         )}
         <Row label="Created" value={formatDate(pact.createdAt)} />
-        <Row label="Deadline" value={formatDate(pact.deadline)} warn={deadlinePassed} />
+        <div className="flex justify-between items-center px-4 py-2.5">
+          <span className="text-xs font-mono text-[var(--color-muted)] uppercase">Deadline</span>
+          <span className={`text-sm font-mono ${deadlinePassed ? 'text-[var(--color-red)]' : ''}`}>
+            {formatDate(pact.deadline)} {!isTerminal(pact.status) && <span className="ml-2 text-[var(--color-lime)]">(<Countdown deadlineTs={pact.deadline} />)</span>}
+          </span>
+        </div>
         <Row label="Last Update" value={formatDate(pact.updatedAt)} />
         <Row label="Terms Hash" value={pact.termsHash} mono small />
         {pact.proofHash !== '0x0000000000000000000000000000000000000000000000000000000000000000' && (

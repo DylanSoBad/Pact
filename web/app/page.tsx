@@ -1,71 +1,61 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useState, useEffect } from 'react'
 import Link from 'next/link'
-import ConnectButton from '../components/ConnectButton'
 import TapeLine from '../components/TapeLine'
+import ConnectButton from '../components/ConnectButton'
 import { fetchPacts, PactData } from '../lib/reads'
-import { kindLabel, statusLabel, formatAmount, tokenSymbol, formatTimestamp, truncateAddress, statusColor, isZeroAddress } from '../lib/format'
+import {
+  kindLabel, statusLabel, formatAmount, tokenSymbol,
+  formatTimestamp, truncateAddress
+} from '../lib/format'
 
-export default function TapePage() {
+export default function Home() {
+  const [filter, setFilter] = useState('ALL')
   const [pacts, setPacts] = useState<PactData[]>([])
-  const [filter, setFilter] = useState<string>('ALL')
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
     let mounted = true
-
-    async function poll() {
-      try {
-        const data = await fetchPacts(50)
-        if (mounted) {
-          setPacts(data)
-          setLoading(false)
-        }
-      } catch {
-        if (mounted) setLoading(false)
+    async function load() {
+      const data = await fetchPacts()
+      if (mounted) {
+        // Sort descending by ID so newest is at top
+        setPacts(data.sort((a, b) => Number(b.id) - Number(a.id)))
+        setLoading(false)
       }
     }
 
-    poll()
-    const interval = setInterval(poll, 2000)
+    load()
+    const interval = setInterval(load, 2000)
     return () => { mounted = false; clearInterval(interval) }
   }, [])
 
-  const filteredPacts = pacts.filter((p) => {
+  const filteredPacts = pacts.filter(p => {
     if (filter === 'ALL') return true
-    if (filter === 'LIVE') return p.status === 2 // Active
-    return kindLabel(p.kind) === filter
+    if (filter === 'LIVE') return p.status === 2 // Status.LIVE
+    if (filter === 'DELIVERY') return p.kind === 0
+    if (filter === 'FX') return p.kind === 1
+    if (filter === 'JOB') return p.kind === 2
+    return true
   })
 
-  const filters = ['ALL', 'DELIVERY', 'FX', 'JOB', 'LIVE']
-
   return (
-    <main className="min-h-screen max-w-[960px] mx-auto pt-8 flex flex-col">
-      <header className="flex justify-between items-center mb-4 px-4">
-        <div>
-          <div className="flex items-center gap-4">
-            <h1 className="text-3xl font-bold tracking-tight">PACT</h1>
-            <div className="bg-[var(--color-panel)] px-3 py-1 text-xs font-mono border border-[var(--color-line)] flex items-center gap-2">
-              <div className="w-2 h-2 rounded-full bg-[var(--color-lime)] animate-pulse"></div>
-              ARC TESTNET 5042002
-            </div>
-          </div>
-          <p className="text-[var(--color-muted)] text-sm mt-1">economic contracts with collateral. not a dex.</p>
+    <main className="min-h-screen max-w-[800px] mx-auto pt-8 px-4 flex flex-col">
+      <header className="flex items-center justify-between mb-8">
+        <div className="flex items-center gap-4">
+          <div className="w-4 h-4 bg-[var(--color-lime)]"></div>
+          <h1 className="text-xl font-bold tracking-tight font-mono">PACT // ARC</h1>
         </div>
         <ConnectButton />
       </header>
 
-      <div className="flex gap-4 mb-6 px-4 items-center">
-        {filters.map((f) => (
+      <div className="flex border-b border-[var(--color-line)] text-sm font-mono sticky top-0 bg-black z-10">
+        {['ALL', 'DELIVERY', 'FX', 'JOB', 'LIVE'].map(f => (
           <button
             key={f}
             onClick={() => setFilter(f)}
-            className={`text-xs font-mono uppercase pb-1 transition-colors cursor-pointer ${
-              filter === f
-                ? 'text-[var(--color-lime)] border-b border-[var(--color-lime)]'
-                : 'text-[var(--color-muted)] hover:text-[var(--color-text)]'
-            }`}
+            className={`px-6 py-1 ${filter === f ? 'bg-white text-black' : 'text-[var(--color-muted)] hover:text-white'}`}
           >
             {f}
           </button>

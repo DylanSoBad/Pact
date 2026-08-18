@@ -1,20 +1,44 @@
-@import "tailwindcss";
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
 
-@theme {
-  --font-mono: "IBM Plex Mono", ui-monospace, monospace;
-  --font-sans: "IBM Plex Sans", ui-sans-serif, system-ui;
-  --color-bg: #07080a;
-  --color-panel: #101216;
-  --color-line: #1c1f26;
-  --color-text: #e8ead3;
-  --color-muted: #8b9078;
+:root {
+  --color-bg: #000000;
+  --color-panel: #111111;
+  --color-line: #333333;
+  --color-text: #ffffff;
+  --color-muted: #a3a3a3; /* Boosted for 4.5:1 contrast on black */
+  
   --color-lime: #c8f542;
-  --color-red: #ff4d4d;
-  --color-amber: #f5a524;
+  --color-red: #ff3333;
+  --color-amber: #ffaa00;
+
+  --font-sans: var(--font-ibm-plex-sans), system-ui, sans-serif;
+  --font-mono: var(--font-ibm-plex-mono), monospace;
 }
 
 body {
-  background-color: var(--color-bg);
+  background: var(--color-bg);
   color: var(--color-text);
   font-family: var(--font-sans);
+}
+
+/* Brutalist resets */
+* {
+  border-radius: 0 !important;
+  box-shadow: none !important;
+}
+
+input:focus-visible, 
+button:focus-visible, 
+select:focus-visible, 
+textarea:focus-visible {
+  outline: none !important;
+  box-shadow: 0 0 0 2px var(--color-lime) !important;
+}
+
+/* Hide scrollbar for tape UI */
+::-webkit-scrollbar {
+  width: 0px;
+  background: transparent;
 }
