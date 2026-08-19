@@ -4,11 +4,12 @@ import { useState, useEffect, useRef } from 'react'
 import Link from 'next/link'
 import Navbar from '../../components/Navbar'
 import TrustStrip from '../../components/TrustStrip'
-import { useAccount, useWriteContract, useWaitForTransactionReceipt, useReadContract, useChainId, useSwitchChain } from 'wagmi'
+import { useAccount, useWalletClient, usePublicClient, useWriteContract, useWaitForTransactionReceipt, useReadContract, useChainId, useSwitchChain } from 'wagmi'
 import { useModal } from 'connectkit'
 import { parseUnits, formatUnits, maxUint256, decodeEventLog } from 'viem'
 import { PACT_ABI, ERC20_ABI } from '../../lib/abi'
 import { USDC_ERC20, EURC, getPactAddress } from '../../lib/arc'
+import { PACT_BYTECODE } from '../../lib/bytecode'
 import { hashTerms } from '../../lib/terms'
 import TokenSelect from '../../components/TokenSelect'
 
@@ -33,11 +34,16 @@ const ARBITRATOR_PRESETS = [
 
 export default function NewPactPage() {
   const { address, isConnected } = useAccount()
+  const { data: walletClient } = useWalletClient()
+  const publicClient = usePublicClient()
   const { setOpen: openModal } = useModal()
   const chainId = useChainId()
   const { switchChain } = useSwitchChain()
 
   const [pactAddress, setPactAddress] = useState<`0x${string}`>('0x0000000000000000000000000000000000000000')
+  const [deployingContract, setDeployingContract] = useState(false)
+  const [deployTxHash, setDeployTxHash] = useState<string | null>(null)
+
   const [kind, setKind] = useState(0)
   const [tokenMaker, setTokenMaker] = useState(USDC_ERC20)
   const [tokenTaker, setTokenTaker] = useState(USDC_ERC20)
@@ -59,7 +65,8 @@ export default function NewPactPage() {
 
   useEffect(() => {
     document.title = 'PACT · New'
-    setPactAddress(getPactAddress())
+    const addr = getPactAddress()
+    setPactAddress(addr)
   }, [])
 
   // 1-Click Batched Flow Ref
@@ -108,13 +115,38 @@ export default function NewPactPage() {
   const tokenLabel = TOKENS.find(t => t.value === tokenMaker)?.label || 'tokens'
 
   let disabled = false, reason = ''
-  if (!isContractConfigured) { disabled = true; reason = 'Deploy protocol contract first' }
-  else if (!amountMaker || makerBn === 0n) { disabled = true; reason = 'Enter an amount' }
+  if (!amountMaker || makerBn === 0n) { disabled = true; reason = 'Enter an amount' }
   else if (isConnected && !hasBalance) { disabled = true; reason = `Not enough ${tokenLabel}` }
   else if (terms.length < 20) { disabled = true; reason = `${20 - terms.length} more characters needed` }
   else if (arbitratorType === 'custom' && (!customArbitrator.startsWith('0x') || customArbitrator.length !== 42)) { disabled = true; reason = 'Enter valid 0x Arbitrator address' }
   else if (!deadlineMinutes || Number(deadlineMinutes) < 2) { disabled = true; reason = 'Set a deadline' }
   else if (kind === 1 && (!amountTaker || parseTaker() === 0n)) { disabled = true; reason = 'Enter counterparty amount' }
+
+  // 1-Click In-Place Contract Deployment Handler
+  const handleDeployProtocolContract = async () => {
+    if (!walletClient || isWrongChain) return
+    setDeployingContract(true)
+    try {
+      const hash = await walletClient.deployContract({
+        abi: PACT_ABI,
+        bytecode: PACT_BYTECODE,
+        args: [USDC_ERC20 as `0x${string}`, EURC as `0x${string}`],
+      })
+      setDeployTxHash(hash)
+
+      if (publicClient) {
+        const receipt = await publicClient.waitForTransactionReceipt({ hash })
+        if (receipt?.contractAddress) {
+          localStorage.setItem('pact_contract_address', receipt.contractAddress)
+          setPactAddress(receipt.contractAddress)
+        }
+      }
+    } catch (err: any) {
+      console.error('Deployment error:', err)
+    } finally {
+      setDeployingContract(false)
+    }
+  }
 
   // ─── Senior 1-Click Batched Pipeline Auto-Trigger ───
   useEffect(() => {
@@ -159,7 +191,12 @@ export default function NewPactPage() {
   }, [createConfirmed, createReceipt])
 
   const doBatched1ClickDeploy = () => {
-    if (!isConnected || isWrongChain || !isContractConfigured) return
+    if (!isConnected || isWrongChain) return
+    if (!isContractConfigured) {
+      handleDeployProtocolContract()
+      return
+    }
+
     if (needsApproval) {
       isBatchedRef.current = true
       setStep('approving')
@@ -268,18 +305,6 @@ export default function NewPactPage() {
   return (
     <main className="min-h-screen max-w-[580px] mx-auto px-5 sm:px-8 pb-24 overflow-x-hidden">
       <Navbar /><TrustStrip />
-
-      {!isContractConfigured && (
-        <div className="mb-6 p-4 rounded-xl bg-amber-500/[0.08] border border-amber-500/20 text-[13px] text-amber-300 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 animate-enter">
-          <div>
-            <div className="font-semibold mb-0.5">⚠️ Protocol Contract Not Initialized</div>
-            <div className="text-amber-400/80 text-[12px]">Deploy the smart contract to Arc Testnet with 1-click or paste an address.</div>
-          </div>
-          <Link href="/deploy" className="btn-primary bg-amber-400 text-black px-4 py-1.5 rounded-lg text-[12px] shrink-0">
-            Deploy Now ↗
-          </Link>
-        </div>
-      )}
 
       {/* Account Abstraction Banner */}
       <div className="mb-6 p-3 rounded-xl bg-emerald-500/[0.06] border border-emerald-500/20 flex items-center justify-between text-[12px] text-emerald-300 animate-enter">
@@ -499,6 +524,18 @@ export default function NewPactPage() {
             </button>
           ) : disabled ? (
             <button disabled className="w-full bg-white/[0.04] text-zinc-600 py-3 rounded-xl text-[14px] cursor-not-allowed">{reason}</button>
+          ) : deployingContract ? (
+            <div className="w-full py-3.5 rounded-xl text-[14px] text-center text-amber-400 flex items-center justify-center gap-2 bg-amber-500/[0.08] border border-amber-500/20">
+              <div className="w-4 h-4 border-[1.5px] border-amber-400 border-t-transparent rounded-full animate-spin" />
+              <span>Deploying Protocol Contract on Circle Arc…</span>
+            </div>
+          ) : !isContractConfigured ? (
+            <button
+              onClick={handleDeployProtocolContract}
+              className="btn-primary w-full py-3.5 text-[14px] flex items-center justify-center gap-2 bg-amber-400 text-black hover:bg-amber-300"
+            >
+              <span>🚀 1-Click Initialize & Deploy Protocol Contract</span>
+            </button>
           ) : step === 'creating' || createPending || createReceiptLoading ? (
             <div className="w-full py-3.5 rounded-xl text-[14px] text-center text-emerald-400 flex items-center justify-center gap-2 bg-emerald-500/[0.08] border border-emerald-500/20">
               <div className="w-4 h-4 border-[1.5px] border-emerald-400 border-t-transparent rounded-full animate-spin" />
