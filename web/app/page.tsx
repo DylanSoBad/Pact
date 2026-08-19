@@ -8,7 +8,7 @@ import TrustStrip from '../components/TrustStrip'
 import TapeLine from '../components/TapeLine'
 import { fetchPacts, PactData } from '../lib/reads'
 import { getPactAddress } from '../lib/arc'
-import { useAccount } from 'wagmi'
+import { useAccount, useBlockNumber } from 'wagmi'
 import {
   kindLabel, statusLabel, formatAmount, tokenSymbol,
   formatTimestamp, truncateAddress
@@ -24,6 +24,9 @@ export default function Home() {
   const [loading, setLoading] = useState(true)
   const [rpcError, setRpcError] = useState(false)
   const [lastFetchTime, setLastFetchTime] = useState<number>(Date.now())
+
+  // Use wagmi's optimized block watcher instead of manual aggressive polling
+  const { data: blockNumber } = useBlockNumber({ watch: true })
 
   useEffect(() => { document.title = 'PACT · Escrows' }, [])
 
@@ -49,12 +52,16 @@ export default function Home() {
   useEffect(() => {
     let ok = true
     loadData()
-    // 2-second high frequency real-time Multicall3 polling (Spec §9)
-    const iv = setInterval(() => { if (ok && !document.hidden) loadData() }, 2000)
-    const vis = () => { if (!document.hidden) loadData() }
+    // Fallback visibility listener
+    const vis = () => { if (!document.hidden && ok) loadData() }
     document.addEventListener('visibilitychange', vis)
-    return () => { ok = false; clearInterval(iv); document.removeEventListener('visibilitychange', vis) }
+    return () => { ok = false; document.removeEventListener('visibilitychange', vis) }
   }, [])
+
+  // Refetch when block number changes
+  useEffect(() => {
+    if (blockNumber) loadData()
+  }, [blockNumber])
 
   const handleSearchKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
     if (e.key === 'Enter') {

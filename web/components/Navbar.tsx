@@ -30,12 +30,7 @@ export default function Navbar() {
         >
           MY PACTS
         </Link>
-        <Link
-          href="/deploy"
-          className="hidden @md:inline text-[13px] uppercase tracking-widest text-zinc-500 hover:text-[#c8f542] transition-colors"
-        >
-          Deploy
-        </Link>
+
         <a
           href="https://faucet.circle.com/"
           target="_blank"

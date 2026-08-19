@@ -6,7 +6,8 @@ import Navbar from '../../components/Navbar'
 import TrustStrip from '../../components/TrustStrip'
 import { useAccount, useWalletClient, usePublicClient, useWriteContract, useWaitForTransactionReceipt, useReadContract, useChainId, useSwitchChain } from 'wagmi'
 import { useModal } from 'connectkit'
-import { parseUnits, formatUnits, maxUint256, decodeEventLog } from 'viem'
+import { parseUnits, formatUnits, maxUint256, decodeEventLog, isAddress } from 'viem'
+import { toast } from 'sonner'
 import { PACT_ABI, ERC20_ABI } from '../../lib/abi'
 import { USDC_ERC20, EURC, getPactAddress } from '../../lib/arc'
 import { PACT_BYTECODE } from '../../lib/bytecode'
@@ -105,6 +106,7 @@ export default function NewPactPage() {
   else if (terms.length < 20) { disabled = true; reason = `${20 - terms.length} more characters needed` }
   else if (!deadlineMinutes || Number(deadlineMinutes) < 2) { disabled = true; reason = 'Set a deadline' }
   else if (kind === 1 && (!amountTaker || parseTaker() === 0n)) { disabled = true; reason = 'Enter counterparty amount' }
+  else if (taker && !isAddress(taker)) { disabled = true; reason = 'Invalid counterparty address' }
 
   // 1-Click In-Place Contract Deployment Handler
   const handleDeployProtocolContract = async () => {
@@ -123,10 +125,12 @@ export default function NewPactPage() {
         if (receipt?.contractAddress) {
           localStorage.setItem('pact_contract_address', receipt.contractAddress)
           setPactAddress(receipt.contractAddress)
+          toast.success('Protocol contract initialized')
         }
       }
     } catch (err: any) {
       console.error('Deployment error:', err)
+      toast.error('Failed to initialize protocol contract')
     } finally {
       setDeployingContract(false)
     }
@@ -161,8 +165,22 @@ export default function NewPactPage() {
   }, [approveConfirmed, step, pactAddress])
 
   useEffect(() => {
+    if (approveError) {
+      setStep('form')
+      isBatchedRef.current = false
+      toast.error('Approval failed or rejected')
+    }
+    if (createError) {
+      setStep('form')
+      isBatchedRef.current = false
+      toast.error('Pact creation failed or rejected')
+    }
+  }, [approveError, createError])
+
+  useEffect(() => {
     if (createConfirmed && createReceipt) {
       setStep('done')
+      toast.success('Pact successfully created!')
       try {
         for (const log of createReceipt.logs) {
           try {
@@ -225,7 +243,7 @@ export default function NewPactPage() {
     ? `${typeof window !== 'undefined' ? window.location.origin : ''}/p/${createdPactId}?terms=${encodeURIComponent(terms)}`
     : ''
 
-  const copyLink = () => { if (shareUrl) { navigator.clipboard.writeText(shareUrl); setCopiedLink(true); setTimeout(() => setCopiedLink(false), 2500) } }
+  const copyLink = () => { if (shareUrl) { navigator.clipboard.writeText(shareUrl); setCopiedLink(true); toast.success('Link copied to clipboard!'); setTimeout(() => setCopiedLink(false), 2500) } }
 
   const mc = kind === 0 ? { m: 'Your deposit', t: 'Seller bond', ma: 'Payment', ta: 'Collateral' }
     : kind === 1 ? { m: 'You lock', t: 'They lock', ma: 'Amount', ta: 'Amount' }
