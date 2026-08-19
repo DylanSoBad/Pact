@@ -13,6 +13,7 @@ import { kindLabel, formatAmount, tokenSymbol, formatDate, truncateAddress, isTe
 import { verifyTerms } from '../../../lib/terms'
 import Countdown from '../../../components/Countdown'
 import { getPactAddress } from '../../../lib/arc'
+import { toast } from 'sonner'
 
 export default function PactDetailPage() {
   const params = useParams()
@@ -27,6 +28,7 @@ export default function PactDetailPage() {
   const [verifyInput, setVerifyInput] = useState(termsParam || '')
   const [termsVerified, setTermsVerified] = useState<boolean | null>(null)
   const [makerRep, setMakerRep] = useState<{ cleared: number; slashed: number; notional: bigint } | null>(null)
+  const [takerRep, setTakerRep] = useState<{ cleared: number; slashed: number; notional: bigint } | null>(null)
   const [showShareModal, setShowShareModal] = useState(false)
   const [showDisputeModal, setShowDisputeModal] = useState(false)
   const [disputeConfirmed, setDisputeConfirmed] = useState(false)
@@ -61,6 +63,9 @@ export default function PactDetailPage() {
         setLastFetch(Date.now())
         if (termsParam) setTermsVerified(verifyTerms(termsParam, d.termsHash as `0x${string}`))
         setMakerRep(await fetchReputation(d.maker as `0x${string}`))
+        if (!isZeroAddress(d.taker)) {
+          setTakerRep(await fetchReputation(d.taker as `0x${string}`))
+        }
       }
     } catch { setRpcError(true) }
     finally { setLoading(false) }
@@ -74,7 +79,18 @@ export default function PactDetailPage() {
     return () => { ok = false; clearInterval(iv); document.removeEventListener('visibilitychange', vis) }
   }, [id, termsParam, notificationsEnabled])
 
-  useEffect(() => { if (txConfirmed) load() }, [txConfirmed])
+  useEffect(() => { 
+    if (txConfirmed) {
+      toast.success('Transaction confirmed on Circle Arc!')
+      load() 
+    }
+  }, [txConfirmed])
+
+  useEffect(() => {
+    if (writeError) {
+      toast.error(writeError.message || 'Transaction failed')
+    }
+  }, [writeError])
 
   const requestNotifications = () => {
     if (typeof window !== 'undefined' && 'Notification' in window) {
@@ -314,20 +330,28 @@ export default function PactDetailPage() {
       </div>
 
       {/* Maker Reputation Track Record */}
-      {makerRep && (
-        <div className="flex items-center gap-6 mb-8 text-[12px] p-3 rounded-none surface-0 border border-zinc-800">
-          <div>
-            <span className="text-zinc-500 uppercase tracking-widest">Cleared</span>
-            <span className="ml-2 text-[#c8f542] font-bold">{makerRep.cleared}</span>
-          </div>
-          <div>
-            <span className="text-zinc-500 uppercase tracking-widest">Slashed</span>
-            <span className="ml-2 text-rose-400 font-bold">{makerRep.slashed}</span>
-          </div>
-          <div>
-            <span className="text-zinc-500 uppercase tracking-widest">Settled Vol</span>
-            <span className="ml-2 text-zinc-400 font-bold">${formatAmount(makerRep.notional)}</span>
-          </div>
+      {(makerRep || takerRep) && (
+        <div className="grid grid-cols-1 @md:grid-cols-2 gap-4 mb-8">
+          {makerRep && (
+            <div className="surface-0 border border-zinc-800 p-4">
+              <span className="text-[11px] uppercase tracking-widest text-zinc-500 block mb-3">Maker Trust Score</span>
+              <div className="flex items-center gap-6 text-[12px]">
+                <div><span className="text-zinc-500 uppercase tracking-widest">Cleared</span><span className="ml-2 text-[#c8f542] font-bold">{makerRep.cleared}</span></div>
+                <div><span className="text-zinc-500 uppercase tracking-widest">Slashed</span><span className="ml-2 text-rose-400 font-bold">{makerRep.slashed}</span></div>
+                <div><span className="text-zinc-500 uppercase tracking-widest">Vol</span><span className="ml-2 text-zinc-400 font-bold">${formatAmount(makerRep.notional)}</span></div>
+              </div>
+            </div>
+          )}
+          {takerRep && (
+            <div className="surface-0 border border-zinc-800 p-4">
+              <span className="text-[11px] uppercase tracking-widest text-zinc-500 block mb-3">Counterparty Trust Score</span>
+              <div className="flex items-center gap-6 text-[12px]">
+                <div><span className="text-zinc-500 uppercase tracking-widest">Cleared</span><span className="ml-2 text-[#c8f542] font-bold">{takerRep.cleared}</span></div>
+                <div><span className="text-zinc-500 uppercase tracking-widest">Slashed</span><span className="ml-2 text-rose-400 font-bold">{takerRep.slashed}</span></div>
+                <div><span className="text-zinc-500 uppercase tracking-widest">Vol</span><span className="ml-2 text-zinc-400 font-bold">${formatAmount(takerRep.notional)}</span></div>
+              </div>
+            </div>
+          )}
         </div>
       )}
 
@@ -344,11 +368,7 @@ export default function PactDetailPage() {
         </div>
       )}
 
-      {writeError && (
-        <div className="mb-6 text-[12px] text-rose-400 p-3 rounded-none bg-rose-500/[0.08] border border-rose-500/30">
-          {writeError.message || 'Transaction execution failed.'}
-        </div>
-      )}
+
 
       {/* Primary & Secondary Role Actions */}
       {isConnected && !isTerminal(pact.status) && (

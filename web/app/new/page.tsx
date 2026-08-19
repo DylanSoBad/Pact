@@ -12,6 +12,7 @@ import { PACT_ABI, ERC20_ABI } from '../../lib/abi'
 import { USDC_ERC20, EURC, getPactAddress } from '../../lib/arc'
 import { PACT_BYTECODE } from '../../lib/bytecode'
 import { hashTerms } from '../../lib/terms'
+import { fetchReputation } from '../../lib/reads'
 import TokenSelect from '../../components/TokenSelect'
 
 const TARGET_CHAIN_ID = Number(process.env.NEXT_PUBLIC_CHAIN_ID || 5042002)
@@ -24,6 +25,12 @@ const KINDS = [
 const TOKENS = [
   { value: USDC_ERC20, label: 'USDC' },
   { value: EURC, label: 'EURC' },
+]
+
+const TEMPLATES = [
+  { label: 'Delivery', text: 'Delivery of physical goods. Must provide valid tracking URL upon fulfillment.' },
+  { label: 'Freelance', text: 'Completion of coding task. Must provide GitHub PR and passing tests.' },
+  { label: 'OTC Swap', text: 'Atomic exchange of digital assets. No extra conditions.' },
 ]
 
 
@@ -54,12 +61,28 @@ export default function NewPactPage() {
   const [step, setStep] = useState<'form' | 'approving' | 'creating' | 'done'>('form')
   const [createdPactId, setCreatedPactId] = useState<number | null>(null)
   const [copiedLink, setCopiedLink] = useState(false)
+  
+  const [reputation, setReputation] = useState<{ cleared: number; slashed: number; notional: bigint } | null>(null)
+  const [repLoading, setRepLoading] = useState(false)
 
   useEffect(() => {
     document.title = 'PACT · New'
     const addr = getPactAddress()
     setPactAddress(addr)
   }, [])
+
+  // Auto-fetch reputation when counterparty address is valid
+  useEffect(() => {
+    if (taker && isAddress(taker)) {
+      setRepLoading(true)
+      fetchReputation(taker as `0x${string}`).then(r => {
+        setReputation(r)
+        setRepLoading(false)
+      })
+    } else {
+      setReputation(null)
+    }
+  }, [taker])
 
   // 1-Click Batched Flow Ref
   const isBatchedRef = useRef(false)
@@ -409,9 +432,19 @@ export default function NewPactPage() {
           <div className="separator" />
 
           <div>
-            <label className="text-[12px] text-zinc-500 block mb-1.5">
-              Designated Counterparty <span className="text-zinc-700">· leave empty for open candidate pool</span>
-            </label>
+            <div className="flex items-center justify-between mb-1.5">
+              <label className="text-[12px] text-zinc-500 block">
+                Designated Counterparty <span className="text-zinc-700">· leave empty for open candidate pool</span>
+              </label>
+              {reputation && (
+                <div className="flex items-center gap-2 text-[10px] uppercase tracking-wider bg-[#18181b] px-2 py-0.5 border border-zinc-800">
+                  <span className="text-zinc-400">Trust Score:</span>
+                  <span className="text-[#c8f542]">{reputation.cleared} Cleared</span>
+                  {reputation.slashed > 0 && <span className="text-rose-400">/ {reputation.slashed} Slashed</span>}
+                </div>
+              )}
+              {repLoading && <div className="text-[10px] text-zinc-600 uppercase tracking-wider">Checking rep...</div>}
+            </div>
             <input type="text" value={taker} onChange={e => setTaker(e.target.value)} placeholder="0x…"
               className="w-full bg-[#07080a] border border-zinc-800 hover:border-zinc-600 text-white px-3.5 py-2.5 rounded-none text-[14px] font-mono placeholder:text-zinc-700 focus:border-[#c8f542] transition-none outline-none focus:ring-0" />
           </div>
@@ -422,7 +455,15 @@ export default function NewPactPage() {
         <div>
           <div className="flex justify-between items-center mb-2">
             <label className="text-[13px] text-zinc-500">Agreement terms & fulfillment condition</label>
-            <span className={`text-[11px] ${terms.length < 20 ? 'text-amber-500' : 'text-zinc-600'}`}>{terms.length}/20</span>
+            <div className="flex items-center gap-2">
+              <span className="text-[10px] text-zinc-600 hidden @md:inline">Templates:</span>
+              {TEMPLATES.map(t => (
+                <button key={t.label} onClick={() => setTerms(t.text)} className="text-[10px] bg-zinc-900 border border-zinc-800 hover:border-[#c8f542] text-zinc-400 hover:text-[#c8f542] px-2 py-0.5 transition-colors">
+                  {t.label}
+                </button>
+              ))}
+              <span className={`text-[11px] ml-2 ${terms.length < 20 ? 'text-amber-500' : 'text-zinc-600'}`}>{terms.length}/20</span>
+            </div>
           </div>
           <textarea value={terms} onChange={e => setTerms(e.target.value)} rows={3}
             placeholder="Describe delivery condition, tracking number, or milestone specification…"
