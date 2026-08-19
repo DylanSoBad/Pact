@@ -356,7 +356,17 @@ export default function NewPactPage() {
                 {address && (
                   <span className="text-[11px] text-zinc-600">
                     {formatUnits(makerBalance, makerDecimals)}{' '}
-                    <button onClick={() => { if (makerBalance > 0n) setAmountMaker(formatUnits(makerBalance, makerDecimals)) }}
+                    <button onClick={() => { 
+                      if (makerBalance > 0n) {
+                        let maxBal = makerBalance
+                        // Reserve 0.05 USDC for gas if using USDC
+                        if (tokenMaker === USDC_ERC20) {
+                          const gasReserve = 50000n 
+                          maxBal = makerBalance > gasReserve ? makerBalance - gasReserve : 0n
+                        }
+                        setAmountMaker(formatUnits(maxBal, makerDecimals))
+                      }
+                    }}
                       className="text-[#c8f542] hover:text-[#d6fa61] cursor-pointer font-bold active:scale-90 transition-transform">MAX</button>
                   </span>
                 )}
