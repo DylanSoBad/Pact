@@ -6,13 +6,16 @@ import Navbar from '../components/Navbar'
 import TrustStrip from '../components/TrustStrip'
 import TapeLine from '../components/TapeLine'
 import { fetchPacts, PactData } from '../lib/reads'
+import { useAccount } from 'wagmi'
 import {
   kindLabel, statusLabel, formatAmount, tokenSymbol,
   formatTimestamp, truncateAddress
 } from '../lib/format'
 
 export default function Home() {
+  const { address } = useAccount()
   const [filter, setFilter] = useState('ALL')
+  const [searchQuery, setSearchQuery] = useState('')
   const [pacts, setPacts] = useState<PactData[]>([])
   const [loading, setLoading] = useState(true)
   const [rpcError, setRpcError] = useState(false)
@@ -23,8 +26,8 @@ export default function Home() {
   async function loadData() {
     if (document.hidden) return
     try {
-      const data = await fetchPacts()
-      setPacts(data.sort((a, b) => Number(b.id) - Number(a.id)))
+      const data = await fetchPacts(100)
+      setPacts(data)
       setRpcError(false)
       setLastFetchTime(Date.now())
     } catch { setRpcError(true) }
@@ -41,20 +44,35 @@ export default function Home() {
 
   const filtered = useMemo(() =>
     pacts.filter(p => {
+      // Search filter
+      if (searchQuery.trim()) {
+        const q = searchQuery.toLowerCase().trim()
+        const matchId = p.id.toString().includes(q)
+        const matchMaker = p.maker.toLowerCase().includes(q)
+        const matchTaker = p.taker.toLowerCase().includes(q)
+        if (!matchId && !matchMaker && !matchTaker) return false
+      }
+
+      // Tab filters
       if (filter === 'ALL') return true
-      if (filter === 'LIVE') return p.status === 2
+      if (filter === 'MY') {
+        if (!address) return true
+        return p.maker.toLowerCase() === address.toLowerCase() || p.taker.toLowerCase() === address.toLowerCase()
+      }
+      if (filter === 'LIVE') return p.status === 2 || p.status === 3
       if (filter === 'DELIVERY') return p.kind === 0
       if (filter === 'FX') return p.kind === 1
       if (filter === 'JOB') return p.kind === 2
       return true
-    }), [pacts, filter])
+    }), [pacts, filter, searchQuery, address])
 
   const total = pacts.length
-  const live = pacts.filter(p => p.status === 2).length
+  const live = pacts.filter(p => p.status === 2 || p.status === 3).length
   const cleared = pacts.filter(p => p.status === 4).length
 
   const filters = [
     { id: 'ALL', label: 'All' },
+    ...(address ? [{ id: 'MY', label: 'My Pacts' }] : []),
     { id: 'DELIVERY', label: 'Delivery' },
     { id: 'FX', label: 'FX' },
     { id: 'JOB', label: 'Job' },
@@ -94,37 +112,65 @@ export default function Home() {
         </div>
       </div>
 
-      {/* Filters with pill click micro-animations */}
-      <div className="flex items-center gap-1.5 mb-6 overflow-x-auto pb-1 animate-enter-delay">
-        {filters.map(f => (
-          <button
-            key={f.id}
-            onClick={() => setFilter(f.id)}
-            className={`pill-interactive px-3.5 py-1.5 text-[13px] rounded-lg transition-all ${
-              filter === f.id
-                ? 'bg-white/[0.12] text-white shadow-sm ring-1 ring-white/10'
-                : 'text-zinc-500 hover:text-zinc-200 hover:bg-white/[0.04]'
-            }`}
-          >
-            {f.id === 'LIVE' && filter !== 'LIVE' && (
-              <span className="inline-block w-[5px] h-[5px] rounded-full bg-amber-400 mr-1.5 align-middle animate-pulse-soft" />
-            )}
-            {f.label}
-          </button>
-        ))}
+      {/* Search & Filter Bar */}
+      <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 mb-6 animate-enter-delay">
+        {/* Filters */}
+        <div className="flex items-center gap-1.5 overflow-x-auto pb-1">
+          {filters.map(f => (
+            <button
+              key={f.id}
+              onClick={() => setFilter(f.id)}
+              className={`pill-interactive px-3.5 py-1.5 text-[13px] rounded-lg transition-all shrink-0 ${
+                filter === f.id
+                  ? 'bg-white/[0.12] text-white shadow-sm ring-1 ring-white/10'
+                  : 'text-zinc-500 hover:text-zinc-200 hover:bg-white/[0.04]'
+              }`}
+            >
+              {f.id === 'LIVE' && filter !== 'LIVE' && (
+                <span className="inline-block w-[5px] h-[5px] rounded-full bg-amber-400 mr-1.5 align-middle animate-pulse-soft" />
+              )}
+              {f.label}
+            </button>
+          ))}
+        </div>
+
+        {/* Instant Search Box */}
+        <div className="relative">
+          <input
+            type="text"
+            value={searchQuery}
+            onChange={e => setSearchQuery(e.target.value)}
+            placeholder="Search #id or 0x address…"
+            className="w-full sm:w-56 bg-white/[0.03] border border-white/[0.06] hover:border-white/[0.12] text-white px-3 py-1.5 rounded-lg text-[12px] placeholder:text-zinc-600 focus:border-emerald-500/50 transition-colors"
+          />
+          {searchQuery && (
+            <button
+              onClick={() => setSearchQuery('')}
+              className="absolute right-2.5 top-1.5 text-zinc-500 hover:text-zinc-300 text-xs cursor-pointer"
+            >
+              ✕
+            </button>
+          )}
+        </div>
       </div>
 
       {/* Content */}
       {loading ? (
         <div className="flex items-center justify-center py-24 text-[14px] text-zinc-600 gap-3">
           <div className="w-4 h-4 border-[1.5px] border-emerald-500 border-t-transparent rounded-full animate-spin" />
-          Loading contracts…
+          Querying on-chain ledger on Arc…
         </div>
       ) : filtered.length === 0 ? (
         <div className="flex flex-col items-center justify-center py-24 text-center animate-enter">
-          <p className="text-[15px] text-zinc-400 mb-1">No contracts yet</p>
+          <p className="text-[15px] text-zinc-400 mb-1">
+            {searchQuery ? `No contracts found matching "${searchQuery}"` : 'No contracts yet'}
+          </p>
           <p className="text-[13px] text-zinc-600 mb-6">
-            {filter === 'ALL' ? 'Create the first escrow pact to get started.' : `No pacts match this filter.`}
+            {searchQuery
+              ? 'Try searching with another address or pact ID.'
+              : filter === 'ALL'
+              ? 'Create the first escrow pact to get started.'
+              : `No pacts match this filter.`}
           </p>
           <Link
             href="/new"
@@ -142,7 +188,7 @@ export default function Home() {
             return (
               <TapeLine key={p.id} pact={{
                 id: p.id, time: formatTimestamp(p.updatedAt), kind: kindLabel(p.kind),
-                status: p.status === 2 ? 'LIVE' : statusLabel(p.status),
+                status: p.status === 2 ? 'LIVE' : p.status === 3 ? 'PROOF IN' : statusLabel(p.status),
                 amount: amt, address: truncateAddress(p.maker), blurSize: p.blurSize,
               }} />
             )
