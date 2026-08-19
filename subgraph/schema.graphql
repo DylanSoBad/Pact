@@ -1,0 +1,83 @@
+enum PactStatus {
+  OPEN
+  FUNDED
+  ACTIVE
+  PROOF_IN
+  CLEARED
+  SLASHED
+  EXPIRED
+  CANCELLED
+}
+
+enum PactKind {
+  DELIVERY
+  FX_SWAP
+  JOB
+}
+
+"""
+Primary Bilateral Escrow Agreement on Circle Arc
+"""
+type Pact @entity {
+  id: ID!
+  pactId: BigInt!
+  kind: PactKind!
+  status: PactStatus!
+  maker: User!
+  taker: User
+  tokenMaker: Bytes!
+  tokenTaker: Bytes!
+  amountMaker: BigInt!
+  amountTaker: BigInt!
+  termsHash: Bytes!
+  proofHash: Bytes
+  deadline: BigInt!
+  blurSize: Boolean!
+  createdAt: BigInt!
+  updatedAt: BigInt!
+  blockNumber: BigInt!
+  transactionHash: Bytes!
+  events: [PactEvent!]! @derivedFrom(field: "pact")
+}
+
+"""
+Indexed Web3 User Account & Reputation Track Record
+"""
+type User @entity {
+  id: ID! # wallet address
+  pactsCreated: [Pact!]! @derivedFrom(field: "maker")
+  pactsParticipated: [Pact!]! @derivedFrom(field: "taker")
+  totalCreated: BigInt!
+  totalParticipated: BigInt!
+  clearedCount: BigInt!
+  slashedCount: BigInt!
+  settledVolumeUSD: BigDecimal!
+}
+
+"""
+Global Protocol Metrics & Volume Time-series
+"""
+type ProtocolStat @entity {
+  id: ID!
+  totalPacts: BigInt!
+  activePacts: BigInt!
+  settledPacts: BigInt!
+  slashedPacts: BigInt!
+  totalVolumeUSD: BigDecimal!
+  lastUpdatedBlock: BigInt!
+  lastUpdatedTimestamp: BigInt!
+}
+
+"""
+Immutable Event Log for Auditability & Dispute Tracing
+"""
+type PactEvent @entity(immutable: true) {
+  id: ID!
+  pact: Pact!
+  eventType: String!
+  actor: Bytes!
+  timestamp: BigInt!
+  blockNumber: BigInt!
+  transactionHash: Bytes!
+  data: String
+}

@@ -6,6 +6,7 @@ import { useRouter } from 'next/navigation'
 import Navbar from '../components/Navbar'
 import TrustStrip from '../components/TrustStrip'
 import TapeLine from '../components/TapeLine'
+import { queryPactsGraphQL, IndexerStats } from '../lib/indexer'
 import { fetchPacts, PactData } from '../lib/reads'
 import { useAccount } from 'wagmi'
 import {
@@ -19,6 +20,8 @@ export default function Home() {
   const [filter, setFilter] = useState('ALL')
   const [searchQuery, setSearchQuery] = useState('')
   const [pacts, setPacts] = useState<PactData[]>([])
+  const [stats, setStats] = useState<IndexerStats | null>(null)
+  const [indexerLatency, setIndexerLatency] = useState<number | null>(null)
   const [loading, setLoading] = useState(true)
   const [rpcError, setRpcError] = useState(false)
   const [lastFetchTime, setLastFetchTime] = useState<number>(Date.now())
@@ -28,12 +31,24 @@ export default function Home() {
   async function loadData() {
     if (document.hidden) return
     try {
-      const data = await fetchPacts(100)
-      setPacts(data)
+      // 1. Query GraphQL Subgraph Indexer (< 50ms)
+      const graphRes = await queryPactsGraphQL({})
+      if (graphRes.pacts.length > 0 || graphRes.stats.totalPacts >= 0) {
+        setPacts(graphRes.pacts)
+        setStats(graphRes.stats)
+        setIndexerLatency(graphRes.latencyMs)
+      } else {
+        // Fallback to Multicall RPC
+        const data = await fetchPacts(100)
+        setPacts(data)
+      }
       setRpcError(false)
       setLastFetchTime(Date.now())
-    } catch { setRpcError(true) }
-    finally { setLoading(false) }
+    } catch {
+      setRpcError(true)
+    } finally {
+      setLoading(false)
+    }
   }
 
   useEffect(() => {
@@ -77,9 +92,10 @@ export default function Home() {
       return true
     }), [pacts, filter, searchQuery, address])
 
-  const total = pacts.length
-  const live = pacts.filter(p => p.status === 2 || p.status === 3).length
-  const cleared = pacts.filter(p => p.status === 4).length
+  const total = stats ? stats.totalPacts : pacts.length
+  const live = stats ? stats.activePacts : pacts.filter(p => p.status === 2 || p.status === 3).length
+  const cleared = stats ? stats.settledPacts : pacts.filter(p => p.status === 4).length
+  const settledVol = stats ? stats.settledVolumeUSD : '0.00'
 
   const filters = [
     { id: 'ALL', label: 'All' },
@@ -95,20 +111,28 @@ export default function Home() {
       <Navbar />
       <TrustStrip lastUpdated={lastFetchTime} rpcError={rpcError} onRetry={loadData} />
 
-      {/* Hero */}
-      <div className="mb-10 animate-enter">
-        <h1 className="text-[22px] sm:text-[26px] font-semibold text-white tracking-[-0.02em] mb-2">
-          Escrow contracts
-        </h1>
+      {/* Hero with Subgraph Indexer Latency Indicator */}
+      <div className="mb-8 animate-enter">
+        <div className="flex items-center justify-between gap-2 mb-2">
+          <h1 className="text-[22px] sm:text-[26px] font-semibold text-white tracking-[-0.02em]">
+            Escrow contracts
+          </h1>
+          {indexerLatency !== null && (
+            <span className="hidden sm:inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-mono bg-emerald-500/[0.08] text-emerald-400 border border-emerald-500/20">
+              <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse-soft" />
+              GraphQL Subgraph: {indexerLatency}ms
+            </span>
+          )}
+        </div>
         <p className="text-[15px] text-zinc-500 leading-relaxed max-w-md">
-          Lock funds into bilateral agreements with verifiable terms and automatic settlement.
+          Lock funds into bilateral agreements with verifiable terms and automatic settlement on Circle Arc.
         </p>
       </div>
 
-      {/* Stats — inline */}
-      <div className="flex items-center gap-6 mb-8 text-[14px] animate-enter-delay">
+      {/* Stats with Volume Visualizer — inline */}
+      <div className="flex flex-wrap items-center gap-y-2 gap-x-6 mb-8 text-[14px] animate-enter-delay">
         <div>
-          <span className="text-zinc-500">Total</span>
+          <span className="text-zinc-500">Total Escrows</span>
           <span className="ml-2 text-white font-semibold tabular-nums">{loading ? '–' : total}</span>
         </div>
         <span className="text-zinc-800">·</span>
@@ -120,6 +144,11 @@ export default function Home() {
         <div>
           <span className="text-zinc-500">Settled</span>
           <span className="ml-2 text-emerald-400 font-semibold tabular-nums">{loading ? '–' : cleared}</span>
+        </div>
+        <span className="text-zinc-800">·</span>
+        <div>
+          <span className="text-zinc-500">Settled Volume</span>
+          <span className="ml-2 text-zinc-200 font-semibold tabular-nums">${loading ? '–' : settledVol}</span>
         </div>
       </div>
 
@@ -170,7 +199,7 @@ export default function Home() {
       {loading ? (
         <div className="flex items-center justify-center py-24 text-[14px] text-zinc-600 gap-3">
           <div className="w-4 h-4 border-[1.5px] border-emerald-500 border-t-transparent rounded-full animate-spin" />
-          Querying on-chain ledger on Arc…
+          Querying GraphQL Subgraph on Arc…
         </div>
       ) : filtered.length === 0 ? (
         <div className="flex flex-col items-center justify-center py-24 text-center animate-enter">
