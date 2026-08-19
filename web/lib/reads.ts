@@ -2,9 +2,9 @@ import { createPublicClient, http } from 'viem'
 import { arcTestnet, getPactAddress } from './arc'
 import { PACT_ABI } from './abi'
 
-const client = createPublicClient({
+export const arcPublicClient = createPublicClient({
   chain: arcTestnet,
-  transport: http(),
+  transport: http('https://rpc.testnet.arc.network'),
 })
 
 export type PactData = {
@@ -35,24 +35,23 @@ export async function fetchNextId(customAddress?: `0x${string}`): Promise<number
   }
 
   try {
-    const result = await client.readContract({
+    const result = await arcPublicClient.readContract({
       address: targetAddress,
       abi: PACT_ABI,
       functionName: 'nextId',
     })
     return Number(result)
-  } catch {
+  } catch (e) {
+    console.error('Error fetching nextId on Arc:', e)
     return 1
   }
 }
 
 /**
- * Optimized Scalable Fetcher:
- * 1. Checks memory cache for immutable settled pacts.
- * 2. Batches active/uncached pact queries via Multicall3 in chunked payloads.
- * 3. Reduces RPC bandwidth by >70% on busy testnet traffic.
+ * Spec §9 Multicall3 Poller:
+ * Queries up to 50 active pacts directly via Multicall3 on Arc RPC.
  */
-export async function fetchPacts(maxCount = 100, customAddress?: `0x${string}`): Promise<PactData[]> {
+export async function fetchPacts(maxCount = 50, customAddress?: `0x${string}`): Promise<PactData[]> {
   const targetAddress = customAddress || getPactAddress()
   if (!targetAddress || targetAddress === '0x0000000000000000000000000000000000000000') {
     return []
@@ -81,70 +80,65 @@ export async function fetchPacts(maxCount = 100, customAddress?: `0x${string}`):
     return cachedPacts.sort((a, b) => Number(b.id - a.id))
   }
 
-  // Chunk requests into max 25 pacts (50 contract calls) per batch to ensure RPC stability
-  const CHUNK_SIZE = 25
+  // Multicall3 direct batching (up to 50 pacts)
+  const calls: { address: `0x${string}`; abi: typeof PACT_ABI; functionName: string; args: readonly [bigint] }[] = []
+
+  for (const id of idsToFetch) {
+    calls.push({
+      address: targetAddress,
+      abi: PACT_ABI,
+      functionName: 'getPact',
+      args: [BigInt(id)] as const,
+    })
+    calls.push({
+      address: targetAddress,
+      abi: PACT_ABI,
+      functionName: 'deadlines',
+      args: [BigInt(id)] as const,
+    })
+  }
+
   const newlyFetched: PactData[] = []
 
-  for (let c = 0; c < idsToFetch.length; c += CHUNK_SIZE) {
-    const chunkIds = idsToFetch.slice(c, c + CHUNK_SIZE)
-    const calls: { address: `0x${string}`; abi: typeof PACT_ABI; functionName: string; args: readonly [bigint] }[] = []
+  try {
+    const results = await arcPublicClient.multicall({ contracts: calls as any })
 
-    for (const id of chunkIds) {
-      calls.push({
-        address: targetAddress,
-        abi: PACT_ABI,
-        functionName: 'getPact',
-        args: [BigInt(id)] as const,
-      })
-      calls.push({
-        address: targetAddress,
-        abi: PACT_ABI,
-        functionName: 'deadlines',
-        args: [BigInt(id)] as const,
-      })
-    }
+    for (let i = 0; i < idsToFetch.length; i++) {
+      const pactResult = results[i * 2]
+      const deadlineResult = results[i * 2 + 1]
 
-    try {
-      const results = await client.multicall({ contracts: calls as any })
+      if (pactResult.status !== 'success' || deadlineResult.status !== 'success') continue
 
-      for (let i = 0; i < chunkIds.length; i++) {
-        const pactResult = results[i * 2]
-        const deadlineResult = results[i * 2 + 1]
+      const p = pactResult.result as any
+      const deadline = deadlineResult.result as bigint
+      const currentId = idsToFetch[i]
 
-        if (pactResult.status !== 'success' || deadlineResult.status !== 'success') continue
-
-        const p = pactResult.result as any
-        const deadline = deadlineResult.result as bigint
-        const currentId = chunkIds[i]
-
-        const item: PactData = {
-          id: currentId,
-          maker: p.maker,
-          amountMaker: p.amountMaker,
-          kind: Number(p.kind),
-          status: Number(p.status),
-          taker: p.taker,
-          amountTaker: p.amountTaker,
-          blurSize: p.blurSize,
-          tokenMaker: p.tokenMaker,
-          createdAt: p.createdAt,
-          tokenTaker: p.tokenTaker,
-          updatedAt: p.updatedAt,
-          termsHash: p.termsHash,
-          proofHash: p.proofHash,
-          deadline,
-        }
-
-        // Cache permanently if pact reached a terminal state
-        if (item.status >= 4) {
-          terminalPactCache.set(currentId, item)
-        }
-
-        newlyFetched.push(item)
+      const item: PactData = {
+        id: currentId,
+        maker: p.maker,
+        amountMaker: p.amountMaker,
+        kind: Number(p.kind),
+        status: Number(p.status),
+        taker: p.taker,
+        amountTaker: p.amountTaker,
+        blurSize: p.blurSize,
+        tokenMaker: p.tokenMaker,
+        createdAt: p.createdAt,
+        tokenTaker: p.tokenTaker,
+        updatedAt: p.updatedAt,
+        termsHash: p.termsHash,
+        proofHash: p.proofHash,
+        deadline,
       }
-    } catch (err) {
-      console.warn('Multicall chunk read error on Arc:', err)
+
+      if (item.status >= 4) {
+        terminalPactCache.set(currentId, item)
+      }
+
+      newlyFetched.push(item)
     }
+  } catch (err) {
+    console.warn('Multicall3 read error on Arc:', err)
   }
 
   const all = [...cachedPacts, ...newlyFetched]
@@ -162,7 +156,7 @@ export async function fetchSinglePact(id: number, customAddress?: `0x${string}`)
   }
 
   try {
-    const [pactResult, deadlineResult] = await client.multicall({
+    const [pactResult, deadlineResult] = await arcPublicClient.multicall({
       contracts: [
         {
           address: targetAddress,
@@ -225,7 +219,7 @@ export async function fetchReputation(address: `0x${string}`, customAddress?: `0
   }
 
   try {
-    const results = await client.multicall({
+    const results = await arcPublicClient.multicall({
       contracts: [
         { address: targetAddress, abi: PACT_ABI, functionName: 'clearedCount', args: [address] },
         { address: targetAddress, abi: PACT_ABI, functionName: 'slashedCount', args: [address] },

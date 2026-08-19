@@ -6,7 +6,6 @@ import { useRouter } from 'next/navigation'
 import Navbar from '../components/Navbar'
 import TrustStrip from '../components/TrustStrip'
 import TapeLine from '../components/TapeLine'
-import { queryPactsGraphQL, IndexerStats } from '../lib/indexer'
 import { fetchPacts, PactData } from '../lib/reads'
 import { getPactAddress } from '../lib/arc'
 import { useAccount } from 'wagmi'
@@ -21,34 +20,26 @@ export default function Home() {
   const [filter, setFilter] = useState('ALL')
   const [searchQuery, setSearchQuery] = useState('')
   const [pacts, setPacts] = useState<PactData[]>([])
-  const [stats, setStats] = useState<IndexerStats | null>(null)
-  const [indexerLatency, setIndexerLatency] = useState<number | null>(null)
+  const [latencyMs, setLatencyMs] = useState<number | null>(null)
   const [loading, setLoading] = useState(true)
   const [rpcError, setRpcError] = useState(false)
   const [lastFetchTime, setLastFetchTime] = useState<number>(Date.now())
 
   useEffect(() => { document.title = 'PACT · Escrows' }, [])
 
+  // Spec §9 Compliant: Direct Multicall3 poll every 2s
   async function loadData() {
     if (document.hidden) return
+    const start = performance.now()
     try {
       const contractAddress = getPactAddress()
-      // 1. Query GraphQL Subgraph Indexer (< 50ms)
-      const graphRes = await queryPactsGraphQL({ contractAddress })
-      if (graphRes.pacts.length > 0) {
-        setPacts(graphRes.pacts)
-        setStats(graphRes.stats)
-        setIndexerLatency(graphRes.latencyMs)
-      } else {
-        // Fallback directly to Multicall RPC
-        const data = await fetchPacts(100, contractAddress)
-        setPacts(data)
-        if (graphRes.stats) setStats(graphRes.stats)
-        if (graphRes.latencyMs) setIndexerLatency(graphRes.latencyMs)
-      }
+      const data = await fetchPacts(50, contractAddress)
+      setPacts(data)
+      setLatencyMs(Math.round(performance.now() - start))
       setRpcError(false)
       setLastFetchTime(Date.now())
-    } catch {
+    } catch (err) {
+      console.error('RPC Multicall poll error:', err)
       setRpcError(true)
     } finally {
       setLoading(false)
@@ -56,8 +47,10 @@ export default function Home() {
   }
 
   useEffect(() => {
-    let ok = true; loadData()
-    const iv = setInterval(() => { if (ok && !document.hidden) loadData() }, 10000)
+    let ok = true
+    loadData()
+    // 2-second high frequency real-time Multicall3 polling (Spec §9)
+    const iv = setInterval(() => { if (ok && !document.hidden) loadData() }, 2000)
     const vis = () => { if (!document.hidden) loadData() }
     document.addEventListener('visibilitychange', vis)
     return () => { ok = false; clearInterval(iv); document.removeEventListener('visibilitychange', vis) }
@@ -96,10 +89,12 @@ export default function Home() {
       return true
     }), [pacts, filter, searchQuery, address])
 
-  const total = stats ? stats.totalPacts : pacts.length
-  const live = stats ? stats.activePacts : pacts.filter(p => p.status === 2 || p.status === 3).length
-  const cleared = stats ? stats.settledPacts : pacts.filter(p => p.status === 4).length
-  const settledVol = stats ? stats.settledVolumeUSD : '0.00'
+  const total = pacts.length
+  const live = pacts.filter(p => p.status === 2 || p.status === 3).length
+  const cleared = pacts.filter(p => p.status === 4).length
+  const settledVol = (
+    pacts.filter(p => p.status === 4).reduce((sum, p) => sum + Number(p.amountMaker) / 1e6, 0)
+  ).toFixed(2)
 
   const filters = [
     { id: 'ALL', label: 'All' },
@@ -115,16 +110,16 @@ export default function Home() {
       <Navbar />
       <TrustStrip lastUpdated={lastFetchTime} rpcError={rpcError} onRetry={loadData} />
 
-      {/* Hero with Subgraph Indexer Latency Indicator */}
+      {/* Hero with Direct Arc RPC Latency Indicator */}
       <div className="mb-6 animate-enter">
         <div className="flex items-center justify-between gap-2 mb-2">
           <h1 className="text-[22px] sm:text-[26px] font-semibold text-white tracking-[-0.02em]">
             Escrow contracts
           </h1>
-          {indexerLatency !== null && (
+          {latencyMs !== null && (
             <span className="hidden sm:inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-mono bg-emerald-500/[0.08] text-emerald-400 border border-emerald-500/20">
               <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse-soft" />
-              GraphQL Subgraph: {indexerLatency}ms
+              Multicall3 RPC: {latencyMs}ms
             </span>
           )}
         </div>
@@ -214,7 +209,7 @@ export default function Home() {
       {loading ? (
         <div className="flex items-center justify-center py-24 text-[14px] text-zinc-600 gap-3">
           <div className="w-4 h-4 border-[1.5px] border-emerald-500 border-t-transparent rounded-full animate-spin" />
-          Querying GraphQL Subgraph on Arc…
+          Reading on-chain state via Multicall3…
         </div>
       ) : filtered.length === 0 ? (
         <div className="flex flex-col items-center justify-center py-24 text-center animate-enter">
@@ -249,7 +244,7 @@ export default function Home() {
                 status: p.status === 2 ? 'ACTIVE' : p.status === 3 ? 'PROOF IN' : p.status === 8 ? 'DISPUTED' : statusLabel(p.status),
                 amount: amt,
                 address: truncateAddress(p.maker),
-                blurSize: false, // Ensure parameters & amounts are clearly visible!
+                blurSize: false,
               }} />
             )
           })}
