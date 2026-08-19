@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useMemo } from 'react'
 import Link from 'next/link'
+import { useRouter } from 'next/navigation'
 import Navbar from '../components/Navbar'
 import TrustStrip from '../components/TrustStrip'
 import TapeLine from '../components/TapeLine'
@@ -13,6 +14,7 @@ import {
 } from '../lib/format'
 
 export default function Home() {
+  const router = useRouter()
   const { address } = useAccount()
   const [filter, setFilter] = useState('ALL')
   const [searchQuery, setSearchQuery] = useState('')
@@ -42,12 +44,21 @@ export default function Home() {
     return () => { ok = false; clearInterval(iv); document.removeEventListener('visibilitychange', vis) }
   }, [])
 
+  const handleSearchKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === 'Enter') {
+      const clean = searchQuery.trim().replace(/^#/, '')
+      if (/^\d+$/.test(clean)) {
+        router.push(`/p/${clean}`)
+      }
+    }
+  }
+
   const filtered = useMemo(() =>
     pacts.filter(p => {
       // Search filter
       if (searchQuery.trim()) {
-        const q = searchQuery.toLowerCase().trim()
-        const matchId = p.id.toString().includes(q)
+        const q = searchQuery.toLowerCase().trim().replace(/^#/, '')
+        const matchId = p.id.toString() === q || p.id.toString().includes(q)
         const matchMaker = p.maker.toLowerCase().includes(q)
         const matchTaker = p.taker.toLowerCase().includes(q)
         if (!matchId && !matchMaker && !matchTaker) return false
@@ -134,14 +145,15 @@ export default function Home() {
           ))}
         </div>
 
-        {/* Instant Search Box */}
+        {/* Instant Search Box with direct Enter jump */}
         <div className="relative">
           <input
             type="text"
             value={searchQuery}
             onChange={e => setSearchQuery(e.target.value)}
-            placeholder="Search #id or 0x address…"
-            className="w-full sm:w-56 bg-white/[0.03] border border-white/[0.06] hover:border-white/[0.12] text-white px-3 py-1.5 rounded-lg text-[12px] placeholder:text-zinc-600 focus:border-emerald-500/50 transition-colors"
+            onKeyDown={handleSearchKeyDown}
+            placeholder="Search #id or 0x address (↵ to open)…"
+            className="w-full sm:w-64 bg-white/[0.03] border border-white/[0.06] hover:border-white/[0.12] text-white px-3 py-1.5 rounded-lg text-[12px] placeholder:text-zinc-600 focus:border-emerald-500/50 transition-colors"
           />
           {searchQuery && (
             <button
