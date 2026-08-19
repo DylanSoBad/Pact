@@ -98,12 +98,12 @@ export default function Home() {
       <div className="mb-6 animate-enter border-b border-zinc-800 pb-4">
         <div className="flex items-center justify-between gap-2 mb-2">
           <h1 className="text-[20px] font-bold text-white tracking-widest uppercase">
-            &gt; PACT_FEED
+            &gt; PACT FEED
           </h1>
           {latencyMs !== null && (
             <span className="hidden @md:inline-flex items-center gap-1.5 text-[11px] font-mono text-[#c8f542]">
               <span className="w-1.5 h-1.5 bg-[#c8f542] animate-pulse-soft" />
-              RPC_LATENCY: {latencyMs}ms
+              RPC LATENCY: {latencyMs}ms
             </span>
           )}
         </div>
@@ -131,36 +131,42 @@ export default function Home() {
       {loading ? (
         <div className="flex items-center justify-center py-24 text-[14px] text-zinc-600 gap-3">
           <div className="w-3 h-3 bg-[#c8f542] animate-pulse-soft" />
-          POLLING_CHAIN_DATA...
+          POLLING CHAIN DATA...
         </div>
       ) : filtered.length === 0 ? (
         <div className="flex flex-col items-center justify-center py-24 text-center animate-enter">
           <p className="text-[13px] text-zinc-500 mb-1">
-            {searchQuery ? `0 matches for "${searchQuery}"` : 'DATA_STREAM_EMPTY'}
+            {searchQuery ? `0 matches for "${searchQuery}"` : 'DATA STREAM EMPTY'}
           </p>
           <Link
             href="/new"
             className="text-[12px] text-[#c8f542] underline mt-4"
           >
-            &gt; init_pact
+            &gt; create new pact
           </Link>
         </div>
       ) : (
-        <div className="animate-enter-delay border-t border-zinc-800">
-          {filtered.map(p => {
+        <div className="border-t border-zinc-800">
+          {filtered.map((p, index) => {
             const amt = p.kind === 1
               ? `${formatAmount(p.amountMaker)} ${tokenSymbol(p.tokenMaker)} ↔ ${formatAmount(p.amountTaker)} ${tokenSymbol(p.tokenTaker)}`
               : `${formatAmount(p.amountMaker)} ${tokenSymbol(p.tokenMaker)}`
             return (
-              <TapeLine key={p.id} pact={{
-                id: p.id,
-                time: formatTimestamp(p.updatedAt),
-                kind: kindLabel(p.kind),
-                status: p.status === 2 ? 'ACTIVE' : p.status === 3 ? 'PROOF IN' : statusLabel(p.status),
-                amount: amt,
-                address: truncateAddress(p.maker),
-                blurSize: false,
-              }} />
+              <div 
+                key={p.id} 
+                className="animate-enter"
+                style={{ animationDelay: `${index * 50}ms`, animationFillMode: 'both' }}
+              >
+                <TapeLine pact={{
+                  id: p.id,
+                  time: formatTimestamp(p.updatedAt),
+                  kind: kindLabel(p.kind),
+                  status: p.status === 2 ? 'ACTIVE' : p.status === 3 ? 'PROOF IN' : statusLabel(p.status),
+                  amount: amt,
+                  address: truncateAddress(p.maker),
+                  blurSize: false,
+                }} />
+              </div>
             )
           })}
         </div>

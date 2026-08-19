@@ -28,7 +28,7 @@ export default function Navbar() {
           href="/me"
           className="hidden @md:inline text-[13px] uppercase tracking-widest text-zinc-500 hover:text-[#c8f542] transition-colors"
         >
-          My_Pacts
+          MY PACTS
         </Link>
         <Link
           href="/deploy"
@@ -42,14 +42,14 @@ export default function Navbar() {
           rel="noreferrer"
           className="hidden @md:inline text-[13px] uppercase tracking-widest text-zinc-500 hover:text-[#c8f542] transition-colors"
         >
-          Faucet_↗
+          FAUCET ↗
         </a>
         <ConnectButton />
         <a
           href="/new"
           className="btn-primary px-4 py-[7px] text-[12px] uppercase tracking-widest"
         >
-          init_pact
+          NEW PACT
         </a>
       </div>
     </header>
