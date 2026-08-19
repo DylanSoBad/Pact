@@ -5,7 +5,9 @@ import { useBlockNumber } from 'wagmi'
 import { arcTestnet } from '../lib/arc'
 import { truncateAddress } from '../lib/format'
 
-const PACT_ADDRESS = (process.env.NEXT_PUBLIC_PACT_ADDRESS || '0x0000000000000000000000000000000000000000') as `0x${string}`
+import { getPactAddress } from '../lib/arc'
+
+const PACT_ADDRESS = getPactAddress()
 
 export default function TrustStrip({ lastUpdated, rpcError, onRetry }: { lastUpdated?: number; rpcError?: boolean; onRetry?: () => void }) {
   const { data: blockNumber, isError: blockError } = useBlockNumber({ watch: true, chainId: arcTestnet.id })
@@ -30,9 +32,9 @@ export default function TrustStrip({ lastUpdated, rpcError, onRetry }: { lastUpd
   const configured = PACT_ADDRESS !== '0x0000000000000000000000000000000000000000'
 
   return (
-    <div className="flex items-center gap-3 text-[12px] text-zinc-600 mb-8">
-      <span className={`w-[5px] h-[5px] rounded-full ${hasError ? 'bg-amber-500' : 'bg-emerald-500 animate-pulse-soft'}`} />
-      <span>{arcTestnet.name}</span>
+    <div className="flex items-center gap-3 text-[12px] text-zinc-600 mb-8 font-mono">
+      <span className={`w-[8px] h-[8px] ${hasError ? 'bg-amber-500' : 'bg-[#c8f542] animate-pulse-soft'}`} />
+      <span className="uppercase tracking-widest">{arcTestnet.name}</span>
       <span className="text-zinc-700">·</span>
       <span>{arcTestnet.id}</span>
       {configured && (

@@ -1,7 +1,6 @@
 @import "tailwindcss";
 
 @theme {
-  --font-sans: var(--font-ibm-plex-sans), "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
   --font-mono: var(--font-ibm-plex-mono), "SF Mono", Consolas, monospace;
 }
 
@@ -9,9 +8,9 @@
 html { scroll-behavior: smooth; }
 
 body {
-  background: #0a0a0b;
+  background: #07080a;
   color: #e4e4e7;
-  font-family: var(--font-sans);
+  font-family: var(--font-mono);
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
   line-height: 1.6;
@@ -19,15 +18,15 @@ body {
 
 /* ─── Selection ─── */
 ::selection {
-  background: rgba(16, 185, 129, 0.25);
-  color: #fff;
+  background: rgba(200, 245, 66, 0.3);
+  color: #c8f542;
 }
 
 /* ─── Focus ─── */
 *:focus-visible {
   outline: none;
-  box-shadow: 0 0 0 2px rgba(16, 185, 129, 0.4);
-  border-radius: 6px;
+  box-shadow: 0 0 0 1px #c8f542;
+  border-radius: 0;
 }
 
 /* ─── Scrollbar ─── */
@@ -69,127 +68,95 @@ body {
   100% { transform: scale(1); }
 }
 
-.animate-enter { animation: enter 0.4s cubic-bezier(0.16, 1, 0.3, 1) both; }
-.animate-enter-delay { animation: enter 0.4s 0.1s cubic-bezier(0.16, 1, 0.3, 1) both; }
+.animate-enter { animation: enter 0.2s ease-out both; }
+.animate-enter-delay { animation: enter 0.2s 0.05s ease-out both; }
 .animate-pulse-soft { animation: pulse-soft 2.5s ease-in-out infinite; }
 
-/* ─── Interactive Button Design System ─── */
+/* ─── Interactive Button Design System (Terminal) ─── */
 
-/* Primary Button (White Solid with dynamic sheen & spring physics) */
+/* Primary Button */
 .btn-primary {
-  position: relative;
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  overflow: hidden;
-  background-color: #ffffff;
+  background-color: #c8f542;
   color: #000000;
-  font-weight: 500;
-  border-radius: 10px;
+  font-weight: 700;
+  border: 1px solid #c8f542;
+  border-radius: 2px;
   cursor: pointer;
   user-select: none;
-  transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
-  box-shadow: 0 1px 3px rgba(0,0,0,0.1), 0 0 0 1px rgba(255,255,255,0.1);
+  transition: all 0.1s;
 }
 
 .btn-primary:hover {
-  background-color: #f4f4f5;
-  transform: translateY(-1.5px);
-  box-shadow: 0 6px 24px -4px rgba(255, 255, 255, 0.2), 0 0 0 1px rgba(255,255,255,0.25);
+  background-color: #d6fa61;
 }
 
 .btn-primary:active {
-  transform: translateY(0.5px) scale(0.96);
-  box-shadow: 0 1px 2px rgba(0,0,0,0.1);
+  background-color: #b5df35;
 }
 
-/* Light beam sweep across button */
-.btn-primary::after {
-  content: '';
-  position: absolute;
-  top: 0;
-  left: 0;
-  width: 60%;
-  height: 100%;
-  background: linear-gradient(
-    90deg,
-    rgba(255,255,255,0) 0%,
-    rgba(255,255,255,0.4) 50%,
-    rgba(255,255,255,0) 100%
-  );
-  transform: translateX(-150%) skewX(-20deg);
-  transition: transform 0.6s ease;
-  pointer-events: none;
-}
-
-.btn-primary:hover::after {
-  transform: translateX(250%) skewX(-20deg);
+.btn-primary:disabled {
+  background-color: #1a1b1e;
+  border-color: #27272a;
+  color: #52525b;
+  cursor: not-allowed;
 }
 
 /* Secondary / Ghost Interactive Button */
 .btn-ghost {
-  position: relative;
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  background: rgba(255, 255, 255, 0.03);
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  border-radius: 10px;
+  background: transparent;
+  color: #a1a1aa;
+  border: 1px solid #27272a;
+  border-radius: 2px;
   cursor: pointer;
   user-select: none;
-  transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+  transition: all 0.1s;
 }
 
 .btn-ghost:hover {
-  background: rgba(255, 255, 255, 0.07);
-  border-color: rgba(255, 255, 255, 0.18);
-  transform: translateY(-1px);
-  color: #ffffff;
+  border-color: #c8f542;
+  color: #c8f542;
+  background: rgba(200, 245, 66, 0.05);
 }
 
 .btn-ghost:active {
-  transform: translateY(0.5px) scale(0.96);
-  background: rgba(255, 255, 255, 0.1);
+  background: rgba(200, 245, 66, 0.1);
 }
 
 /* Interactive Pills & Tabs */
 .pill-interactive {
-  position: relative;
   cursor: pointer;
   user-select: none;
-  transition: all 0.18s cubic-bezier(0.16, 1, 0.3, 1);
+  border-radius: 2px;
+  border: 1px solid transparent;
+  transition: all 0.1s;
 }
 
 .pill-interactive:hover {
-  transform: translateY(-1px);
-}
-
-.pill-interactive:active {
-  transform: translateY(0.5px) scale(0.94);
+  border-color: #3f3f46;
 }
 
 /* Interactive Card Row on Hover & Click */
 .row-interactive {
-  transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+  transition: all 0.1s;
 }
 
 .row-interactive:hover {
-  background: rgba(255, 255, 255, 0.03);
-  transform: translateX(3px);
-}
-
-.row-interactive:active {
-  transform: scale(0.99) translateX(1px);
-  background: rgba(255, 255, 255, 0.045);
+  background: #0f1014;
 }
 
 /* Surface layers */
-.surface-0 { background: rgba(255,255,255,0.02); }
-.surface-1 { background: rgba(255,255,255,0.035); }
-.surface-2 { background: rgba(255,255,255,0.05); }
+.surface-0 { background: #07080a; border: 1px solid #18181b; }
+.surface-1 { background: #0c0d10; border: 1px solid #27272a; }
+.surface-2 { background: #18181b; border: 1px solid #3f3f46; }
 
 /* Subtle separator */
 .separator {
   height: 1px;
-  background: linear-gradient(90deg, transparent, rgba(255,255,255,0.07), transparent);
+  background: #27272a;
 }

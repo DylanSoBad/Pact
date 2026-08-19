@@ -25,7 +25,7 @@ export const arcTestnet = defineChain({
 export const USDC_ERC20 = "0x3600000000000000000000000000000000000000"; // 6 decimals
 export const EURC = "0x89B50855Aa3bE2F677cD6303Cec089B5F319D72a";       // 6 decimals
 
-export const OFFICIAL_PACT_ADDRESS: `0x${string}` = "0x0f1d2aa5435ed94870314f6304be1ed50965313e";
+export const OFFICIAL_PACT_ADDRESS: `0x${string}` = "0x0000000000000000000000000000000000000000";
 
 export function getPactAddress(): `0x${string}` {
   if (typeof window !== 'undefined') {

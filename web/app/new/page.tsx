@@ -25,12 +25,7 @@ const TOKENS = [
   { value: EURC, label: 'EURC' },
 ]
 
-const ARBITRATOR_PRESETS = [
-  { id: 'none', label: 'Bilateral Consensus (Direct)', desc: 'Maker & Taker resolve directly without 3rd party', addr: '' },
-  { id: 'dao', label: 'PACT DAO Dispute Council', desc: 'Decentralized Community Multi-Sig Court', addr: '0x8401A7C3105B853e5eA89C1aB188981442aFa243' },
-  { id: 'kleros', label: 'Kleros Court / UMA Oracle Adapter', desc: 'Optimistic decentralized staked juror pool', addr: '0x98101E17aE184d0840A865b2fa023eAf777C2932' },
-  { id: 'custom', label: 'Custom Multi-Sig / Arbitrator', desc: 'Specify your own trusted 3rd-party EVM address', addr: '' },
-]
+
 
 export default function NewPactPage() {
   const { address, isConnected } = useAccount()
@@ -51,13 +46,9 @@ export default function NewPactPage() {
   const [amountTaker, setAmountTaker] = useState('')
   const [taker, setTaker] = useState('')
   const [terms, setTerms] = useState('')
-  const [deadlineMinutes, setDeadlineMinutes] = useState('60')
+  const [deadlineMinutes, setDeadlineMinutes] = useState('1440')
   const [blurSize, setBlurSize] = useState(false)
-  const [sessionKeyEnabled, setSessionKeyEnabled] = useState(true)
 
-  // Decentralized Arbitration Module State
-  const [arbitratorType, setArbitratorType] = useState('dao')
-  const [customArbitrator, setCustomArbitrator] = useState('')
 
   const [step, setStep] = useState<'form' | 'approving' | 'creating' | 'done'>('form')
   const [createdPactId, setCreatedPactId] = useState<number | null>(null)
@@ -96,13 +87,7 @@ export default function NewPactPage() {
   const parseMaker = () => { try { return parseUnits(amountMaker || '0', makerDecimals) } catch { return 0n } }
   const parseTaker = () => { try { return parseUnits(amountTaker || '0', 6) } catch { return 0n } }
 
-  const effectiveArbitrator = arbitratorType === 'none' ? '' : arbitratorType === 'custom' ? customArbitrator : (ARBITRATOR_PRESETS.find(p => p.id === arbitratorType)?.addr || '')
-
-  const termsWithArbitrator = effectiveArbitrator
-    ? `${terms}\n\n[Decentralized Arbitration: ${effectiveArbitrator} (2-of-3 Multi-Sig)]`
-    : terms
-
-  const termsH = hashTerms(termsWithArbitrator)
+  const termsH = hashTerms(terms)
   const needsTakerToken = kind === 1 || parseTaker() > 0n
   const effectiveTokenTaker = needsTakerToken ? tokenTaker : '0x0000000000000000000000000000000000000000'
   const deadline = new Date(Date.now() + Number(deadlineMinutes || 0) * 60000)
@@ -118,7 +103,6 @@ export default function NewPactPage() {
   if (!amountMaker || makerBn === 0n) { disabled = true; reason = 'Enter an amount' }
   else if (isConnected && !hasBalance) { disabled = true; reason = `Not enough ${tokenLabel}` }
   else if (terms.length < 20) { disabled = true; reason = `${20 - terms.length} more characters needed` }
-  else if (arbitratorType === 'custom' && (!customArbitrator.startsWith('0x') || customArbitrator.length !== 42)) { disabled = true; reason = 'Enter valid 0x Arbitrator address' }
   else if (!deadlineMinutes || Number(deadlineMinutes) < 2) { disabled = true; reason = 'Set a deadline' }
   else if (kind === 1 && (!amountTaker || parseTaker() === 0n)) { disabled = true; reason = 'Enter counterparty amount' }
 
@@ -234,12 +218,11 @@ export default function NewPactPage() {
     setAmountMaker('10')
     setAmountTaker('2')
     setTerms('Delivery of 1x Server Hardware unit to Singapore DC. Courier tracking reference required upon fulfillment.')
-    setDeadlineMinutes('60')
-    setArbitratorType('dao')
+    setDeadlineMinutes('1440')
   }
 
   const shareUrl = createdPactId
-    ? `${typeof window !== 'undefined' ? window.location.origin : ''}/p/${createdPactId}?terms=${encodeURIComponent(termsWithArbitrator)}${effectiveArbitrator ? `&arbitrator=${encodeURIComponent(effectiveArbitrator)}` : ''}`
+    ? `${typeof window !== 'undefined' ? window.location.origin : ''}/p/${createdPactId}?terms=${encodeURIComponent(terms)}`
     : ''
 
   const copyLink = () => { if (shareUrl) { navigator.clipboard.writeText(shareUrl); setCopiedLink(true); setTimeout(() => setCopiedLink(false), 2500) } }
@@ -251,26 +234,20 @@ export default function NewPactPage() {
   // ── Success ──
   if (step === 'done' && createConfirmed) {
     return (
-      <main className="min-h-screen max-w-[580px] mx-auto px-5 sm:px-8 pb-20 overflow-x-hidden">
+      <main className="min-h-screen max-w-[580px] mx-auto px-5 sm:px-8 pb-20 overflow-x-hidden font-mono">
         <Navbar /><TrustStrip />
-        <div className="text-center py-16 animate-enter">
-          <div className="w-14 h-14 rounded-2xl bg-emerald-500 text-black flex items-center justify-center mx-auto mb-5 text-xl font-bold shadow-[0_0_30px_rgba(16,185,129,0.2)]">✓</div>
+        <div className="text-center py-16 animate-enter border border-zinc-800 bg-[#0c0d10] mt-8 p-8">
+          <div className="w-14 h-14 bg-[#c8f542] text-black flex items-center justify-center mx-auto mb-5 text-xl font-bold rounded-none">✓</div>
           <h2 className="text-xl font-semibold text-white mb-1">
             Pact {createdPactId ? `#${createdPactId.toString().padStart(4, '0')}` : ''} created
           </h2>
           <p className="text-[14px] text-zinc-500 mb-8">${amountMaker} {tokenLabel} locked on-chain via Arc Native Settlement.</p>
 
-          {effectiveArbitrator && (
-            <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-amber-500/10 border border-amber-500/20 text-amber-300 text-[12px] mb-6">
-              <span>Protected by 2-of-3 Decentralized Arbitration ({effectiveArbitrator.slice(0, 6)}…{effectiveArbitrator.slice(-4)})</span>
-            </div>
-          )}
-
           {createdPactId && (
-            <div className="surface-1 rounded-xl p-4 mb-8 text-left max-w-sm mx-auto border border-white/[0.04]">
-              <p className="text-[12px] text-zinc-500 mb-2">Share with counterparty & arbitrator</p>
+            <div className="surface-1 p-4 mb-8 text-left max-w-sm mx-auto">
+              <p className="text-[12px] text-zinc-500 mb-2">Share with counterparty</p>
               <div className="flex gap-2">
-                <input readOnly value={shareUrl} className="flex-1 bg-white/[0.04] border border-white/[0.06] text-zinc-300 px-3 py-2 rounded-lg text-[12px] font-mono select-all" />
+                <input readOnly value={shareUrl} className="flex-1 bg-black border border-zinc-700 text-[#c8f542] px-3 py-2 rounded-none text-[12px] font-mono select-all focus:ring-0 outline-none" />
                 <button onClick={copyLink} className="btn-primary px-4 py-2 text-[12px]">
                   {copiedLink ? 'Copied' : 'Copy'}
                 </button>
@@ -280,7 +257,7 @@ export default function NewPactPage() {
 
           <div className="flex flex-col sm:flex-row items-center justify-center gap-3">
             {createdPactId ? (
-              <Link href={`/p/${createdPactId}?terms=${encodeURIComponent(termsWithArbitrator)}${effectiveArbitrator ? `&arbitrator=${encodeURIComponent(effectiveArbitrator)}` : ''}`}
+              <Link href={`/p/${createdPactId}?terms=${encodeURIComponent(terms)}`}
                 className="btn-primary px-6 py-2.5 text-[13px]">
                 Open pact →
               </Link>
@@ -302,24 +279,24 @@ export default function NewPactPage() {
   }
 
   return (
-    <main className="min-h-screen max-w-[580px] mx-auto px-5 sm:px-8 pb-24 overflow-x-hidden">
+    <main className="min-h-screen max-w-[580px] mx-auto px-5 sm:px-8 pb-24 overflow-x-hidden font-mono">
       <Navbar /><TrustStrip />
 
       {/* Arc Network Info Banner */}
-      <div className="mb-6 p-3 rounded-xl bg-emerald-500/[0.06] border border-emerald-500/20 flex items-center justify-between text-[12px] text-emerald-300 animate-enter">
+      <div className="mb-6 p-3 bg-[#c8f542]/10 border border-[#c8f542]/30 flex items-center justify-between text-[12px] text-[#c8f542] animate-enter rounded-none">
         <div className="flex items-center gap-2">
-          <span><strong>Arc Testnet:</strong> Native USDC Gas · Direct On-Chain Escrow</span>
+          <span><strong>Arc Testnet:</strong> Native USDC Gas · Direct On-Chain Pact</span>
         </div>
-        <span className="bg-emerald-500/10 px-2 py-0.5 rounded-full text-[10px] font-mono border border-emerald-500/20">
+        <span className="bg-[#c8f542]/20 px-2 py-0.5 text-[10px] font-mono border border-[#c8f542]/30 rounded-none">
           Chain ID 5042002
         </span>
       </div>
 
       {isWrongChain && (
-        <div className="rounded-lg bg-rose-500/[0.08] border border-rose-500/20 p-3.5 mb-6 text-[13px] flex items-center justify-between text-rose-300">
+        <div className="bg-rose-500/[0.08] border border-rose-500/20 p-3.5 mb-6 text-[13px] flex items-center justify-between text-rose-300 rounded-none">
           <span>Wrong network</span>
           <button onClick={() => switchChain({ chainId: TARGET_CHAIN_ID })}
-            className="btn-primary bg-rose-500 text-black px-3.5 py-1 rounded-lg text-[12px]">
+            className="btn-primary bg-rose-500 border-rose-500 text-black px-3.5 py-1 text-[12px]">
             Switch
           </button>
         </div>
@@ -339,17 +316,17 @@ export default function NewPactPage() {
       <div className="space-y-8 animate-enter-delay">
         {/* Type */}
         <div>
-          <label className="text-[13px] text-zinc-500 block mb-3">Escrow Archetype</label>
+          <label className="text-[13px] text-zinc-500 block mb-3">Pact Archetype</label>
           <div className="grid grid-cols-3 gap-2">
             {KINDS.map(k => (
-              <label key={k.value} className={`pill-interactive p-3.5 rounded-xl cursor-pointer transition-all text-center ${
+              <label key={k.value} className={`pill-interactive p-3.5 cursor-pointer transition-none text-center border ${
                 kind === k.value
-                  ? 'bg-white/[0.1] ring-1 ring-white/20 shadow-sm'
-                  : 'bg-white/[0.02] hover:bg-white/[0.05]'
+                  ? 'bg-[#c8f542]/10 border-[#c8f542] text-[#c8f542]'
+                  : 'bg-black border-zinc-800 hover:border-zinc-600'
               }`}>
                 <input type="radio" name="kind" value={k.value} checked={kind === k.value} onChange={() => setKind(k.value)} className="sr-only" />
-                <span className={`text-[13px] font-medium block mb-0.5 ${kind === k.value ? 'text-white' : 'text-zinc-400'}`}>{k.label}</span>
-                <span className="text-[11px] text-zinc-600 block">{k.desc}</span>
+                <span className={`text-[13px] font-bold tracking-wider block mb-0.5 ${kind === k.value ? 'text-[#c8f542]' : 'text-zinc-400'}`}>{k.label}</span>
+                <span className="text-[10px] text-zinc-600 block uppercase tracking-widest">{k.desc}</span>
               </label>
             ))}
           </div>
@@ -367,12 +344,12 @@ export default function NewPactPage() {
                   <span className="text-[11px] text-zinc-600">
                     {formatUnits(makerBalance, makerDecimals)}{' '}
                     <button onClick={() => { if (makerBalance > 0n) setAmountMaker(formatUnits(makerBalance, makerDecimals)) }}
-                      className="text-emerald-500 hover:text-emerald-400 cursor-pointer font-medium active:scale-90 transition-transform">max</button>
+                      className="text-[#c8f542] hover:text-[#d6fa61] cursor-pointer font-bold active:scale-90 transition-transform">MAX</button>
                   </span>
                 )}
               </div>
               <input type="number" value={amountMaker} onChange={e => setAmountMaker(e.target.value)} placeholder="0.00"
-                className="w-full bg-white/[0.03] border border-white/[0.06] hover:border-white/[0.1] text-white px-3.5 py-2.5 rounded-xl text-[14px] placeholder:text-zinc-700 focus:border-emerald-500/50 transition-colors" />
+                className="w-full bg-[#07080a] border border-zinc-800 hover:border-zinc-600 text-[#c8f542] px-3.5 py-2.5 rounded-none text-[14px] placeholder:text-zinc-700 focus:border-[#c8f542] transition-none outline-none focus:ring-0" />
             </div>
           </div>
 
@@ -384,7 +361,7 @@ export default function NewPactPage() {
               <label className="text-[12px] text-zinc-500 block mb-1.5">{mc.ta}</label>
               <input type="number" value={amountTaker} onChange={e => setAmountTaker(e.target.value)}
                 placeholder={kind === 1 ? '0.00' : '0.00 (optional)'}
-                className="w-full bg-white/[0.03] border border-white/[0.06] hover:border-white/[0.1] text-white px-3.5 py-2.5 rounded-xl text-[14px] placeholder:text-zinc-700 focus:border-emerald-500/50 transition-colors" />
+                className="w-full bg-[#07080a] border border-zinc-800 hover:border-zinc-600 text-[#c8f542] px-3.5 py-2.5 rounded-none text-[14px] placeholder:text-zinc-700 focus:border-[#c8f542] transition-none outline-none focus:ring-0" />
             </div>
           </div>
 
@@ -395,63 +372,10 @@ export default function NewPactPage() {
               Designated Counterparty <span className="text-zinc-700">· leave empty for open candidate pool</span>
             </label>
             <input type="text" value={taker} onChange={e => setTaker(e.target.value)} placeholder="0x…"
-              className="w-full bg-white/[0.03] border border-white/[0.06] hover:border-white/[0.1] text-white px-3.5 py-2.5 rounded-xl text-[14px] font-mono placeholder:text-zinc-700 focus:border-emerald-500/50 transition-colors" />
+              className="w-full bg-[#07080a] border border-zinc-800 hover:border-zinc-600 text-white px-3.5 py-2.5 rounded-none text-[14px] font-mono placeholder:text-zinc-700 focus:border-[#c8f542] transition-none outline-none focus:ring-0" />
           </div>
         </div>
 
-        {/* Decentralized Arbitration Module */}
-        <div className="surface-1 rounded-xl p-4 border border-white/[0.06] space-y-3">
-          <div className="flex items-center justify-between">
-            <label className="text-[13px] font-medium text-white flex items-center gap-1.5">
-              Decentralized Arbitration & 2-of-3 Multi-Sig
-            </label>
-            <span className="text-[10px] font-mono text-amber-400 bg-amber-500/10 px-2 py-0.5 rounded-full border border-amber-500/20">
-              EscrowLock Active
-            </span>
-          </div>
-          <p className="text-[12px] text-zinc-400 leading-relaxed">
-            In case of dispute, funds enter a 2-of-3 Multi-Sig escrow lock. The selected Arbitrator acts as an impartial cryptographic referee.
-          </p>
-
-          <div className="space-y-2 pt-1">
-            {ARBITRATOR_PRESETS.map(arb => (
-              <label key={arb.id} className={`flex items-start gap-3 p-3 rounded-xl cursor-pointer transition-all border ${
-                arbitratorType === arb.id
-                  ? 'bg-white/[0.08] border-amber-500/40 text-white'
-                  : 'bg-white/[0.02] border-white/[0.04] hover:bg-white/[0.05] text-zinc-400'
-              }`}>
-                <input
-                  type="radio"
-                  name="arbitrator"
-                  value={arb.id}
-                  checked={arbitratorType === arb.id}
-                  onChange={() => setArbitratorType(arb.id)}
-                  className="mt-0.5 text-amber-500 bg-transparent border-zinc-700"
-                />
-                <div className="flex-1">
-                  <div className="text-[13px] font-medium text-white">{arb.label}</div>
-                  <div className="text-[11px] text-zinc-500 mt-0.5">{arb.desc}</div>
-                  {arb.addr && (
-                    <div className="font-mono text-[10px] text-amber-400/80 mt-1">{arb.addr}</div>
-                  )}
-                </div>
-              </label>
-            ))}
-          </div>
-
-          {arbitratorType === 'custom' && (
-            <div className="pt-2">
-              <label className="text-[12px] text-zinc-400 block mb-1">Custom Arbitrator EVM Address</label>
-              <input
-                type="text"
-                value={customArbitrator}
-                onChange={e => setCustomArbitrator(e.target.value.trim())}
-                placeholder="0x…"
-                className="w-full bg-white/[0.03] border border-white/[0.06] text-white px-3.5 py-2.5 rounded-xl text-[13px] font-mono focus:border-amber-500/50"
-              />
-            </div>
-          )}
-        </div>
 
         {/* Terms */}
         <div>
@@ -461,7 +385,7 @@ export default function NewPactPage() {
           </div>
           <textarea value={terms} onChange={e => setTerms(e.target.value)} rows={3}
             placeholder="Describe delivery condition, tracking number, or milestone specification…"
-            className="w-full bg-white/[0.03] border border-white/[0.06] hover:border-white/[0.1] text-white px-3.5 py-2.5 rounded-xl text-[14px] leading-relaxed placeholder:text-zinc-700 focus:border-emerald-500/50 resize-none transition-colors" />
+            className="w-full bg-[#07080a] border border-zinc-800 hover:border-zinc-600 text-white px-3.5 py-2.5 rounded-none text-[13px] leading-relaxed placeholder:text-zinc-700 focus:border-[#c8f542] resize-none transition-none outline-none focus:ring-0" />
           {terms && <p className="text-[11px] text-zinc-600 mt-1.5 font-mono">SHA-256 Digest: {termsH.slice(0, 24)}…</p>}
         </div>
 
@@ -470,10 +394,10 @@ export default function NewPactPage() {
           <label className="text-[13px] text-zinc-500 block mb-2">Settlement Deadline</label>
           <div className="flex items-center gap-2">
             <input type="number" value={deadlineMinutes} onChange={e => setDeadlineMinutes(e.target.value)} min="2"
-              className="flex-1 bg-white/[0.03] border border-white/[0.06] hover:border-white/[0.1] text-white px-3.5 py-2.5 rounded-xl text-[14px] focus:border-emerald-500/50 transition-colors" />
-            {[{ m: 60, l: '1h' }, { m: 360, l: '6h' }, { m: 1440, l: '24h' }, { m: 10080, l: '7d' }].map(p => (
+              className="flex-1 bg-[#07080a] border border-zinc-800 hover:border-zinc-600 text-[#c8f542] px-3.5 py-2.5 rounded-none text-[14px] focus:border-[#c8f542] transition-none outline-none focus:ring-0" />
+            {[{ m: 30, l: '30m' }, { m: 60, l: '1h' }, { m: 360, l: '6h' }, { m: 1440, l: '24h' }, { m: 10080, l: '7d' }].map(p => (
               <button key={p.m} type="button" onClick={() => setDeadlineMinutes(p.m.toString())}
-                className="pill-interactive px-3 py-2.5 bg-white/[0.03] border border-white/[0.06] hover:border-white/[0.12] rounded-xl text-[13px] text-zinc-400 hover:text-white transition-all">
+                className="pill-interactive px-3 py-2.5 bg-[#07080a] border border-zinc-800 hover:border-[#c8f542] text-[13px] text-zinc-400 hover:text-[#c8f542] transition-none rounded-none">
                 {p.l}
               </button>
             ))}
@@ -483,30 +407,24 @@ export default function NewPactPage() {
           <div className="mt-4 space-y-2">
             <label className="flex items-center gap-2.5 cursor-pointer select-none">
               <input type="checkbox" checked={blurSize} onChange={e => setBlurSize(e.target.checked)}
-                className="w-4 h-4 rounded border-zinc-700 bg-transparent text-emerald-500 focus:ring-emerald-500/30" />
-              <span className="text-[13px] text-zinc-400">Obfuscate amounts on public dashboard</span>
-            </label>
-
-            <label className="flex items-center gap-2.5 cursor-pointer select-none">
-              <input type="checkbox" checked={sessionKeyEnabled} onChange={e => setSessionKeyEnabled(e.target.checked)}
-                className="w-4 h-4 rounded border-zinc-700 bg-transparent text-emerald-500 focus:ring-emerald-500/30" />
-              <span className="text-[13px] text-emerald-400">Pre-approve Session Key (Automatic Settlement)</span>
+                className="w-4 h-4 rounded-none border-zinc-700 bg-[#07080a] text-[#c8f542] focus:ring-[#c8f542]/30 focus:ring-offset-0 outline-none" />
+              <span className="text-[13px] text-zinc-400" title="Amounts remain readable in on-chain calldata">blur amount in UI (still public onchain)</span>
             </label>
           </div>
         </div>
 
         {/* Summary */}
-        <div className="surface-1 rounded-xl p-4 text-[13px] space-y-2 border border-white/[0.04]">
-          <p className="text-zinc-500 text-[12px] mb-3">Settlement Summary</p>
-          <div className="flex justify-between"><span className="text-zinc-500">Locked Principal</span><span className="text-zinc-200">${amountMaker || '0'} {tokenLabel}</span></div>
+        <div className="surface-1 p-4 text-[13px] space-y-2 border border-zinc-800 rounded-none">
+          <p className="text-zinc-500 text-[12px] mb-3 uppercase tracking-widest">Settlement Summary</p>
+          <div className="flex justify-between"><span className="text-zinc-500">Locked Principal</span><span className="text-[#c8f542]">${amountMaker || '0'} {tokenLabel}</span></div>
           <div className="flex justify-between"><span className="text-zinc-500">Counterparty</span><span className="text-zinc-200">{taker ? `${taker.slice(0,6)}…${taker.slice(-4)}` : 'Open'}</span></div>
-          <div className="flex justify-between"><span className="text-zinc-500">Arbitrator</span><span className="text-amber-400 font-mono text-[11px]">{effectiveArbitrator ? `${effectiveArbitrator.slice(0,6)}…${effectiveArbitrator.slice(-4)} (2-of-3)` : 'Direct Bilateral'}</span></div>
+          <div className="flex justify-between"><span className="text-zinc-500">Arbitrator</span><span className="text-zinc-600 font-mono text-[11px]">Direct Bilateral</span></div>
           <div className="flex justify-between"><span className="text-zinc-500">Timeout Expiry</span><span className="text-zinc-200">{deadline.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span></div>
         </div>
 
         {/* Errors */}
         {(approveError || createError) && (
-          <p className="text-[13px] text-rose-400 bg-rose-500/[0.08] p-3 rounded-xl border border-rose-500/20">
+          <p className="text-[13px] text-rose-400 bg-rose-500/[0.08] p-3 rounded-none border border-rose-500/20">
             {approveError?.message || createError?.message || 'Transaction failed on Arc.'}
           </p>
         )}
@@ -521,44 +439,44 @@ export default function NewPactPage() {
               Connect Wallet to Continue
             </button>
           ) : disabled ? (
-            <button disabled className="w-full bg-white/[0.04] text-zinc-600 py-3 rounded-xl text-[14px] cursor-not-allowed">{reason}</button>
+            <button disabled className="w-full bg-[#18181b] border border-zinc-800 text-zinc-600 py-3 text-[13px] uppercase tracking-widest rounded-none cursor-not-allowed">{reason}</button>
           ) : deployingContract ? (
-            <div className="w-full py-3.5 rounded-xl text-[14px] text-center text-amber-400 flex items-center justify-center gap-2 bg-amber-500/[0.08] border border-amber-500/20">
-              <div className="w-4 h-4 border-[1.5px] border-amber-400 border-t-transparent rounded-full animate-spin" />
+            <div className="w-full py-3.5 text-[14px] text-center text-[#c8f542] flex items-center justify-center gap-2 bg-[#c8f542]/10 border border-[#c8f542]/30 rounded-none">
+              <div className="w-4 h-4 border-[1.5px] border-[#c8f542] border-t-transparent rounded-full animate-spin" />
               <span>Deploying Protocol Contract on Circle Arc…</span>
             </div>
           ) : !isContractConfigured ? (
             <button
               onClick={handleDeployProtocolContract}
-              className="btn-primary w-full py-3.5 text-[14px] flex items-center justify-center gap-2 bg-amber-400 text-black hover:bg-amber-300"
+              className="btn-primary w-full py-3.5 text-[14px] flex items-center justify-center gap-2 rounded-none"
             >
               <span>Initialize Protocol Contract</span>
             </button>
           ) : step === 'creating' || createPending || createReceiptLoading ? (
-            <div className="w-full py-3.5 rounded-xl text-[14px] text-center text-emerald-400 flex items-center justify-center gap-2 bg-emerald-500/[0.08] border border-emerald-500/20">
-              <div className="w-4 h-4 border-[1.5px] border-emerald-400 border-t-transparent rounded-full animate-spin" />
-              <span>[Step 2/2] Initializing Escrow on Circle Arc…</span>
+            <div className="w-full py-3.5 text-[14px] text-center text-[#c8f542] flex items-center justify-center gap-2 bg-[#c8f542]/10 border border-[#c8f542]/30 rounded-none">
+              <div className="w-4 h-4 border-[1.5px] border-[#c8f542] border-t-transparent rounded-full animate-spin" />
+              <span>[Step 2/2] Initializing Pact on Circle Arc…</span>
             </div>
           ) : step === 'approving' || approvePending || approveReceiptLoading ? (
-            <div className="w-full py-3.5 rounded-xl text-[14px] text-center text-amber-400 flex items-center justify-center gap-2 bg-amber-500/[0.08] border border-amber-500/20">
-              <div className="w-4 h-4 border-[1.5px] border-amber-400 border-t-transparent rounded-full animate-spin" />
+            <div className="w-full py-3.5 text-[14px] text-center text-[#c8f542] flex items-center justify-center gap-2 bg-[#c8f542]/10 border border-[#c8f542]/30 rounded-none">
+              <div className="w-4 h-4 border-[1.5px] border-[#c8f542] border-t-transparent rounded-full animate-spin" />
               <span>[Step 1/2] Authorizing {tokenLabel} Collateral…</span>
             </div>
           ) : needsApproval ? (
             <div className="space-y-2">
               <button
                 onClick={doBatched1ClickDeploy}
-                className="btn-primary w-full py-3.5 text-[14px] flex items-center justify-center gap-2 bg-white text-black hover:bg-zinc-200"
+                className="btn-primary w-full py-3.5 text-[14px] flex items-center justify-center gap-2 rounded-none"
               >
                 <span>Authorize & Deploy Pact</span>
               </button>
               <p className="text-[11px] text-zinc-500 text-center">
-                Batched pipeline automatically executes Approve and initializes the escrow contract.
+                Batched pipeline automatically executes Approve and initializes the pact contract.
               </p>
             </div>
           ) : (
             <button onClick={doCreate} className="btn-primary w-full py-3.5 text-[14px]">
-              Deploy Escrow Pact
+              Deploy Pact
             </button>
           )}
         </div>

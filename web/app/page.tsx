@@ -89,149 +89,64 @@ export default function Home() {
       return true
     }), [pacts, filter, searchQuery, address])
 
-  const total = pacts.length
-  const live = pacts.filter(p => p.status === 2 || p.status === 3).length
-  const cleared = pacts.filter(p => p.status === 4).length
-  const settledVol = (
-    pacts.filter(p => p.status === 4).reduce((sum, p) => sum + Number(p.amountMaker) / 1e6, 0)
-  ).toFixed(2)
-
-  const filters = [
-    { id: 'ALL', label: 'All' },
-    ...(address ? [{ id: 'MY', label: 'My Pacts' }] : []),
-    { id: 'DELIVERY', label: 'Delivery' },
-    { id: 'FX', label: 'FX' },
-    { id: 'JOB', label: 'Job' },
-    { id: 'LIVE', label: 'Live' },
-  ]
-
   return (
-    <main className="min-h-screen max-w-[780px] mx-auto px-5 sm:px-8 pb-24 overflow-x-hidden">
+    <main className="min-h-screen max-w-[780px] mx-auto px-5 sm:px-8 pb-24 overflow-x-hidden font-mono">
       <Navbar />
       <TrustStrip lastUpdated={lastFetchTime} rpcError={rpcError} onRetry={loadData} />
 
       {/* Hero with Direct Arc RPC Latency Indicator */}
-      <div className="mb-6 animate-enter">
+      <div className="mb-6 animate-enter border-b border-zinc-800 pb-4">
         <div className="flex items-center justify-between gap-2 mb-2">
-          <h1 className="text-[22px] sm:text-[26px] font-semibold text-white tracking-[-0.02em]">
-            Escrow contracts
+          <h1 className="text-[20px] font-bold text-white tracking-widest uppercase">
+            &gt; PACT_FEED
           </h1>
           {latencyMs !== null && (
-            <span className="hidden sm:inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[11px] font-mono bg-emerald-500/[0.08] text-emerald-400 border border-emerald-500/20">
-              <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse-soft" />
-              Multicall3 RPC: {latencyMs}ms
+            <span className="hidden sm:inline-flex items-center gap-1.5 text-[11px] font-mono text-[#c8f542]">
+              <span className="w-1.5 h-1.5 bg-[#c8f542] animate-pulse-soft" />
+              RPC_LATENCY: {latencyMs}ms
             </span>
           )}
         </div>
-        <p className="text-[15px] text-zinc-400 leading-relaxed max-w-md">
-          Lock funds into bilateral agreements with verifiable terms and automatic settlement on Circle Arc.
+        <p className="text-[12px] text-zinc-500 max-w-md">
+          Live bilateral settlement stream on Circle Arc Testnet.
         </p>
       </div>
 
-      {/* Highlighted Metrics Dashboard Card */}
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-8 animate-enter-delay">
-        <div className="p-3.5 rounded-xl bg-white/[0.02] border border-sky-500/20 hover:border-sky-500/40 transition-colors">
-          <div className="text-[12px] text-sky-300 font-medium">Total Escrows</div>
-          <div className="text-[20px] font-bold text-sky-400 mt-1 tabular-nums">
-            {loading ? '–' : total}
-          </div>
-        </div>
-
-        <div className="p-3.5 rounded-xl bg-white/[0.02] border border-amber-500/20 hover:border-amber-500/40 transition-colors">
-          <div className="text-[12px] text-amber-300 font-medium flex items-center gap-1.5">
-            <span className="w-1.5 h-1.5 rounded-full bg-amber-400 animate-pulse" />
-            Active
-          </div>
-          <div className="text-[20px] font-bold text-amber-400 mt-1 tabular-nums">
-            {loading ? '–' : live}
-          </div>
-        </div>
-
-        <div className="p-3.5 rounded-xl bg-white/[0.02] border border-emerald-500/20 hover:border-emerald-500/40 transition-colors">
-          <div className="text-[12px] text-emerald-300 font-medium">Settled</div>
-          <div className="text-[20px] font-bold text-emerald-400 mt-1 tabular-nums">
-            {loading ? '–' : cleared}
-          </div>
-        </div>
-
-        <div className="p-3.5 rounded-xl bg-white/[0.02] border border-emerald-500/20 hover:border-emerald-500/40 transition-colors">
-          <div className="text-[12px] text-emerald-300 font-medium">Settled Volume</div>
-          <div className="text-[20px] font-bold text-emerald-300 mt-1 tabular-nums font-mono">
-            ${loading ? '–' : settledVol}
-          </div>
-        </div>
+      {/* Terminal Filter Input */}
+      <div className="mb-4 animate-enter-delay relative">
+        <span className="absolute left-3 top-1/2 -translate-y-1/2 text-[#c8f542] text-[13px]">&gt;</span>
+        <input
+          type="text"
+          value={searchQuery}
+          onChange={e => setSearchQuery(e.target.value)}
+          onKeyDown={handleSearchKeyDown}
+          placeholder="filter by id or address..."
+          className="w-full bg-[#07080a] border border-zinc-800 focus:border-[#c8f542] text-white pl-8 pr-3 py-2 rounded-none text-[13px] placeholder:text-zinc-700 transition-colors focus:ring-0 outline-none"
+        />
       </div>
 
-      {/* Search & Filter Bar */}
-      <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 mb-6 animate-enter-delay">
-        {/* Filters */}
-        <div className="flex items-center gap-1.5 overflow-x-auto pb-1">
-          {filters.map(f => (
-            <button
-              key={f.id}
-              onClick={() => setFilter(f.id)}
-              className={`pill-interactive px-3.5 py-1.5 text-[13px] rounded-lg transition-all shrink-0 ${
-                filter === f.id
-                  ? 'bg-white/[0.12] text-white shadow-sm ring-1 ring-white/10'
-                  : 'text-zinc-500 hover:text-zinc-200 hover:bg-white/[0.04]'
-              }`}
-            >
-              {f.id === 'LIVE' && filter !== 'LIVE' && (
-                <span className="inline-block w-[5px] h-[5px] rounded-full bg-amber-400 mr-1.5 align-middle animate-pulse-soft" />
-              )}
-              {f.label}
-            </button>
-          ))}
-        </div>
 
-        {/* Instant Search Box with direct Enter jump */}
-        <div className="relative">
-          <input
-            type="text"
-            value={searchQuery}
-            onChange={e => setSearchQuery(e.target.value)}
-            onKeyDown={handleSearchKeyDown}
-            placeholder="Search #id or 0x address (↵ to open)…"
-            className="w-full sm:w-64 bg-white/[0.03] border border-white/[0.06] hover:border-white/[0.12] text-white px-3 py-1.5 rounded-lg text-[12px] placeholder:text-zinc-600 focus:border-emerald-500/50 transition-colors"
-          />
-          {searchQuery && (
-            <button
-              onClick={() => setSearchQuery('')}
-              className="absolute right-2.5 top-1.5 text-zinc-500 hover:text-zinc-300 text-xs cursor-pointer"
-            >
-              ✕
-            </button>
-          )}
-        </div>
-      </div>
 
       {/* Content */}
       {loading ? (
         <div className="flex items-center justify-center py-24 text-[14px] text-zinc-600 gap-3">
-          <div className="w-4 h-4 border-[1.5px] border-emerald-500 border-t-transparent rounded-full animate-spin" />
-          Reading on-chain state via Multicall3…
+          <div className="w-3 h-3 bg-[#c8f542] animate-pulse-soft" />
+          POLLING_CHAIN_DATA...
         </div>
       ) : filtered.length === 0 ? (
         <div className="flex flex-col items-center justify-center py-24 text-center animate-enter">
-          <p className="text-[15px] text-zinc-400 mb-1">
-            {searchQuery ? `No contracts found matching "${searchQuery}"` : 'No contracts yet'}
-          </p>
-          <p className="text-[13px] text-zinc-600 mb-6">
-            {searchQuery
-              ? 'Try searching with another address or pact ID.'
-              : filter === 'ALL'
-              ? 'Create the first escrow pact to get started.'
-              : `No pacts match this filter.`}
+          <p className="text-[13px] text-zinc-500 mb-1">
+            {searchQuery ? `0 matches for "${searchQuery}"` : 'DATA_STREAM_EMPTY'}
           </p>
           <Link
             href="/new"
-            className="btn-primary px-5 py-2.5 text-[13px]"
+            className="text-[12px] text-[#c8f542] underline mt-4"
           >
-            Create pact
+            &gt; init_pact
           </Link>
         </div>
       ) : (
-        <div className="animate-enter-delay space-y-2">
+        <div className="animate-enter-delay border-t border-zinc-800">
           {filtered.map(p => {
             const amt = p.kind === 1
               ? `${formatAmount(p.amountMaker)} ${tokenSymbol(p.tokenMaker)} ↔ ${formatAmount(p.amountTaker)} ${tokenSymbol(p.tokenTaker)}`
@@ -241,7 +156,7 @@ export default function Home() {
                 id: p.id,
                 time: formatTimestamp(p.updatedAt),
                 kind: kindLabel(p.kind),
-                status: p.status === 2 ? 'ACTIVE' : p.status === 3 ? 'PROOF IN' : p.status === 8 ? 'DISPUTED' : statusLabel(p.status),
+                status: p.status === 2 ? 'ACTIVE' : p.status === 3 ? 'PROOF IN' : statusLabel(p.status),
                 amount: amt,
                 address: truncateAddress(p.maker),
                 blurSize: false,

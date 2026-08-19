@@ -6,19 +6,19 @@ import ConnectButton from './ConnectButton'
 
 export default function Navbar() {
   return (
-    <header className="flex items-center justify-between py-4 mb-8 animate-enter">
+    <header className="flex items-center justify-between py-4 mb-8 border-b border-zinc-800 animate-enter font-mono">
       <Link href="/" className="flex items-center gap-3 group cursor-pointer transition-transform active:scale-95 duration-150">
-        <div className="relative w-9 h-9 rounded-xl overflow-hidden flex items-center justify-center group-hover:scale-105 transition-transform duration-200 shadow-[0_0_20px_rgba(59,130,246,0.2)] border border-white/10 bg-white/[0.03]">
+        <div className="relative w-8 h-8 rounded-none overflow-hidden flex items-center justify-center border border-zinc-800 bg-black">
           <Image
             src="/logo.png"
             alt="PACT Logo"
-            width={36}
-            height={36}
-            className="w-full h-full object-cover"
+            width={32}
+            height={32}
+            className="w-full h-full object-cover sepia-[100%] hue-rotate-[50deg] saturate-[300%]"
             priority
           />
         </div>
-        <span className="text-[16px] font-semibold text-white tracking-[-0.01em] group-hover:text-zinc-200 transition-colors">
+        <span className="text-[16px] font-bold text-white uppercase tracking-widest group-hover:text-[#c8f542] transition-colors">
           PACT
         </span>
       </Link>
@@ -26,13 +26,13 @@ export default function Navbar() {
       <div className="flex items-center gap-3">
         <Link
           href="/me"
-          className="hidden sm:inline text-[13px] text-zinc-400 hover:text-white transition-all hover:-translate-y-0.5 active:translate-y-0 active:scale-95 duration-150"
+          className="hidden sm:inline text-[13px] uppercase tracking-widest text-zinc-500 hover:text-[#c8f542] transition-colors"
         >
-          My Pacts
+          My_Pacts
         </Link>
         <Link
           href="/deploy"
-          className="hidden sm:inline text-[13px] text-zinc-500 hover:text-zinc-300 transition-all hover:-translate-y-0.5 active:translate-y-0 active:scale-95 duration-150"
+          className="hidden sm:inline text-[13px] uppercase tracking-widest text-zinc-500 hover:text-[#c8f542] transition-colors"
         >
           Deploy
         </Link>
@@ -40,16 +40,16 @@ export default function Navbar() {
           href="https://faucet.circle.com/"
           target="_blank"
           rel="noreferrer"
-          className="hidden sm:inline text-[13px] text-zinc-500 hover:text-zinc-300 transition-all hover:-translate-y-0.5 active:translate-y-0 active:scale-95 duration-150"
+          className="hidden sm:inline text-[13px] uppercase tracking-widest text-zinc-500 hover:text-[#c8f542] transition-colors"
         >
-          Faucet ↗
+          Faucet_↗
         </a>
         <ConnectButton />
         <Link
           href="/new"
-          className="btn-primary px-4 py-[7px] text-[13px]"
+          className="btn-primary px-4 py-[7px] text-[12px] uppercase tracking-widest"
         >
-          New pact
+          init_pact
         </Link>
       </div>
     </header>

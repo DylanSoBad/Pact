@@ -91,16 +91,16 @@ export default function MePage() {
 
   if (!isConnected) {
     return (
-      <main className="min-h-screen max-w-[780px] mx-auto px-5 sm:px-8 pb-24 overflow-x-hidden">
+      <main className="min-h-screen max-w-[780px] mx-auto px-5 sm:px-8 pb-24 overflow-x-hidden font-mono">
         <Navbar />
         <TrustStrip lastUpdated={lastFetchTime} rpcError={rpcError} onRetry={loadUserData} />
 
-        <div className="text-center py-24 space-y-4 animate-enter">
-          <h1 className="text-[22px] font-semibold text-white">Connect Wallet</h1>
-          <p className="text-[14px] text-zinc-400 max-w-sm mx-auto">
-            Connect your Arc wallet to view your on-chain settlement reputation, active escrow commitments, and transaction history.
+        <div className="text-center py-24 space-y-4 animate-enter border border-zinc-800 bg-[#0c0d10]">
+          <h1 className="text-[20px] font-bold text-white uppercase tracking-widest">Connect Wallet</h1>
+          <p className="text-[12px] text-zinc-500 max-w-sm mx-auto uppercase tracking-wider">
+            Connect your Arc wallet to view your on-chain settlement reputation, active pact commitments, and transaction history.
           </p>
-          <button onClick={() => openModal(true)} className="btn-primary px-6 py-2.5 text-[13px]">
+          <button onClick={() => openModal(true)} className="btn-primary px-6 py-2.5 text-[12px] uppercase tracking-widest">
             Connect Wallet
           </button>
         </div>
@@ -109,22 +109,22 @@ export default function MePage() {
   }
 
   return (
-    <main className="min-h-screen max-w-[780px] mx-auto px-5 sm:px-8 pb-24 overflow-x-hidden">
+    <main className="min-h-screen max-w-[780px] mx-auto px-5 sm:px-8 pb-24 overflow-x-hidden font-mono">
       <Navbar />
       <TrustStrip lastUpdated={lastFetchTime} rpcError={rpcError} onRetry={loadUserData} />
 
       {/* Profile Header */}
-      <div className="surface-1 rounded-2xl p-6 mb-8 border border-white/[0.06] space-y-4 animate-enter">
+      <div className="surface-1 rounded-none p-6 mb-8 border border-zinc-800 space-y-4 animate-enter">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
           <div>
-            <span className="text-[12px] text-zinc-500 block mb-1">Connected Account</span>
+            <span className="text-[11px] uppercase tracking-widest text-zinc-500 block mb-1">Connected Account</span>
             <div className="flex items-center gap-2">
-              <span className="text-[16px] font-mono text-white font-semibold">
+              <span className="text-[14px] font-bold text-white uppercase">
                 {truncateAddress(address || '')}
               </span>
               <button
                 onClick={copyAddress}
-                className="btn-ghost px-2.5 py-1 text-[11px] text-zinc-400 hover:text-white"
+                className="btn-ghost px-2.5 py-1 text-[11px] text-zinc-500 hover:text-[#c8f542] uppercase tracking-widest"
               >
                 {copiedAddr ? 'Copied' : 'Copy'}
               </button>
@@ -132,44 +132,44 @@ export default function MePage() {
                 href={`https://testnet.arcscan.app/address/${address}`}
                 target="_blank"
                 rel="noreferrer"
-                className="text-[12px] text-emerald-400 hover:text-emerald-300 underline ml-1"
+                className="text-[11px] uppercase tracking-widest text-zinc-500 hover:text-[#c8f542] underline ml-1"
               >
-                ArcScan ↗
+                ArcScan_↗
               </a>
             </div>
           </div>
 
-          <Link href="/new" className="btn-primary px-4 py-2 text-[13px] text-center">
-            New Pact +
+          <Link href="/new" className="btn-primary px-4 py-2 text-[12px] uppercase tracking-widest text-center">
+            init_pact
           </Link>
         </div>
 
         {/* Reputation Scorecards */}
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 pt-2">
-          <div className="p-3 rounded-xl bg-white/[0.02] border border-emerald-500/20">
-            <span className="text-[11px] text-emerald-300 block">Cleared Deals</span>
-            <span className="text-[18px] font-bold text-emerald-400 mt-0.5 tabular-nums block">
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 pt-4 border-t border-zinc-800 mt-4">
+          <div className="p-3 rounded-none bg-black border border-zinc-800">
+            <span className="text-[10px] uppercase tracking-widest text-zinc-500 block">Cleared Deals</span>
+            <span className="text-[18px] font-bold text-[#c8f542] mt-0.5 tabular-nums block">
               {reputation ? reputation.cleared : 0}
             </span>
           </div>
 
-          <div className="p-3 rounded-xl bg-white/[0.02] border border-rose-500/20">
-            <span className="text-[11px] text-rose-300 block">Slashed / Disputes</span>
+          <div className="p-3 rounded-none bg-black border border-zinc-800">
+            <span className="text-[10px] uppercase tracking-widest text-zinc-500 block">Slashed / Disputes</span>
             <span className="text-[18px] font-bold text-rose-400 mt-0.5 tabular-nums block">
               {reputation ? reputation.slashed : 0}
             </span>
           </div>
 
-          <div className="p-3 rounded-xl bg-white/[0.02] border border-sky-500/20">
-            <span className="text-[11px] text-sky-300 block">Settled Notional</span>
-            <span className="text-[18px] font-bold text-sky-400 mt-0.5 tabular-nums font-mono block">
+          <div className="p-3 rounded-none bg-black border border-zinc-800">
+            <span className="text-[10px] uppercase tracking-widest text-zinc-500 block">Settled Notional</span>
+            <span className="text-[18px] font-bold text-zinc-400 mt-0.5 tabular-nums block">
               ${reputation ? formatAmount(reputation.notional) : '0.00'}
             </span>
           </div>
 
-          <div className="p-3 rounded-xl bg-white/[0.02] border border-amber-500/20">
-            <span className="text-[11px] text-amber-300 block">Reliability Score</span>
-            <span className="text-[18px] font-bold text-amber-400 mt-0.5 tabular-nums block">
+          <div className="p-3 rounded-none bg-black border border-zinc-800">
+            <span className="text-[10px] uppercase tracking-widest text-zinc-500 block">Reliability Score</span>
+            <span className="text-[18px] font-bold text-[#c8f542] mt-0.5 tabular-nums block">
               {successRate}%
             </span>
           </div>
@@ -178,51 +178,51 @@ export default function MePage() {
 
       {/* Role Filters */}
       <div className="flex items-center justify-between gap-3 mb-6 animate-enter-delay">
-        <div className="flex items-center gap-1.5">
+        <div className="flex items-center gap-1.5 border border-zinc-800 bg-[#0c0d10] p-1">
           <button
             onClick={() => setRoleFilter('ALL')}
-            className={`pill-interactive px-3.5 py-1.5 text-[13px] rounded-lg transition-all ${
+            className={`px-3 py-1.5 text-[11px] uppercase tracking-widest transition-none ${
               roleFilter === 'ALL'
-                ? 'bg-white/[0.12] text-white shadow-sm ring-1 ring-white/10'
-                : 'text-zinc-500 hover:text-zinc-200 hover:bg-white/[0.04]'
+                ? 'bg-[#c8f542] text-black font-bold'
+                : 'text-zinc-500 hover:text-zinc-200 hover:bg-zinc-800'
             }`}
           >
-            All Pacts ({pacts.length})
+            All_Pacts ({pacts.length})
           </button>
           <button
             onClick={() => setRoleFilter('MAKER')}
-            className={`pill-interactive px-3.5 py-1.5 text-[13px] rounded-lg transition-all ${
+            className={`px-3 py-1.5 text-[11px] uppercase tracking-widest transition-none ${
               roleFilter === 'MAKER'
-                ? 'bg-white/[0.12] text-white shadow-sm ring-1 ring-white/10'
-                : 'text-zinc-500 hover:text-zinc-200 hover:bg-white/[0.04]'
+                ? 'bg-[#c8f542] text-black font-bold'
+                : 'text-zinc-500 hover:text-zinc-200 hover:bg-zinc-800'
             }`}
           >
-            As Maker ({makerCount})
+            As_Maker ({makerCount})
           </button>
           <button
             onClick={() => setRoleFilter('TAKER')}
-            className={`pill-interactive px-3.5 py-1.5 text-[13px] rounded-lg transition-all ${
+            className={`px-3 py-1.5 text-[11px] uppercase tracking-widest transition-none ${
               roleFilter === 'TAKER'
-                ? 'bg-white/[0.12] text-white shadow-sm ring-1 ring-white/10'
-                : 'text-zinc-500 hover:text-zinc-200 hover:bg-white/[0.04]'
+                ? 'bg-[#c8f542] text-black font-bold'
+                : 'text-zinc-500 hover:text-zinc-200 hover:bg-zinc-800'
             }`}
           >
-            As Counterparty ({takerCount})
+            As_Counterparty ({takerCount})
           </button>
         </div>
       </div>
 
       {/* Pacts List */}
       {loading ? (
-        <div className="flex items-center justify-center py-20 text-[14px] text-zinc-600 gap-3">
-          <div className="w-4 h-4 border-[1.5px] border-emerald-500 border-t-transparent rounded-full animate-spin" />
-          Fetching your on-chain escrow records…
+        <div className="flex items-center justify-center py-20 text-[12px] text-zinc-500 gap-3">
+          <div className="w-3 h-3 bg-[#c8f542] animate-pulse-soft" />
+          FETCHING_ONCHAIN_RECORDS...
         </div>
       ) : filteredPacts.length === 0 ? (
-        <div className="text-center py-16 surface-1 rounded-2xl border border-white/[0.04] p-8 space-y-3">
-          <p className="text-[14px] text-zinc-400">No escrow contracts found for this account.</p>
-          <Link href="/new" className="btn-primary inline-block px-5 py-2 text-[13px]">
-            Create a New Escrow Pact →
+        <div className="text-center py-16 surface-1 rounded-none border border-zinc-800 p-8 space-y-3 bg-[#0c0d10]">
+          <p className="text-[12px] text-zinc-500 uppercase tracking-widest">No pact contracts found for this account.</p>
+          <Link href="/new" className="text-[#c8f542] inline-block px-5 py-2 text-[12px] uppercase tracking-widest underline">
+            init_new_pact
           </Link>
         </div>
       ) : (
@@ -236,7 +236,7 @@ export default function MePage() {
                 id: p.id,
                 time: formatTimestamp(p.updatedAt),
                 kind: kindLabel(p.kind),
-                status: p.status === 2 ? 'ACTIVE' : p.status === 3 ? 'PROOF IN' : p.status === 8 ? 'DISPUTED' : statusLabel(p.status),
+                status: p.status === 2 ? 'ACTIVE' : p.status === 3 ? 'PROOF IN' : statusLabel(p.status),
                 amount: amt,
                 address: truncateAddress(p.maker),
                 blurSize: false,
