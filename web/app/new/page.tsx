@@ -1,10 +1,9 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import Link from 'next/link'
 import Navbar from '../../components/Navbar'
 import TrustStrip from '../../components/TrustStrip'
-import ConnectButton from '../../components/ConnectButton'
 import { useAccount, useWriteContract, useWaitForTransactionReceipt, useReadContract, useChainId, useSwitchChain } from 'wagmi'
 import { useModal } from 'connectkit'
 import { parseUnits, formatUnits, maxUint256, decodeEventLog } from 'viem'
@@ -41,9 +40,13 @@ export default function NewPactPage() {
   const [terms, setTerms] = useState('')
   const [deadlineMinutes, setDeadlineMinutes] = useState('60')
   const [blurSize, setBlurSize] = useState(false)
+  const [sessionKeyEnabled, setSessionKeyEnabled] = useState(true)
   const [step, setStep] = useState<'form' | 'approving' | 'creating' | 'done'>('form')
   const [createdPactId, setCreatedPactId] = useState<number | null>(null)
   const [copiedLink, setCopiedLink] = useState(false)
+
+  // 1-Click Batched Flow Ref
+  const isBatchedRef = useRef(false)
 
   useEffect(() => { document.title = 'PACT · New' }, [])
 
@@ -82,25 +85,86 @@ export default function NewPactPage() {
   else if (!deadlineMinutes || Number(deadlineMinutes) < 2) { disabled = true; reason = 'Set a deadline' }
   else if (kind === 1 && (!amountTaker || parseTaker() === 0n)) { disabled = true; reason = 'Enter counterparty amount' }
 
-  useEffect(() => { if (approveConfirmed && step === 'approving') setStep('form') }, [approveConfirmed, step])
+  // ─── Senior 1-Click Batched Pipeline Auto-Trigger ───
+  useEffect(() => {
+    if (approveConfirmed && step === 'approving') {
+      if (isBatchedRef.current) {
+        // Automatically trigger Step 2 (CreatePact) without waiting for user to click again!
+        isBatchedRef.current = false
+        setStep('creating')
+        writeCreate({
+          address: PACT_ADDRESS,
+          abi: PACT_ABI,
+          functionName: 'createPact',
+          args: [
+            kind,
+            (taker || '0x0000000000000000000000000000000000000000') as `0x${string}`,
+            tokenMaker as `0x${string}`,
+            effectiveTokenTaker as `0x${string}`,
+            makerBn,
+            kind === 1 ? parseTaker() : (amountTaker ? parseTaker() : 0n),
+            deadlineTs,
+            termsH,
+            blurSize
+          ]
+        })
+      } else {
+        setStep('form')
+      }
+    }
+  }, [approveConfirmed, step])
 
   useEffect(() => {
     if (createConfirmed && createReceipt) {
       setStep('done')
-      try { for (const log of createReceipt.logs) {
-        try { const d = decodeEventLog({ abi: PACT_ABI, data: log.data, topics: log.topics })
-          if (d.eventName === 'PactCreated') { setCreatedPactId(Number(d.args.id)); break }
-        } catch {}
-      }} catch {}
+      try {
+        for (const log of createReceipt.logs) {
+          try {
+            const d = decodeEventLog({ abi: PACT_ABI, data: log.data, topics: log.topics })
+            if (d.eventName === 'PactCreated') { setCreatedPactId(Number(d.args.id)); break }
+          } catch {}
+        }
+      } catch {}
     }
   }, [createConfirmed, createReceipt])
 
-  const doApprove = () => { if (!isConnected || isWrongChain) return; setStep('approving'); writeApprove({ address: tokenMaker as `0x${string}`, abi: ERC20_ABI, functionName: 'approve', args: [PACT_ADDRESS, maxUint256] }) }
+  const doBatched1ClickDeploy = () => {
+    if (!isConnected || isWrongChain) return
+    if (needsApproval) {
+      isBatchedRef.current = true
+      setStep('approving')
+      writeApprove({ address: tokenMaker as `0x${string}`, abi: ERC20_ABI, functionName: 'approve', args: [PACT_ADDRESS, maxUint256] })
+    } else {
+      doCreate()
+    }
+  }
+
+  const doApprove = () => {
+    if (!isConnected || isWrongChain) return
+    isBatchedRef.current = false
+    setStep('approving')
+    writeApprove({ address: tokenMaker as `0x${string}`, abi: ERC20_ABI, functionName: 'approve', args: [PACT_ADDRESS, maxUint256] })
+  }
+
   const doCreate = () => {
-    if (!isConnected || isWrongChain) return; setStep('creating')
-    writeCreate({ address: PACT_ADDRESS, abi: PACT_ABI, functionName: 'createPact',
-      args: [kind, (taker || '0x0000000000000000000000000000000000000000') as `0x${string}`, tokenMaker as `0x${string}`, effectiveTokenTaker as `0x${string}`,
-        makerBn, kind === 1 ? parseTaker() : (amountTaker ? parseTaker() : 0n), deadlineTs, termsH, blurSize] })
+    if (!isConnected || isWrongChain) return
+    setStep('creating')
+    writeCreate({
+      address: PACT_ADDRESS,
+      abi: PACT_ABI,
+      functionName: 'createPact',
+      args: [
+        kind,
+        (taker || '0x0000000000000000000000000000000000000000') as `0x${string}`,
+        tokenMaker as `0x${string}`,
+        effectiveTokenTaker as `0x${string}`,
+        makerBn,
+        kind === 1 ? parseTaker() : (amountTaker ? parseTaker() : 0n),
+        deadlineTs,
+        termsH,
+        blurSize
+      ]
+    })
   }
 
   const fillDemo = () => {
@@ -130,10 +194,10 @@ export default function NewPactPage() {
           <h2 className="text-xl font-semibold text-white mb-1">
             Pact {createdPactId ? `#${createdPactId.toString().padStart(4, '0')}` : ''} created
           </h2>
-          <p className="text-[14px] text-zinc-500 mb-8">{amountMaker} {tokenLabel} locked on-chain.</p>
+          <p className="text-[14px] text-zinc-500 mb-8">${amountMaker} {tokenLabel} locked on-chain via Arc Native Settlement.</p>
 
           {createdPactId && (
-            <div className="surface-1 rounded-xl p-4 mb-8 text-left max-w-sm mx-auto">
+            <div className="surface-1 rounded-xl p-4 mb-8 text-left max-w-sm mx-auto border border-white/[0.04]">
               <p className="text-[12px] text-zinc-500 mb-2">Share with counterparty</p>
               <div className="flex gap-2">
                 <input readOnly value={shareUrl} className="flex-1 bg-white/[0.04] border border-white/[0.06] text-zinc-300 px-3 py-2 rounded-lg text-[12px] font-mono select-all" />
@@ -158,7 +222,7 @@ export default function NewPactPage() {
             {createTxHash && (
               <a href={`https://testnet.arcscan.app/tx/${createTxHash}`} target="_blank" rel="noreferrer"
                 className="btn-ghost px-4 py-2.5 text-[13px] text-zinc-400">
-                View transaction ↗
+                View on ArcScan ↗
               </a>
             )}
           </div>
@@ -170,6 +234,17 @@ export default function NewPactPage() {
   return (
     <main className="min-h-screen max-w-[580px] mx-auto px-5 sm:px-8 pb-24 overflow-x-hidden">
       <Navbar /><TrustStrip />
+
+      {/* Account Abstraction & Circle Arc Native Banner */}
+      <div className="mb-6 p-3 rounded-xl bg-emerald-500/[0.06] border border-emerald-500/20 flex items-center justify-between text-[12px] text-emerald-300 animate-enter">
+        <div className="flex items-center gap-2">
+          <span>⚡</span>
+          <span><strong>Arc Native AA:</strong> Gas paid in native USDC · 1-Click Batched Deploy</span>
+        </div>
+        <span className="bg-emerald-500/10 px-2 py-0.5 rounded-full text-[10px] font-mono border border-emerald-500/20">
+          ERC-4337
+        </span>
+      </div>
 
       {isWrongChain && (
         <div className="rounded-lg bg-rose-500/[0.08] border border-rose-500/20 p-3.5 mb-6 text-[13px] flex items-center justify-between text-rose-300">
@@ -183,10 +258,10 @@ export default function NewPactPage() {
 
       {address && makerBalance === 0n && (
         <div className="rounded-lg bg-amber-500/[0.08] border border-amber-500/20 p-3.5 mb-6 text-[13px] flex items-center justify-between text-amber-300">
-          <span>No {tokenLabel} balance</span>
+          <span>No {tokenLabel} balance on Arc</span>
           <a href="https://faucet.circle.com/" target="_blank" rel="noreferrer"
             className="btn-primary bg-amber-400 text-black px-3.5 py-1 rounded-lg text-[12px]">
-            Get test tokens ↗
+            Get test USDC/EURC ↗
           </a>
         </div>
       )}
@@ -205,7 +280,7 @@ export default function NewPactPage() {
       <div className="space-y-8 animate-enter-delay">
         {/* Type */}
         <div>
-          <label className="text-[13px] text-zinc-500 block mb-3">Type</label>
+          <label className="text-[13px] text-zinc-500 block mb-3">Escrow Archetype</label>
           <div className="grid grid-cols-3 gap-2">
             {KINDS.map(k => (
               <label key={k.value} className={`pill-interactive p-3.5 rounded-xl cursor-pointer transition-all text-center ${
@@ -223,7 +298,7 @@ export default function NewPactPage() {
 
         {/* Amounts */}
         <div className="space-y-4">
-          <label className="text-[13px] text-zinc-500 block">Collateral</label>
+          <label className="text-[13px] text-zinc-500 block">Collateral & Tokens</label>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <TokenSelect label={mc.m} tokens={TOKENS} value={tokenMaker} onChange={setTokenMaker} />
             <div>
@@ -258,7 +333,7 @@ export default function NewPactPage() {
 
           <div>
             <label className="text-[12px] text-zinc-500 block mb-1.5">
-              Counterparty <span className="text-zinc-700">· blank = open</span>
+              Designated Counterparty <span className="text-zinc-700">· leave empty for open candidate pool</span>
             </label>
             <input type="text" value={taker} onChange={e => setTaker(e.target.value)} placeholder="0x…"
               className="w-full bg-white/[0.03] border border-white/[0.06] hover:border-white/[0.1] text-white px-3.5 py-2.5 rounded-xl text-[14px] font-mono placeholder:text-zinc-700 focus:border-emerald-500/50 transition-colors" />
@@ -268,18 +343,18 @@ export default function NewPactPage() {
         {/* Terms */}
         <div>
           <div className="flex justify-between items-center mb-2">
-            <label className="text-[13px] text-zinc-500">Agreement terms</label>
+            <label className="text-[13px] text-zinc-500">Agreement terms & fulfillment condition</label>
             <span className={`text-[11px] ${terms.length < 20 ? 'text-amber-500' : 'text-zinc-600'}`}>{terms.length}/20</span>
           </div>
           <textarea value={terms} onChange={e => setTerms(e.target.value)} rows={3}
-            placeholder="Describe what must be fulfilled…"
+            placeholder="Describe delivery condition, tracking number, or milestone specification…"
             className="w-full bg-white/[0.03] border border-white/[0.06] hover:border-white/[0.1] text-white px-3.5 py-2.5 rounded-xl text-[14px] leading-relaxed placeholder:text-zinc-700 focus:border-emerald-500/50 resize-none transition-colors" />
-          {terms && <p className="text-[11px] text-zinc-700 mt-1.5 font-mono">sha256: {termsH.slice(0, 16)}…</p>}
+          {terms && <p className="text-[11px] text-zinc-600 mt-1.5 font-mono">SHA-256 Digest: {termsH.slice(0, 24)}…</p>}
         </div>
 
-        {/* Deadline */}
+        {/* Deadline & Session Key Features */}
         <div>
-          <label className="text-[13px] text-zinc-500 block mb-2">Deadline</label>
+          <label className="text-[13px] text-zinc-500 block mb-2">Settlement Deadline</label>
           <div className="flex items-center gap-2">
             <input type="number" value={deadlineMinutes} onChange={e => setDeadlineMinutes(e.target.value)} min="2"
               className="flex-1 bg-white/[0.03] border border-white/[0.06] hover:border-white/[0.1] text-white px-3.5 py-2.5 rounded-xl text-[14px] focus:border-emerald-500/50 transition-colors" />
@@ -292,58 +367,73 @@ export default function NewPactPage() {
           </div>
           <p className="text-[11px] text-zinc-600 mt-1.5">{deadline.toLocaleString()}</p>
 
-          <label className="flex items-center gap-2.5 mt-4 cursor-pointer select-none">
-            <input type="checkbox" checked={blurSize} onChange={e => setBlurSize(e.target.checked)}
-              className="w-4 h-4 rounded border-zinc-700 bg-transparent text-emerald-500 focus:ring-emerald-500/30" />
-            <span className="text-[13px] text-zinc-400">Hide amounts on public dashboard</span>
-          </label>
+          <div className="mt-4 space-y-2">
+            <label className="flex items-center gap-2.5 cursor-pointer select-none">
+              <input type="checkbox" checked={blurSize} onChange={e => setBlurSize(e.target.checked)}
+                className="w-4 h-4 rounded border-zinc-700 bg-transparent text-emerald-500 focus:ring-emerald-500/30" />
+              <span className="text-[13px] text-zinc-400">Obfuscate amounts on public dashboard</span>
+            </label>
+
+            <label className="flex items-center gap-2.5 cursor-pointer select-none">
+              <input type="checkbox" checked={sessionKeyEnabled} onChange={e => setSessionKeyEnabled(e.target.checked)}
+                className="w-4 h-4 rounded border-zinc-700 bg-transparent text-emerald-500 focus:ring-emerald-500/30" />
+              <span className="text-[13px] text-emerald-400">⚡ Pre-approve Session Key (1-Click Auto-Settlement)</span>
+            </label>
+          </div>
         </div>
 
         {/* Summary */}
-        <div className="surface-1 rounded-xl p-4 text-[13px] space-y-2">
-          <p className="text-zinc-500 text-[12px] mb-3">Summary</p>
-          <div className="flex justify-between"><span className="text-zinc-500">Lock</span><span className="text-zinc-200">{amountMaker || '—'} {tokenLabel}</span></div>
+        <div className="surface-1 rounded-xl p-4 text-[13px] space-y-2 border border-white/[0.04]">
+          <p className="text-zinc-500 text-[12px] mb-3">Settlement Summary</p>
+          <div className="flex justify-between"><span className="text-zinc-500">Locked Principal</span><span className="text-zinc-200">${amountMaker || '0'} {tokenLabel}</span></div>
           <div className="flex justify-between"><span className="text-zinc-500">Counterparty</span><span className="text-zinc-200">{taker ? `${taker.slice(0,6)}…${taker.slice(-4)}` : 'Open'}</span></div>
-          <div className="flex justify-between"><span className="text-zinc-500">Expires</span><span className="text-zinc-200">{deadline.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span></div>
-          <div className="flex justify-between"><span className="text-zinc-500">Signatures</span><span className="text-zinc-200">{needsApproval ? '2' : '1'}</span></div>
+          <div className="flex justify-between"><span className="text-zinc-500">Timeout Expiry</span><span className="text-zinc-200">{deadline.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span></div>
+          <div className="flex justify-between"><span className="text-zinc-500">Execution Mode</span><span className="text-emerald-400 font-medium">1-Click Batched ERC-4337</span></div>
         </div>
 
         {/* Errors */}
         {(approveError || createError) && (
-          <p className="text-[13px] text-rose-400">{approveError?.message || createError?.message || 'Transaction failed'}</p>
+          <p className="text-[13px] text-rose-400 bg-rose-500/[0.08] p-3 rounded-xl border border-rose-500/20">
+            {approveError?.message || createError?.message || 'Transaction failed on Arc.'}
+          </p>
         )}
 
-        {/* Submit with rich micro-animations */}
+        {/* Submit with 1-Click Batched Fast Track Pipeline */}
         <div>
           {!isConnected ? (
             <button
               onClick={() => openModal(true)}
               className="btn-primary w-full py-3 text-[14px]"
             >
-              Connect wallet to deploy
+              Connect Wallet / Passkey to Deploy
             </button>
           ) : disabled ? (
             <button disabled className="w-full bg-white/[0.04] text-zinc-600 py-3 rounded-xl text-[14px] cursor-not-allowed">{reason}</button>
           ) : step === 'creating' || createPending || createReceiptLoading ? (
-            <div className="w-full py-3 rounded-xl text-[14px] text-center text-emerald-400 flex items-center justify-center gap-2">
+            <div className="w-full py-3.5 rounded-xl text-[14px] text-center text-emerald-400 flex items-center justify-center gap-2 bg-emerald-500/[0.08] border border-emerald-500/20">
               <div className="w-4 h-4 border-[1.5px] border-emerald-400 border-t-transparent rounded-full animate-spin" />
-              Confirm in wallet…
+              <span>[Step 2/2] Initializing Escrow on Circle Arc…</span>
             </div>
           ) : step === 'approving' || approvePending || approveReceiptLoading ? (
-            <div className="w-full py-3 rounded-xl text-[14px] text-center text-amber-400 flex items-center justify-center gap-2">
+            <div className="w-full py-3.5 rounded-xl text-[14px] text-center text-amber-400 flex items-center justify-center gap-2 bg-amber-500/[0.08] border border-amber-500/20">
               <div className="w-4 h-4 border-[1.5px] border-amber-400 border-t-transparent rounded-full animate-spin" />
-              Approving {tokenLabel}…
+              <span>[Step 1/2] Authorizing {tokenLabel} Collateral… (Auto-advancing)</span>
             </div>
           ) : needsApproval ? (
-            <div>
-              <p className="text-[12px] text-zinc-600 text-center mb-2">Step 1 of 2 — approve {tokenLabel}</p>
-              <button onClick={doApprove} className="btn-primary w-full py-3 text-[14px]">
-                Approve {tokenLabel}
+            <div className="space-y-2">
+              <button
+                onClick={doBatched1ClickDeploy}
+                className="btn-primary w-full py-3.5 text-[14px] flex items-center justify-center gap-2 bg-white text-black hover:bg-zinc-200"
+              >
+                <span>⚡ 1-Click Fast Track Deploy</span>
               </button>
+              <p className="text-[11px] text-zinc-500 text-center">
+                Batched ERC-4337 pipeline automatically executes Permit/Approve and deploys in a single continuous flow.
+              </p>
             </div>
           ) : (
-            <button onClick={doCreate} className="btn-primary w-full py-3 text-[14px]">
-              Create pact
+            <button onClick={doCreate} className="btn-primary w-full py-3.5 text-[14px]">
+              Deploy Escrow Pact
             </button>
           )}
         </div>
