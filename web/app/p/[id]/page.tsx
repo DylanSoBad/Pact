@@ -99,10 +99,10 @@ export default function PactDetailPage() {
   const canFund = pact && pact.status === 0 && !isMaker && (isOpenTaker || isTaker)
   const canCancel = pact && pact.status === 0 && isMaker
   const canProof = pact && pact.status === 2 && isTaker && pact.kind !== 1
-  const canReject = pact && pact.status === 3 && isMaker && pact.kind !== 1 && pact.status !== 8
-  const canRelease = pact && ((pact.kind === 1 && pact.status === 2 && (isMaker || isTaker)) || (pact.kind !== 1 && (pact.status === 2 || pact.status === 3) && isMaker)) && pact.status !== 8
+  const canReject = pact && pact.status === 3 && isMaker && pact.kind !== 1
+  const canRelease = pact && ((pact.kind === 1 && pact.status === 2 && (isMaker || isTaker)) || (pact.kind !== 1 && (pact.status === 2 || pact.status === 3) && isMaker))
   const expired = pact && Number(pact.deadline) < Math.floor(Date.now() / 1000)
-  const canExpire = pact && expired && !isTerminal(pact.status) && [0, 2, 3].includes(pact.status) && pact.status !== 8
+  const canExpire = pact && expired && !isTerminal(pact.status) && [0, 2, 3].includes(pact.status)
 
   const doFund = () => {
     if (!pact) return
