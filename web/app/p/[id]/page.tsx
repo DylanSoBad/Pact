@@ -12,8 +12,7 @@ import { PACT_ABI, ERC20_ABI } from '../../../lib/abi'
 import { kindLabel, formatAmount, tokenSymbol, formatDate, truncateAddress, isTerminal, isZeroAddress } from '../../../lib/format'
 import { verifyTerms } from '../../../lib/terms'
 import Countdown from '../../../components/Countdown'
-
-const PACT_ADDRESS = (process.env.NEXT_PUBLIC_PACT_ADDRESS || '0x0000000000000000000000000000000000000000') as `0x${string}`
+import { getPactAddress } from '../../../lib/arc'
 
 export default function PactDetailPage() {
   const params = useParams()
@@ -105,17 +104,18 @@ export default function PactDetailPage() {
 
   const doFund = () => {
     if (!pact) return
+    const pactAddress = getPactAddress()
     if (pact.amountTaker > 0n) {
-      writeContract({ address: pact.tokenTaker as `0x${string}`, abi: ERC20_ABI, functionName: 'approve', args: [PACT_ADDRESS, pact.amountTaker] })
+      writeContract({ address: pact.tokenTaker as `0x${string}`, abi: ERC20_ABI, functionName: 'approve', args: [pactAddress, pact.amountTaker] })
     }
-    writeContract({ address: PACT_ADDRESS, abi: PACT_ABI, functionName: 'fund', args: [BigInt(id)] })
+    writeContract({ address: pactAddress, abi: PACT_ABI, functionName: 'fund', args: [BigInt(id)] })
   }
-  const doCancel = () => writeContract({ address: PACT_ADDRESS, abi: PACT_ABI, functionName: 'cancel', args: [BigInt(id)] })
+  const doCancel = () => writeContract({ address: getPactAddress(), abi: PACT_ABI, functionName: 'cancel', args: [BigInt(id)] })
   const doProof = () => {
     if (!proofInput) return
     import('viem').then(({ keccak256, toHex }) => {
       writeContract({
-        address: PACT_ADDRESS,
+        address: getPactAddress(),
         abi: PACT_ABI,
         functionName: 'submitProof',
         args: [BigInt(id), keccak256(toHex(new TextEncoder().encode(proofInput)))]
@@ -123,11 +123,11 @@ export default function PactDetailPage() {
     })
   }
   const doReject = () => {
-    writeContract({ address: PACT_ADDRESS, abi: PACT_ABI, functionName: 'reject', args: [BigInt(id)] })
+    writeContract({ address: getPactAddress(), abi: PACT_ABI, functionName: 'reject', args: [BigInt(id)] })
     setShowDisputeModal(false)
   }
-  const doRelease = () => writeContract({ address: PACT_ADDRESS, abi: PACT_ABI, functionName: 'release', args: [BigInt(id)] })
-  const doExpire = () => writeContract({ address: PACT_ADDRESS, abi: PACT_ABI, functionName: 'expire', args: [BigInt(id)] })
+  const doRelease = () => writeContract({ address: getPactAddress(), abi: PACT_ABI, functionName: 'release', args: [BigInt(id)] })
+  const doExpire = () => writeContract({ address: getPactAddress(), abi: PACT_ABI, functionName: 'expire', args: [BigInt(id)] })
 
   const currentUrl = typeof window !== 'undefined' ? window.location.href : ''
   const copyShareLink = () => {

@@ -1,8 +1,6 @@
 import { createPublicClient, http } from 'viem'
-import { arcTestnet } from './arc'
+import { arcTestnet, getPactAddress } from './arc'
 import { PACT_ABI } from './abi'
-
-const PACT_ADDRESS = process.env.NEXT_PUBLIC_PACT_ADDRESS as `0x${string}`
 
 const client = createPublicClient({
   chain: arcTestnet,
@@ -30,10 +28,15 @@ export type PactData = {
 // In-memory cache for immutable terminal pacts (CLEARED=4, SLASHED=5, EXPIRED=6, CANCELLED=7)
 const terminalPactCache = new Map<number, PactData>()
 
-export async function fetchNextId(): Promise<number> {
+export async function fetchNextId(customAddress?: `0x${string}`): Promise<number> {
+  const targetAddress = customAddress || getPactAddress()
+  if (!targetAddress || targetAddress === '0x0000000000000000000000000000000000000000') {
+    return 1
+  }
+
   try {
     const result = await client.readContract({
-      address: PACT_ADDRESS,
+      address: targetAddress,
       abi: PACT_ABI,
       functionName: 'nextId',
     })
@@ -49,8 +52,13 @@ export async function fetchNextId(): Promise<number> {
  * 2. Batches active/uncached pact queries via Multicall3 in chunked payloads.
  * 3. Reduces RPC bandwidth by >70% on busy testnet traffic.
  */
-export async function fetchPacts(maxCount = 100): Promise<PactData[]> {
-  const nextId = await fetchNextId()
+export async function fetchPacts(maxCount = 100, customAddress?: `0x${string}`): Promise<PactData[]> {
+  const targetAddress = customAddress || getPactAddress()
+  if (!targetAddress || targetAddress === '0x0000000000000000000000000000000000000000') {
+    return []
+  }
+
+  const nextId = await fetchNextId(targetAddress)
   if (nextId <= 1) return []
 
   const totalPacts = nextId - 1
@@ -83,13 +91,13 @@ export async function fetchPacts(maxCount = 100): Promise<PactData[]> {
 
     for (const id of chunkIds) {
       calls.push({
-        address: PACT_ADDRESS,
+        address: targetAddress,
         abi: PACT_ABI,
         functionName: 'getPact',
         args: [BigInt(id)] as const,
       })
       calls.push({
-        address: PACT_ADDRESS,
+        address: targetAddress,
         abi: PACT_ABI,
         functionName: 'deadlines',
         args: [BigInt(id)] as const,
@@ -144,21 +152,26 @@ export async function fetchPacts(maxCount = 100): Promise<PactData[]> {
   return all
 }
 
-export async function fetchSinglePact(id: number): Promise<PactData | null> {
+export async function fetchSinglePact(id: number, customAddress?: `0x${string}`): Promise<PactData | null> {
   const cached = terminalPactCache.get(id)
   if (cached) return cached
+
+  const targetAddress = customAddress || getPactAddress()
+  if (!targetAddress || targetAddress === '0x0000000000000000000000000000000000000000') {
+    return null
+  }
 
   try {
     const [pactResult, deadlineResult] = await client.multicall({
       contracts: [
         {
-          address: PACT_ADDRESS,
+          address: targetAddress,
           abi: PACT_ABI,
           functionName: 'getPact',
           args: [BigInt(id)],
         },
         {
-          address: PACT_ADDRESS,
+          address: targetAddress,
           abi: PACT_ABI,
           functionName: 'deadlines',
           args: [BigInt(id)],
@@ -201,17 +214,22 @@ export async function fetchSinglePact(id: number): Promise<PactData | null> {
   }
 }
 
-export async function fetchReputation(address: `0x${string}`): Promise<{
+export async function fetchReputation(address: `0x${string}`, customAddress?: `0x${string}`): Promise<{
   cleared: number
   slashed: number
   notional: bigint
 }> {
+  const targetAddress = customAddress || getPactAddress()
+  if (!targetAddress || targetAddress === '0x0000000000000000000000000000000000000000') {
+    return { cleared: 0, slashed: 0, notional: 0n }
+  }
+
   try {
     const results = await client.multicall({
       contracts: [
-        { address: PACT_ADDRESS, abi: PACT_ABI, functionName: 'clearedCount', args: [address] },
-        { address: PACT_ADDRESS, abi: PACT_ABI, functionName: 'slashedCount', args: [address] },
-        { address: PACT_ADDRESS, abi: PACT_ABI, functionName: 'clearedNotional', args: [address] },
+        { address: targetAddress, abi: PACT_ABI, functionName: 'clearedCount', args: [address] },
+        { address: targetAddress, abi: PACT_ABI, functionName: 'slashedCount', args: [address] },
+        { address: targetAddress, abi: PACT_ABI, functionName: 'clearedNotional', args: [address] },
       ] as any,
     })
 

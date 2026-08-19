@@ -1,4 +1,5 @@
 import { PactData } from './reads'
+import { getPactAddress } from './arc'
 
 export type IndexerStats = {
   totalPacts: number
@@ -23,17 +24,22 @@ export async function queryPactsGraphQL(params: {
   kind?: number
   address?: string
   search?: string
+  contractAddress?: `0x${string}`
 }): Promise<GraphQLResponse> {
   const t0 = performance.now()
+  const contractAddress = params.contractAddress || getPactAddress()
 
   try {
     const res = await fetch('/api/graphql', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: {
+        'Content-Type': 'application/json',
+        'x-contract-address': contractAddress,
+      },
       body: JSON.stringify({
         query: `
-          query GetPacts($status: Int, $kind: Int, $address: String, $search: String) {
-            pacts(status: $status, kind: $kind, address: $address, search: $search) {
+          query GetPacts($status: Int, $kind: Int, $address: String, $search: String, $contractAddress: String) {
+            pacts(status: $status, kind: $kind, address: $address, search: $search, contractAddress: $contractAddress) {
               id
               maker
               amountMaker
@@ -60,7 +66,7 @@ export async function queryPactsGraphQL(params: {
             }
           }
         `,
-        variables: params,
+        variables: { ...params, contractAddress },
       }),
     })
 

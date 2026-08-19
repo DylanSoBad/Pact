@@ -8,6 +8,7 @@ import TrustStrip from '../components/TrustStrip'
 import TapeLine from '../components/TapeLine'
 import { queryPactsGraphQL, IndexerStats } from '../lib/indexer'
 import { fetchPacts, PactData } from '../lib/reads'
+import { getPactAddress } from '../lib/arc'
 import { useAccount } from 'wagmi'
 import {
   kindLabel, statusLabel, formatAmount, tokenSymbol,
@@ -31,16 +32,19 @@ export default function Home() {
   async function loadData() {
     if (document.hidden) return
     try {
+      const contractAddress = getPactAddress()
       // 1. Query GraphQL Subgraph Indexer (< 50ms)
-      const graphRes = await queryPactsGraphQL({})
-      if (graphRes.pacts.length > 0 || graphRes.stats.totalPacts >= 0) {
+      const graphRes = await queryPactsGraphQL({ contractAddress })
+      if (graphRes.pacts.length > 0) {
         setPacts(graphRes.pacts)
         setStats(graphRes.stats)
         setIndexerLatency(graphRes.latencyMs)
       } else {
-        // Fallback to Multicall RPC
-        const data = await fetchPacts(100)
+        // Fallback directly to Multicall RPC
+        const data = await fetchPacts(100, contractAddress)
         setPacts(data)
+        if (graphRes.stats) setStats(graphRes.stats)
+        if (graphRes.latencyMs) setIndexerLatency(graphRes.latencyMs)
       }
       setRpcError(false)
       setLastFetchTime(Date.now())

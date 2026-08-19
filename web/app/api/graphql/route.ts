@@ -14,7 +14,9 @@ export async function POST(req: Request) {
     const body = await req.json().catch(() => ({}))
     const { query = '', variables = {} } = body
 
-    const pacts = await fetchPacts(100)
+    const contractAddress = variables.contractAddress || req.headers.get('x-contract-address') || undefined
+
+    const pacts = await fetchPacts(100, contractAddress as `0x${string}`)
 
     let filtered = [...pacts]
 
