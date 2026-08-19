@@ -116,7 +116,7 @@ export default function Home() {
       <TrustStrip lastUpdated={lastFetchTime} rpcError={rpcError} onRetry={loadData} />
 
       {/* Hero with Subgraph Indexer Latency Indicator */}
-      <div className="mb-8 animate-enter">
+      <div className="mb-6 animate-enter">
         <div className="flex items-center justify-between gap-2 mb-2">
           <h1 className="text-[22px] sm:text-[26px] font-semibold text-white tracking-[-0.02em]">
             Escrow contracts
@@ -128,31 +128,42 @@ export default function Home() {
             </span>
           )}
         </div>
-        <p className="text-[15px] text-zinc-500 leading-relaxed max-w-md">
+        <p className="text-[15px] text-zinc-400 leading-relaxed max-w-md">
           Lock funds into bilateral agreements with verifiable terms and automatic settlement on Circle Arc.
         </p>
       </div>
 
-      {/* Stats with Volume Visualizer — inline */}
-      <div className="flex flex-wrap items-center gap-y-2 gap-x-6 mb-8 text-[14px] animate-enter-delay">
-        <div>
-          <span className="text-zinc-500">Total Escrows</span>
-          <span className="ml-2 text-white font-semibold tabular-nums">{loading ? '–' : total}</span>
+      {/* Highlighted Metrics Dashboard Card */}
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-8 animate-enter-delay">
+        <div className="p-3.5 rounded-xl bg-white/[0.02] border border-sky-500/20 hover:border-sky-500/40 transition-colors">
+          <div className="text-[12px] text-sky-300 font-medium">Total Escrows</div>
+          <div className="text-[20px] font-bold text-sky-400 mt-1 tabular-nums">
+            {loading ? '–' : total}
+          </div>
         </div>
-        <span className="text-zinc-800">·</span>
-        <div>
-          <span className="text-zinc-500">Active</span>
-          <span className="ml-2 text-amber-400 font-semibold tabular-nums">{loading ? '–' : live}</span>
+
+        <div className="p-3.5 rounded-xl bg-white/[0.02] border border-amber-500/20 hover:border-amber-500/40 transition-colors">
+          <div className="text-[12px] text-amber-300 font-medium flex items-center gap-1.5">
+            <span className="w-1.5 h-1.5 rounded-full bg-amber-400 animate-pulse" />
+            Active
+          </div>
+          <div className="text-[20px] font-bold text-amber-400 mt-1 tabular-nums">
+            {loading ? '–' : live}
+          </div>
         </div>
-        <span className="text-zinc-800">·</span>
-        <div>
-          <span className="text-zinc-500">Settled</span>
-          <span className="ml-2 text-emerald-400 font-semibold tabular-nums">{loading ? '–' : cleared}</span>
+
+        <div className="p-3.5 rounded-xl bg-white/[0.02] border border-emerald-500/20 hover:border-emerald-500/40 transition-colors">
+          <div className="text-[12px] text-emerald-300 font-medium">Settled</div>
+          <div className="text-[20px] font-bold text-emerald-400 mt-1 tabular-nums">
+            {loading ? '–' : cleared}
+          </div>
         </div>
-        <span className="text-zinc-800">·</span>
-        <div>
-          <span className="text-zinc-500">Settled Volume</span>
-          <span className="ml-2 text-zinc-200 font-semibold tabular-nums">${loading ? '–' : settledVol}</span>
+
+        <div className="p-3.5 rounded-xl bg-white/[0.02] border border-emerald-500/20 hover:border-emerald-500/40 transition-colors">
+          <div className="text-[12px] text-emerald-300 font-medium">Settled Volume</div>
+          <div className="text-[20px] font-bold text-emerald-300 mt-1 tabular-nums font-mono">
+            ${loading ? '–' : settledVol}
+          </div>
         </div>
       </div>
 
@@ -225,16 +236,20 @@ export default function Home() {
           </Link>
         </div>
       ) : (
-        <div className="animate-enter-delay space-y-1">
+        <div className="animate-enter-delay space-y-2">
           {filtered.map(p => {
             const amt = p.kind === 1
               ? `${formatAmount(p.amountMaker)} ${tokenSymbol(p.tokenMaker)} ↔ ${formatAmount(p.amountTaker)} ${tokenSymbol(p.tokenTaker)}`
               : `${formatAmount(p.amountMaker)} ${tokenSymbol(p.tokenMaker)}`
             return (
               <TapeLine key={p.id} pact={{
-                id: p.id, time: formatTimestamp(p.updatedAt), kind: kindLabel(p.kind),
-                status: p.status === 2 ? 'LIVE' : p.status === 3 ? 'PROOF IN' : statusLabel(p.status),
-                amount: amt, address: truncateAddress(p.maker), blurSize: p.blurSize,
+                id: p.id,
+                time: formatTimestamp(p.updatedAt),
+                kind: kindLabel(p.kind),
+                status: p.status === 2 ? 'ACTIVE' : p.status === 3 ? 'PROOF IN' : p.status === 8 ? 'DISPUTED' : statusLabel(p.status),
+                amount: amt,
+                address: truncateAddress(p.maker),
+                blurSize: false, // Ensure parameters & amounts are clearly visible!
               }} />
             )
           })}
