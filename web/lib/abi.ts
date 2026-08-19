@@ -1,4 +1,14 @@
 export const PACT_ABI = [
+  // --- Constructor ---
+  {
+    type: 'constructor',
+    inputs: [
+      { name: '_usdc', type: 'address' },
+      { name: '_eurc', type: 'address' },
+    ],
+    stateMutability: 'nonpayable',
+  },
+
   // --- Views ---
   {
     name: 'nextId',

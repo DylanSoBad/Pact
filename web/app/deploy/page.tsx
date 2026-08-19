@@ -4,7 +4,7 @@ import { useState } from 'react'
 import Link from 'next/link'
 import Navbar from '../../components/Navbar'
 import TrustStrip from '../../components/TrustStrip'
-import { useAccount, useWalletClient, useChainId, useSwitchChain } from 'wagmi'
+import { useAccount, useWalletClient, usePublicClient, useChainId, useSwitchChain } from 'wagmi'
 import { PACT_ABI } from '../../lib/abi'
 import { USDC_ERC20, EURC } from '../../lib/arc'
 import { PACT_BYTECODE } from '../../lib/bytecode'
@@ -14,6 +14,7 @@ const TARGET_CHAIN_ID = 5042002
 export default function DeployPage() {
   const { address, isConnected } = useAccount()
   const { data: walletClient } = useWalletClient()
+  const publicClient = usePublicClient()
   const chainId = useChainId()
   const { switchChain } = useSwitchChain()
 
@@ -30,6 +31,7 @@ export default function DeployPage() {
     if (!walletClient || isWrongChain) return
     setLoading(true)
     setError(null)
+    setTxHash(null)
 
     try {
       const hash = await walletClient.deployContract({
@@ -40,19 +42,16 @@ export default function DeployPage() {
 
       setTxHash(hash)
 
-      // Wait for receipt
-      const receipt = await walletClient.request({
-        method: 'eth_getTransactionReceipt' as any,
-        params: [hash],
-      }) as any
-
-      if (receipt?.contractAddress) {
-        setDeployedAddress(receipt.contractAddress)
-        localStorage.setItem('pact_contract_address', receipt.contractAddress)
+      if (publicClient) {
+        const receipt = await publicClient.waitForTransactionReceipt({ hash })
+        if (receipt?.contractAddress) {
+          setDeployedAddress(receipt.contractAddress)
+          localStorage.setItem('pact_contract_address', receipt.contractAddress)
+        }
       }
     } catch (err: any) {
       console.error(err)
-      setError(err?.message || 'Contract deployment failed')
+      setError(err?.shortMessage || err?.message || 'Contract deployment failed')
     } finally {
       setLoading(false)
     }
@@ -117,14 +116,30 @@ export default function DeployPage() {
             </div>
           )}
 
+          {txHash && !deployedAddress && (
+            <div className="p-3 bg-amber-500/10 border border-amber-500/20 rounded-lg text-amber-300 text-[12px] flex items-center gap-2">
+              <div className="w-3.5 h-3.5 border border-amber-400 border-t-transparent rounded-full animate-spin shrink-0" />
+              <span>Transaction submitted: {txHash.slice(0, 16)}… Waiting for Arc block confirmation…</span>
+            </div>
+          )}
+
           {deployedAddress && (
-            <div className="p-3 bg-emerald-500/10 border border-emerald-500/20 rounded-lg text-emerald-300 text-[13px] space-y-2">
-              <div className="font-semibold">✓ Contract Deployed & Activated!</div>
-              <div className="font-mono text-[11px] break-all">{deployedAddress}</div>
-              <a href={`https://testnet.arcscan.app/address/${deployedAddress}`} target="_blank" rel="noreferrer"
-                className="text-[12px] underline text-emerald-400 hover:text-emerald-300 block">
-                View on ArcScan ↗
-              </a>
+            <div className="p-3.5 bg-emerald-500/10 border border-emerald-500/20 rounded-lg text-emerald-300 text-[13px] space-y-2">
+              <div className="font-semibold flex items-center gap-1.5">
+                <span className="text-emerald-400">✓</span> Contract Deployed & Activated!
+              </div>
+              <div className="font-mono text-[11px] break-all bg-black/40 p-2 rounded border border-emerald-500/20 text-zinc-200">
+                {deployedAddress}
+              </div>
+              <div className="flex items-center justify-between pt-1">
+                <a href={`https://testnet.arcscan.app/address/${deployedAddress}`} target="_blank" rel="noreferrer"
+                  className="text-[12px] underline text-emerald-400 hover:text-emerald-300">
+                  View on ArcScan ↗
+                </a>
+                <Link href="/new" className="btn-primary px-4 py-1.5 text-[12px]">
+                  Create Pact Now →
+                </Link>
+              </div>
             </div>
           )}
 
@@ -136,7 +151,7 @@ export default function DeployPage() {
             {loading ? (
               <>
                 <div className="w-4 h-4 border-[1.5px] border-black border-t-transparent rounded-full animate-spin" />
-                <span>Deploying to Arc Testnet…</span>
+                <span>Confirm in wallet & deploying…</span>
               </>
             ) : (
               <span>🚀 Deploy PactContract to Arc (1 Click)</span>
