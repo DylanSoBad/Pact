@@ -24,6 +24,12 @@ export default function Navbar() {
       </Link>
 
       <div className="flex items-center gap-3">
+        <Link
+          href="/deploy"
+          className="hidden sm:inline text-[13px] text-zinc-500 hover:text-zinc-200 transition-all hover:-translate-y-0.5 active:translate-y-0 active:scale-95 duration-150"
+        >
+          Deploy ↗
+        </Link>
         <a
           href="https://faucet.circle.com/"
           target="_blank"

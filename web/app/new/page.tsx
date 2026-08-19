@@ -8,11 +8,10 @@ import { useAccount, useWriteContract, useWaitForTransactionReceipt, useReadCont
 import { useModal } from 'connectkit'
 import { parseUnits, formatUnits, maxUint256, decodeEventLog } from 'viem'
 import { PACT_ABI, ERC20_ABI } from '../../lib/abi'
-import { USDC_ERC20, EURC } from '../../lib/arc'
+import { USDC_ERC20, EURC, getPactAddress } from '../../lib/arc'
 import { hashTerms } from '../../lib/terms'
 import TokenSelect from '../../components/TokenSelect'
 
-const PACT_ADDRESS = (process.env.NEXT_PUBLIC_PACT_ADDRESS || '0x0000000000000000000000000000000000000000') as `0x${string}`
 const TARGET_CHAIN_ID = Number(process.env.NEXT_PUBLIC_CHAIN_ID || 5042002)
 
 const KINDS = [
@@ -31,6 +30,7 @@ export default function NewPactPage() {
   const chainId = useChainId()
   const { switchChain } = useSwitchChain()
 
+  const [pactAddress, setPactAddress] = useState<`0x${string}`>('0x0000000000000000000000000000000000000000')
   const [kind, setKind] = useState(0)
   const [tokenMaker, setTokenMaker] = useState(USDC_ERC20)
   const [tokenTaker, setTokenTaker] = useState(USDC_ERC20)
@@ -45,10 +45,13 @@ export default function NewPactPage() {
   const [createdPactId, setCreatedPactId] = useState<number | null>(null)
   const [copiedLink, setCopiedLink] = useState(false)
 
+  useEffect(() => {
+    document.title = 'PACT · New'
+    setPactAddress(getPactAddress())
+  }, [])
+
   // 1-Click Batched Flow Ref
   const isBatchedRef = useRef(false)
-
-  useEffect(() => { document.title = 'PACT · New' }, [])
 
   const { writeContract: writeApprove, data: approveTxHash, isPending: approvePending, error: approveError } = useWriteContract()
   const { writeContract: writeCreate, data: createTxHash, isPending: createPending, error: createError } = useWriteContract()
@@ -60,7 +63,15 @@ export default function NewPactPage() {
   const makerDecimals = Number(makerDecimalsData ?? 6)
   const makerBalance = (makerBalData as bigint) ?? 0n
 
-  const { data: allowanceData } = useReadContract({ address: tokenMaker as `0x${string}`, abi: ERC20_ABI, functionName: 'allowance', args: address ? [address, PACT_ADDRESS] : undefined, query: { enabled: !!address } })
+  const isContractConfigured = pactAddress && pactAddress !== '0x0000000000000000000000000000000000000000'
+
+  const { data: allowanceData } = useReadContract({
+    address: tokenMaker as `0x${string}`,
+    abi: ERC20_ABI,
+    functionName: 'allowance',
+    args: address && isContractConfigured ? [address, pactAddress] : undefined,
+    query: { enabled: !!address && isContractConfigured }
+  })
   const currentAllowance = (allowanceData as bigint) || 0n
 
   const parseMaker = () => { try { return parseUnits(amountMaker || '0', makerDecimals) } catch { return 0n } }
@@ -79,7 +90,8 @@ export default function NewPactPage() {
   const tokenLabel = TOKENS.find(t => t.value === tokenMaker)?.label || 'tokens'
 
   let disabled = false, reason = ''
-  if (!amountMaker || makerBn === 0n) { disabled = true; reason = 'Enter an amount' }
+  if (!isContractConfigured) { disabled = true; reason = 'Deploy protocol contract first' }
+  else if (!amountMaker || makerBn === 0n) { disabled = true; reason = 'Enter an amount' }
   else if (isConnected && !hasBalance) { disabled = true; reason = `Not enough ${tokenLabel}` }
   else if (terms.length < 20) { disabled = true; reason = `${20 - terms.length} more characters needed` }
   else if (!deadlineMinutes || Number(deadlineMinutes) < 2) { disabled = true; reason = 'Set a deadline' }
@@ -93,7 +105,7 @@ export default function NewPactPage() {
         isBatchedRef.current = false
         setStep('creating')
         writeCreate({
-          address: PACT_ADDRESS,
+          address: pactAddress,
           abi: PACT_ABI,
           functionName: 'createPact',
           args: [
@@ -112,7 +124,7 @@ export default function NewPactPage() {
         setStep('form')
       }
     }
-  }, [approveConfirmed, step])
+  }, [approveConfirmed, step, pactAddress])
 
   useEffect(() => {
     if (createConfirmed && createReceipt) {
@@ -129,28 +141,28 @@ export default function NewPactPage() {
   }, [createConfirmed, createReceipt])
 
   const doBatched1ClickDeploy = () => {
-    if (!isConnected || isWrongChain) return
+    if (!isConnected || isWrongChain || !isContractConfigured) return
     if (needsApproval) {
       isBatchedRef.current = true
       setStep('approving')
-      writeApprove({ address: tokenMaker as `0x${string}`, abi: ERC20_ABI, functionName: 'approve', args: [PACT_ADDRESS, maxUint256] })
+      writeApprove({ address: tokenMaker as `0x${string}`, abi: ERC20_ABI, functionName: 'approve', args: [pactAddress, maxUint256] })
     } else {
       doCreate()
     }
   }
 
   const doApprove = () => {
-    if (!isConnected || isWrongChain) return
+    if (!isConnected || isWrongChain || !isContractConfigured) return
     isBatchedRef.current = false
     setStep('approving')
-    writeApprove({ address: tokenMaker as `0x${string}`, abi: ERC20_ABI, functionName: 'approve', args: [PACT_ADDRESS, maxUint256] })
+    writeApprove({ address: tokenMaker as `0x${string}`, abi: ERC20_ABI, functionName: 'approve', args: [pactAddress, maxUint256] })
   }
 
   const doCreate = () => {
-    if (!isConnected || isWrongChain) return
+    if (!isConnected || isWrongChain || !isContractConfigured) return
     setStep('creating')
     writeCreate({
-      address: PACT_ADDRESS,
+      address: pactAddress,
       abi: PACT_ABI,
       functionName: 'createPact',
       args: [
@@ -234,6 +246,18 @@ export default function NewPactPage() {
   return (
     <main className="min-h-screen max-w-[580px] mx-auto px-5 sm:px-8 pb-24 overflow-x-hidden">
       <Navbar /><TrustStrip />
+
+      {!isContractConfigured && (
+        <div className="mb-6 p-4 rounded-xl bg-amber-500/[0.08] border border-amber-500/20 text-[13px] text-amber-300 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 animate-enter">
+          <div>
+            <div className="font-semibold mb-0.5">⚠️ Protocol Contract Not Initialized</div>
+            <div className="text-amber-400/80 text-[12px]">Deploy the smart contract to Arc Testnet with 1-click or paste an address.</div>
+          </div>
+          <Link href="/deploy" className="btn-primary bg-amber-400 text-black px-4 py-1.5 rounded-lg text-[12px] shrink-0">
+            Deploy Now ↗
+          </Link>
+        </div>
+      )}
 
       {/* Account Abstraction & Circle Arc Native Banner */}
       <div className="mb-6 p-3 rounded-xl bg-emerald-500/[0.06] border border-emerald-500/20 flex items-center justify-between text-[12px] text-emerald-300 animate-enter">
@@ -388,7 +412,7 @@ export default function NewPactPage() {
           <div className="flex justify-between"><span className="text-zinc-500">Locked Principal</span><span className="text-zinc-200">${amountMaker || '0'} {tokenLabel}</span></div>
           <div className="flex justify-between"><span className="text-zinc-500">Counterparty</span><span className="text-zinc-200">{taker ? `${taker.slice(0,6)}…${taker.slice(-4)}` : 'Open'}</span></div>
           <div className="flex justify-between"><span className="text-zinc-500">Timeout Expiry</span><span className="text-zinc-200">{deadline.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span></div>
-          <div className="flex justify-between"><span className="text-zinc-500">Execution Mode</span><span className="text-emerald-400 font-medium">1-Click Batched ERC-4337</span></div>
+          <div className="flex justify-between"><span className="text-zinc-500">Contract</span><span className="text-zinc-400 font-mono text-[11px]">{isContractConfigured ? `${pactAddress.slice(0,6)}…${pactAddress.slice(-4)}` : 'Unconfigured'}</span></div>
         </div>
 
         {/* Errors */}
