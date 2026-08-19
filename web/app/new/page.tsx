@@ -266,6 +266,19 @@ export default function NewPactPage() {
                 Dashboard →
               </Link>
             )}
+            <button
+              onClick={() => {
+                setStep('form')
+                setCreatedPactId(null)
+                setDeployTxHash(null)
+                setAmountMaker('')
+                setAmountTaker('')
+                setTerms('')
+              }}
+              className="btn-ghost px-4 py-2.5 text-[13px] text-zinc-400 border border-zinc-800"
+            >
+              Create another pact +
+            </button>
             {createTxHash && (
               <a href={`https://testnet.arcscan.app/tx/${createTxHash}`} target="_blank" rel="noreferrer"
                 className="btn-ghost px-4 py-2.5 text-[13px] text-zinc-400">

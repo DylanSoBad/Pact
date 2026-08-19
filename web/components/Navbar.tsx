@@ -45,12 +45,12 @@ export default function Navbar() {
           Faucet_↗
         </a>
         <ConnectButton />
-        <Link
+        <a
           href="/new"
           className="btn-primary px-4 py-[7px] text-[12px] uppercase tracking-widest"
         >
           init_pact
-        </Link>
+        </a>
       </div>
     </header>
   )
