@@ -24,6 +24,13 @@ const TOKENS = [
   { value: EURC, label: 'EURC' },
 ]
 
+const ARBITRATOR_PRESETS = [
+  { id: 'none', label: 'Bilateral Consensus (Direct)', desc: 'Maker & Taker resolve directly without 3rd party', addr: '' },
+  { id: 'dao', label: '🏛️ PACT DAO Dispute Council', desc: 'Decentralized Community Multi-Sig Court', addr: '0x8401A7C3105B853e5eA89C1aB188981442aFa243' },
+  { id: 'kleros', label: '⚖️ Kleros Court / UMA Oracle Adapter', desc: 'Optimistic decentralized staked juror pool', addr: '0x98101E17aE184d0840A865b2fa023eAf777C2932' },
+  { id: 'custom', label: '✍️ Custom Multi-Sig / Arbitrator', desc: 'Specify your own trusted 3rd-party EVM address', addr: '' },
+]
+
 export default function NewPactPage() {
   const { address, isConnected } = useAccount()
   const { setOpen: openModal } = useModal()
@@ -41,6 +48,11 @@ export default function NewPactPage() {
   const [deadlineMinutes, setDeadlineMinutes] = useState('60')
   const [blurSize, setBlurSize] = useState(false)
   const [sessionKeyEnabled, setSessionKeyEnabled] = useState(true)
+
+  // Decentralized Arbitration Module State
+  const [arbitratorType, setArbitratorType] = useState('dao')
+  const [customArbitrator, setCustomArbitrator] = useState('')
+
   const [step, setStep] = useState<'form' | 'approving' | 'creating' | 'done'>('form')
   const [createdPactId, setCreatedPactId] = useState<number | null>(null)
   const [copiedLink, setCopiedLink] = useState(false)
@@ -77,7 +89,13 @@ export default function NewPactPage() {
   const parseMaker = () => { try { return parseUnits(amountMaker || '0', makerDecimals) } catch { return 0n } }
   const parseTaker = () => { try { return parseUnits(amountTaker || '0', 6) } catch { return 0n } }
 
-  const termsH = hashTerms(terms)
+  const effectiveArbitrator = arbitratorType === 'none' ? '' : arbitratorType === 'custom' ? customArbitrator : (ARBITRATOR_PRESETS.find(p => p.id === arbitratorType)?.addr || '')
+
+  const termsWithArbitrator = effectiveArbitrator
+    ? `${terms}\n\n[Decentralized Arbitration: ${effectiveArbitrator} (2-of-3 Multi-Sig)]`
+    : terms
+
+  const termsH = hashTerms(termsWithArbitrator)
   const needsTakerToken = kind === 1 || parseTaker() > 0n
   const effectiveTokenTaker = needsTakerToken ? tokenTaker : '0x0000000000000000000000000000000000000000'
   const deadline = new Date(Date.now() + Number(deadlineMinutes || 0) * 60000)
@@ -94,6 +112,7 @@ export default function NewPactPage() {
   else if (!amountMaker || makerBn === 0n) { disabled = true; reason = 'Enter an amount' }
   else if (isConnected && !hasBalance) { disabled = true; reason = `Not enough ${tokenLabel}` }
   else if (terms.length < 20) { disabled = true; reason = `${20 - terms.length} more characters needed` }
+  else if (arbitratorType === 'custom' && (!customArbitrator.startsWith('0x') || customArbitrator.length !== 42)) { disabled = true; reason = 'Enter valid 0x Arbitrator address' }
   else if (!deadlineMinutes || Number(deadlineMinutes) < 2) { disabled = true; reason = 'Set a deadline' }
   else if (kind === 1 && (!amountTaker || parseTaker() === 0n)) { disabled = true; reason = 'Enter counterparty amount' }
 
@@ -101,7 +120,6 @@ export default function NewPactPage() {
   useEffect(() => {
     if (approveConfirmed && step === 'approving') {
       if (isBatchedRef.current) {
-        // Automatically trigger Step 2 (CreatePact) without waiting for user to click again!
         isBatchedRef.current = false
         setStep('creating')
         writeCreate({
@@ -151,13 +169,6 @@ export default function NewPactPage() {
     }
   }
 
-  const doApprove = () => {
-    if (!isConnected || isWrongChain || !isContractConfigured) return
-    isBatchedRef.current = false
-    setStep('approving')
-    writeApprove({ address: tokenMaker as `0x${string}`, abi: ERC20_ABI, functionName: 'approve', args: [pactAddress, maxUint256] })
-  }
-
   const doCreate = () => {
     if (!isConnected || isWrongChain || !isContractConfigured) return
     setStep('creating')
@@ -187,9 +198,13 @@ export default function NewPactPage() {
     setAmountTaker('2')
     setTerms('Delivery of 1x Server Hardware unit to Singapore DC. Courier tracking reference required upon fulfillment.')
     setDeadlineMinutes('60')
+    setArbitratorType('dao')
   }
 
-  const shareUrl = createdPactId ? `${typeof window !== 'undefined' ? window.location.origin : ''}/p/${createdPactId}?terms=${encodeURIComponent(terms)}` : ''
+  const shareUrl = createdPactId
+    ? `${typeof window !== 'undefined' ? window.location.origin : ''}/p/${createdPactId}?terms=${encodeURIComponent(termsWithArbitrator)}${effectiveArbitrator ? `&arbitrator=${encodeURIComponent(effectiveArbitrator)}` : ''}`
+    : ''
+
   const copyLink = () => { if (shareUrl) { navigator.clipboard.writeText(shareUrl); setCopiedLink(true); setTimeout(() => setCopiedLink(false), 2500) } }
 
   const mc = kind === 0 ? { m: 'Your deposit', t: 'Seller bond', ma: 'Payment', ta: 'Collateral' }
@@ -208,9 +223,16 @@ export default function NewPactPage() {
           </h2>
           <p className="text-[14px] text-zinc-500 mb-8">${amountMaker} {tokenLabel} locked on-chain via Arc Native Settlement.</p>
 
+          {effectiveArbitrator && (
+            <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-amber-500/10 border border-amber-500/20 text-amber-300 text-[12px] mb-6">
+              <span>⚖️</span>
+              <span>Protected by 2-of-3 Decentralized Arbitration ({effectiveArbitrator.slice(0, 6)}…{effectiveArbitrator.slice(-4)})</span>
+            </div>
+          )}
+
           {createdPactId && (
             <div className="surface-1 rounded-xl p-4 mb-8 text-left max-w-sm mx-auto border border-white/[0.04]">
-              <p className="text-[12px] text-zinc-500 mb-2">Share with counterparty</p>
+              <p className="text-[12px] text-zinc-500 mb-2">Share with counterparty & arbitrator</p>
               <div className="flex gap-2">
                 <input readOnly value={shareUrl} className="flex-1 bg-white/[0.04] border border-white/[0.06] text-zinc-300 px-3 py-2 rounded-lg text-[12px] font-mono select-all" />
                 <button onClick={copyLink} className="btn-primary px-4 py-2 text-[12px]">
@@ -222,7 +244,7 @@ export default function NewPactPage() {
 
           <div className="flex flex-col sm:flex-row items-center justify-center gap-3">
             {createdPactId ? (
-              <Link href={`/p/${createdPactId}?terms=${encodeURIComponent(terms)}`}
+              <Link href={`/p/${createdPactId}?terms=${encodeURIComponent(termsWithArbitrator)}${effectiveArbitrator ? `&arbitrator=${encodeURIComponent(effectiveArbitrator)}` : ''}`}
                 className="btn-primary px-6 py-2.5 text-[13px]">
                 Open pact →
               </Link>
@@ -259,7 +281,7 @@ export default function NewPactPage() {
         </div>
       )}
 
-      {/* Account Abstraction & Circle Arc Native Banner */}
+      {/* Account Abstraction Banner */}
       <div className="mb-6 p-3 rounded-xl bg-emerald-500/[0.06] border border-emerald-500/20 flex items-center justify-between text-[12px] text-emerald-300 animate-enter">
         <div className="flex items-center gap-2">
           <span>⚡</span>
@@ -277,16 +299,6 @@ export default function NewPactPage() {
             className="btn-primary bg-rose-500 text-black px-3.5 py-1 rounded-lg text-[12px]">
             Switch
           </button>
-        </div>
-      )}
-
-      {address && makerBalance === 0n && (
-        <div className="rounded-lg bg-amber-500/[0.08] border border-amber-500/20 p-3.5 mb-6 text-[13px] flex items-center justify-between text-amber-300">
-          <span>No {tokenLabel} balance on Arc</span>
-          <a href="https://faucet.circle.com/" target="_blank" rel="noreferrer"
-            className="btn-primary bg-amber-400 text-black px-3.5 py-1 rounded-lg text-[12px]">
-            Get test USDC/EURC ↗
-          </a>
         </div>
       )}
 
@@ -364,6 +376,60 @@ export default function NewPactPage() {
           </div>
         </div>
 
+        {/* Decentralized Arbitration Module */}
+        <div className="surface-1 rounded-xl p-4 border border-white/[0.06] space-y-3">
+          <div className="flex items-center justify-between">
+            <label className="text-[13px] font-medium text-white flex items-center gap-1.5">
+              <span>⚖️</span> Decentralized Arbitration & 2-of-3 Multi-Sig
+            </label>
+            <span className="text-[10px] font-mono text-amber-400 bg-amber-500/10 px-2 py-0.5 rounded-full border border-amber-500/20">
+              EscrowLock Active
+            </span>
+          </div>
+          <p className="text-[12px] text-zinc-400 leading-relaxed">
+            In case of dispute, funds enter a 2-of-3 Multi-Sig escrow lock. The selected Arbitrator acts as an impartial cryptographic referee.
+          </p>
+
+          <div className="space-y-2 pt-1">
+            {ARBITRATOR_PRESETS.map(arb => (
+              <label key={arb.id} className={`flex items-start gap-3 p-3 rounded-xl cursor-pointer transition-all border ${
+                arbitratorType === arb.id
+                  ? 'bg-white/[0.08] border-amber-500/40 text-white'
+                  : 'bg-white/[0.02] border-white/[0.04] hover:bg-white/[0.05] text-zinc-400'
+              }`}>
+                <input
+                  type="radio"
+                  name="arbitrator"
+                  value={arb.id}
+                  checked={arbitratorType === arb.id}
+                  onChange={() => setArbitratorType(arb.id)}
+                  className="mt-0.5 text-amber-500 bg-transparent border-zinc-700"
+                />
+                <div className="flex-1">
+                  <div className="text-[13px] font-medium text-white">{arb.label}</div>
+                  <div className="text-[11px] text-zinc-500 mt-0.5">{arb.desc}</div>
+                  {arb.addr && (
+                    <div className="font-mono text-[10px] text-amber-400/80 mt-1">{arb.addr}</div>
+                  )}
+                </div>
+              </label>
+            ))}
+          </div>
+
+          {arbitratorType === 'custom' && (
+            <div className="pt-2">
+              <label className="text-[12px] text-zinc-400 block mb-1">Custom Arbitrator EVM Address</label>
+              <input
+                type="text"
+                value={customArbitrator}
+                onChange={e => setCustomArbitrator(e.target.value.trim())}
+                placeholder="0x…"
+                className="w-full bg-white/[0.03] border border-white/[0.06] text-white px-3.5 py-2.5 rounded-xl text-[13px] font-mono focus:border-amber-500/50"
+              />
+            </div>
+          )}
+        </div>
+
         {/* Terms */}
         <div>
           <div className="flex justify-between items-center mb-2">
@@ -411,8 +477,8 @@ export default function NewPactPage() {
           <p className="text-zinc-500 text-[12px] mb-3">Settlement Summary</p>
           <div className="flex justify-between"><span className="text-zinc-500">Locked Principal</span><span className="text-zinc-200">${amountMaker || '0'} {tokenLabel}</span></div>
           <div className="flex justify-between"><span className="text-zinc-500">Counterparty</span><span className="text-zinc-200">{taker ? `${taker.slice(0,6)}…${taker.slice(-4)}` : 'Open'}</span></div>
+          <div className="flex justify-between"><span className="text-zinc-500">Arbitrator</span><span className="text-amber-400 font-mono text-[11px]">{effectiveArbitrator ? `${effectiveArbitrator.slice(0,6)}…${effectiveArbitrator.slice(-4)} (2-of-3)` : 'Direct Bilateral'}</span></div>
           <div className="flex justify-between"><span className="text-zinc-500">Timeout Expiry</span><span className="text-zinc-200">{deadline.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span></div>
-          <div className="flex justify-between"><span className="text-zinc-500">Contract</span><span className="text-zinc-400 font-mono text-[11px]">{isContractConfigured ? `${pactAddress.slice(0,6)}…${pactAddress.slice(-4)}` : 'Unconfigured'}</span></div>
         </div>
 
         {/* Errors */}

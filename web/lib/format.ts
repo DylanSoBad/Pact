@@ -3,7 +3,7 @@ import { USDC_ERC20, EURC } from './arc'
 const DECIMALS = 6
 
 export const KIND_LABELS = ['DELIVERY', 'FX', 'JOB'] as const
-export const STATUS_LABELS = ['OPEN', 'FUNDED', 'ACTIVE', 'PROOF IN', 'CLEARED', 'SLASHED', 'EXPIRED', 'CANCELLED'] as const
+export const STATUS_LABELS = ['OPEN', 'FUNDED', 'ACTIVE', 'PROOF IN', 'CLEARED', 'SLASHED', 'EXPIRED', 'CANCELLED', 'DISPUTED'] as const
 
 export function kindLabel(kind: number): string {
   return KIND_LABELS[kind] ?? `KIND(${kind})`
@@ -50,6 +50,7 @@ export function statusColor(status: number): string {
     case 5: return 'text-[var(--color-amber)]'         // Slashed
     case 6: return 'text-gray-500'                     // Expired
     case 7: return 'text-gray-500'                     // Cancelled
+    case 8: return 'text-amber-400'                    // Disputed / Arbitration
     default: return 'text-[var(--color-muted)]'
   }
 }

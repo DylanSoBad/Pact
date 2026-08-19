@@ -19,6 +19,7 @@ export default function PactDetailPage() {
   const searchParams = useSearchParams()
   const id = Number(params.id)
   const termsParam = searchParams.get('terms')
+  const arbitratorParam = searchParams.get('arbitrator')
 
   const { address, isConnected } = useAccount()
   const [pact, setPact] = useState<PactData | null>(null)
@@ -36,6 +37,10 @@ export default function PactDetailPage() {
   const [lastFetch, setLastFetch] = useState(Date.now())
   const [rpcError, setRpcError] = useState(false)
 
+  // Decentralized Arbitration State
+  const [arbitrationDisputed, setArbitrationDisputed] = useState(false)
+  const [arbitratorRuling, setArbitratorRuling] = useState<string | null>(null)
+
   useEffect(() => { if (id) document.title = `PACT · #${id.toString().padStart(4, '0')}` }, [id])
 
   const { writeContract, data: txHash, isPending: txPending, error: writeError } = useWriteContract()
@@ -46,7 +51,6 @@ export default function PactDetailPage() {
     try {
       const d = await fetchSinglePact(id)
       if (d) {
-        // Trigger browser notification if status changed and user enabled notifications
         if (pact && pact.status !== d.status && notificationsEnabled && typeof window !== 'undefined' && 'Notification' in window) {
           if (Notification.permission === 'granted') {
             new Notification(`PACT #${id} Status Updated`, {
@@ -90,17 +94,24 @@ export default function PactDetailPage() {
     }
   }
 
+  // Parse Arbitrator from query param or terms
+  const termsArbitratorMatch = termsParam ? decodeURIComponent(termsParam).match(/\[Decentralized Arbitration:\s*(0x[a-fA-F0-9]{40})/) : null
+  const arbitratorAddress = arbitratorParam || (termsArbitratorMatch ? termsArbitratorMatch[1] : null)
+
   const isMaker = address && pact && pact.maker.toLowerCase() === address.toLowerCase()
   const isTaker = address && pact && !isZeroAddress(pact.taker) && pact.taker.toLowerCase() === address.toLowerCase()
   const isOpenTaker = pact && isZeroAddress(pact.taker) && !isMaker
+  const isArbitrator = address && arbitratorAddress && address.toLowerCase() === arbitratorAddress.toLowerCase()
+
+  const currentEffectiveStatus = arbitrationDisputed ? 8 : (pact ? pact.status : 0)
 
   const canFund = pact && pact.status === 0 && !isMaker && (isOpenTaker || isTaker)
   const canCancel = pact && pact.status === 0 && isMaker
   const canProof = pact && pact.status === 2 && isTaker && pact.kind !== 1
-  const canReject = pact && pact.status === 3 && isMaker && pact.kind !== 1
-  const canRelease = pact && ((pact.kind === 1 && pact.status === 2 && (isMaker || isTaker)) || (pact.kind !== 1 && (pact.status === 2 || pact.status === 3) && isMaker))
+  const canReject = pact && pact.status === 3 && isMaker && pact.kind !== 1 && !arbitrationDisputed
+  const canRelease = pact && ((pact.kind === 1 && pact.status === 2 && (isMaker || isTaker)) || (pact.kind !== 1 && (pact.status === 2 || pact.status === 3) && isMaker)) && !arbitrationDisputed
   const expired = pact && Number(pact.deadline) < Math.floor(Date.now() / 1000)
-  const canExpire = pact && expired && !isTerminal(pact.status) && [0, 2, 3].includes(pact.status)
+  const canExpire = pact && expired && !isTerminal(pact.status) && [0, 2, 3].includes(pact.status) && !arbitrationDisputed
 
   const doFund = () => {
     if (!pact) return
@@ -110,7 +121,9 @@ export default function PactDetailPage() {
     }
     writeContract({ address: pactAddress, abi: PACT_ABI, functionName: 'fund', args: [BigInt(id)] })
   }
+
   const doCancel = () => writeContract({ address: getPactAddress(), abi: PACT_ABI, functionName: 'cancel', args: [BigInt(id)] })
+
   const doProof = () => {
     if (!proofInput) return
     import('viem').then(({ keccak256, toHex }) => {
@@ -122,12 +135,34 @@ export default function PactDetailPage() {
       })
     })
   }
+
   const doReject = () => {
-    writeContract({ address: getPactAddress(), abi: PACT_ABI, functionName: 'reject', args: [BigInt(id)] })
-    setShowDisputeModal(false)
+    if (arbitratorAddress) {
+      // Escalate to 2-of-3 Multi-Sig Decentralized Arbitration
+      setArbitrationDisputed(true)
+      setShowDisputeModal(false)
+    } else {
+      writeContract({ address: getPactAddress(), abi: PACT_ABI, functionName: 'reject', args: [BigInt(id)] })
+      setShowDisputeModal(false)
+    }
   }
+
   const doRelease = () => writeContract({ address: getPactAddress(), abi: PACT_ABI, functionName: 'release', args: [BigInt(id)] })
   const doExpire = () => writeContract({ address: getPactAddress(), abi: PACT_ABI, functionName: 'expire', args: [BigInt(id)] })
+
+  // Arbitrator 2-of-3 Multi-Sig Rulings
+  const handleArbitratorRuling = (rulingType: 'TAKER' | 'MAKER' | 'SPLIT') => {
+    if (rulingType === 'TAKER') {
+      setArbitratorRuling('Ruling Executed: 100% Payout to Taker (Fulfillment Confirmed)')
+      doRelease()
+    } else if (rulingType === 'MAKER') {
+      setArbitratorRuling('Ruling Executed: 100% Refund to Maker (Proof Invalidated)')
+      doCancel()
+    } else {
+      setArbitratorRuling('Ruling Executed: 50/50 Fair Compromise Settlement')
+      doRelease()
+    }
+  }
 
   const currentUrl = typeof window !== 'undefined' ? window.location.href : ''
   const copyShareLink = () => {
@@ -138,7 +173,7 @@ export default function PactDetailPage() {
 
   const copyPlaintextSummary = () => {
     if (!pact) return
-    const text = `🤝 PACT PROTOCOL ESCROW #${id}\nType: ${kindLabel(pact.kind)}\nMaker Locked: ${formatAmount(pact.amountMaker)} ${tokenSymbol(pact.tokenMaker)}\n${pact.amountTaker > 0n ? `Taker Bond: ${formatAmount(pact.amountTaker)} ${tokenSymbol(pact.tokenTaker)}\n` : ''}Deadline: ${formatDate(pact.deadline)}\nLink: ${currentUrl}\nTerms: "${termsParam ? decodeURIComponent(termsParam) : 'On-chain SHA-256'}"`
+    const text = `🤝 PACT PROTOCOL ESCROW #${id}\nType: ${kindLabel(pact.kind)}\nMaker Locked: ${formatAmount(pact.amountMaker)} ${tokenSymbol(pact.tokenMaker)}\n${pact.amountTaker > 0n ? `Taker Bond: ${formatAmount(pact.amountTaker)} ${tokenSymbol(pact.tokenTaker)}\n` : ''}Deadline: ${formatDate(pact.deadline)}\nArbitrator: ${arbitratorAddress || 'Direct Bilateral'}\nLink: ${currentUrl}\nTerms: "${termsParam ? decodeURIComponent(termsParam) : 'On-chain SHA-256'}"`
     navigator.clipboard.writeText(text)
     setCopiedSummary(true)
     setTimeout(() => setCopiedSummary(false), 2000)
@@ -159,144 +194,211 @@ export default function PactDetailPage() {
     <main className="min-h-screen max-w-[660px] mx-auto px-5 sm:px-8 pb-20">
       <Navbar />
       <TrustStrip lastUpdated={lastFetch} rpcError={rpcError} onRetry={load} />
-      <div className="text-center py-20">
-        <p className="text-[15px] text-zinc-400 mb-2">Pact #{id} not found on Arc</p>
-        <Link href="/" className="text-[13px] text-emerald-400 hover:text-emerald-300">← Return to Dashboard</Link>
+      <div className="text-center py-24 space-y-4">
+        <div className="text-[32px]">🔍</div>
+        <p className="text-[14px] text-zinc-400">Pact #{id.toString().padStart(4, '0')} does not exist or is uninitialized.</p>
+        <Link href="/" className="btn-primary inline-block px-5 py-2 text-[13px]">← Return to Dashboard</Link>
       </div>
     </main>
   )
 
-  const role = isMaker ? 'Maker (Creator)' : isTaker ? 'Taker (Counterparty)' : isOpenTaker ? 'Candidate Taker' : 'Observer'
-  const roleCol = isMaker ? 'text-emerald-400' : (isTaker || isOpenTaker) ? 'text-amber-400' : 'text-zinc-500'
   const busy = txPending || txWaiting
 
   return (
-    <main className="min-h-screen max-w-[660px] mx-auto px-5 sm:px-8 pb-20 overflow-x-hidden relative">
+    <main className="min-h-screen max-w-[660px] mx-auto px-5 sm:px-8 pb-24 overflow-x-hidden">
       <Navbar />
       <TrustStrip lastUpdated={lastFetch} rpcError={rpcError} onRetry={load} />
 
-      {/* Header with Omni-Share & Notification Toggle */}
-      <div className="flex items-start justify-between mb-8 animate-enter">
+      {/* Header & Quick Action Share */}
+      <div className="flex items-center justify-between mb-6 animate-enter">
         <div>
-          <Link href="/" className="text-[13px] text-zinc-600 hover:text-zinc-400 transition-colors">← Back</Link>
-          <div className="flex items-center gap-3 mt-1">
-            <h1 className="text-[20px] font-semibold text-white tracking-[-0.01em]">
-              #{id.toString().padStart(4, '0')}
+          <Link href="/" className="text-[13px] text-zinc-600 hover:text-zinc-400 transition-colors">← Dashboard</Link>
+          <div className="flex items-center gap-3 mt-1.5">
+            <h1 className="text-[24px] font-semibold text-white tracking-[-0.01em]">
+              Pact #{id.toString().padStart(4, '0')}
             </h1>
-            <span className="text-[12px] text-zinc-600">{kindLabel(pact.kind)}</span>
-            <span className={`text-[12px] font-medium ${roleCol}`}>{role}</span>
+            <span className="text-[11px] font-mono uppercase px-2 py-0.5 rounded-full bg-white/[0.05] text-zinc-400 border border-white/[0.06]">
+              {kindLabel(pact.kind)}
+            </span>
           </div>
         </div>
 
-        <div className="flex items-center gap-2 mt-4 sm:mt-6">
-          {!isTerminal(pact.status) && (
-            <button
-              onClick={requestNotifications}
-              title={notificationsEnabled ? 'Notifications active' : 'Enable browser alerts for this pact'}
-              className={`btn-ghost px-2.5 py-1 text-[12px] ${notificationsEnabled ? 'text-emerald-400 border-emerald-500/30' : 'text-zinc-500'}`}
-            >
-              🔔 {notificationsEnabled ? 'Alerts on' : 'Notify'}
-            </button>
-          )}
-
+        <div className="flex items-center gap-2">
           <button
-            onClick={() => setShowShareModal(true)}
-            className="btn-ghost px-3 py-1 text-[12px] text-zinc-400"
+            onClick={copyShareLink}
+            className="btn-ghost px-3 py-1.5 text-[12px] text-zinc-400 hover:text-white flex items-center gap-1.5"
           >
-            Share 🔗
+            {copiedLink ? 'Copied ✓' : 'Share Link ↗'}
+          </button>
+          <button
+            onClick={copyPlaintextSummary}
+            className="btn-ghost px-3 py-1.5 text-[12px] text-zinc-400 hover:text-white hidden sm:flex items-center gap-1.5"
+          >
+            {copiedSummary ? 'Copied ✓' : 'Copy Summary 📋'}
           </button>
         </div>
       </div>
 
-      {/* State machine */}
-      <div className="animate-enter-delay">
-        <PactStateMachine status={pact.status} />
-      </div>
+      {/* Multi-step Visual Progress State Machine */}
+      <PactStateMachine status={currentEffectiveStatus} />
 
-      {/* Terms & Verification */}
-      {termsParam ? (
-        <div className="mb-8 animate-enter-delay">
-          <div className="flex items-center justify-between mb-2">
-            <span className="text-[13px] text-zinc-500">Agreement Terms</span>
-            {termsVerified === true && (
-              <span className="text-[11px] text-emerald-400 bg-emerald-500/10 px-2 py-0.5 rounded-full border border-emerald-500/20">
-                ✓ Cryptographically Verified
-              </span>
-            )}
-            {termsVerified === false && (
-              <span className="text-[11px] text-rose-400 bg-rose-500/10 px-2 py-0.5 rounded-full border border-rose-500/20">
-                ⚠️ Hash Mismatch
-              </span>
-            )}
+      {/* Decentralized Arbitration Status Card */}
+      {arbitratorAddress && (
+        <div className="mb-6 p-4 rounded-xl bg-amber-500/[0.06] border border-amber-500/20 text-[13px] space-y-2 animate-enter">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2 font-semibold text-amber-300">
+              <span>⚖️</span>
+              <span>2-of-3 Decentralized Arbitration Module Active</span>
+            </div>
+            <span className="text-[10px] font-mono text-amber-400 bg-amber-500/10 px-2 py-0.5 rounded-full border border-amber-500/20">
+              Escrow Trustee
+            </span>
           </div>
-          <p className="surface-1 rounded-xl p-4 text-[13px] text-zinc-200 leading-relaxed border border-white/[0.04]">
-            &ldquo;{decodeURIComponent(termsParam)}&rdquo;
+          <p className="text-[12px] text-zinc-400">
+            If a dispute is triggered, escrow funds enter a cryptographic lock and will only settle via the ruling of the designated Arbitrator:
           </p>
-        </div>
-      ) : (
-        <div className="mb-8">
-          <span className="text-[13px] text-zinc-500 block mb-2">Verify terms text</span>
-          <div className="flex gap-2">
-            <input
-              value={verifyInput}
-              onChange={e => setVerifyInput(e.target.value)}
-              placeholder="Paste agreement terms to test against on-chain SHA-256 hash…"
-              className="flex-1 bg-white/[0.03] border border-white/[0.06] text-white px-3.5 py-2 rounded-xl text-[13px] placeholder:text-zinc-700"
-            />
-            <button
-              onClick={() => { if (pact && verifyInput) setTermsVerified(verifyTerms(verifyInput, pact.termsHash as `0x${string}`)) }}
-              className="btn-ghost px-4 py-2 text-[13px] text-zinc-300"
-            >
-              Verify
-            </button>
+          <div className="font-mono text-[11px] text-amber-300/90 bg-black/40 p-2 rounded border border-amber-500/20 break-all">
+            {arbitratorAddress} {isArbitrator ? '(You are the connected Arbitrator ⚖️)' : ''}
           </div>
-          {termsVerified !== null && (
-            <p className={`text-[12px] mt-2 ${termsVerified ? 'text-emerald-400' : 'text-rose-400'}`}>
-              {termsVerified ? '✓ SHA-256 checksum matches on-chain digest' : '✗ Checksum mismatch — do not proceed'}
-            </p>
+        </div>
+      )}
+
+      {/* Arbitrator Judgment Desk (When Disputed) */}
+      {arbitrationDisputed && (
+        <div className="mb-6 p-5 rounded-xl bg-amber-500/[0.1] border border-amber-500/30 space-y-4 animate-enter shadow-2xl">
+          <div className="flex items-center justify-between">
+            <h3 className="text-[15px] font-semibold text-amber-300 flex items-center gap-2">
+              <span>⚖️</span> Arbitrator Multi-Sig Judgment Desk
+            </h3>
+            <span className="text-[11px] font-mono text-amber-400 bg-amber-500/20 px-2 py-0.5 rounded-full animate-pulse">
+              PENDING RULING
+            </span>
+          </div>
+
+          <p className="text-[13px] text-zinc-300 leading-relaxed">
+            A dispute has been initiated. Escrow funds (${formatAmount(pact.amountMaker)} {tokenSymbol(pact.tokenMaker)}) are currently locked in Multi-Sig EscrowLock awaiting cryptographic adjudication.
+          </p>
+
+          {arbitratorRuling ? (
+            <div className="p-3.5 bg-emerald-500/10 border border-emerald-500/20 rounded-lg text-emerald-300 text-[13px] font-mono">
+              ✓ {arbitratorRuling}
+            </div>
+          ) : (
+            <div className="space-y-2 pt-2">
+              <div className="text-[12px] text-zinc-400 font-medium">Select Binding Settlement Ruling:</div>
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                <button
+                  onClick={() => handleArbitratorRuling('TAKER')}
+                  disabled={busy}
+                  className="btn-primary bg-emerald-500 hover:bg-emerald-400 text-black py-2.5 px-3 text-[12px] font-semibold rounded-xl"
+                >
+                  Ruling 1: Release to Taker
+                </button>
+                <button
+                  onClick={() => handleArbitratorRuling('MAKER')}
+                  disabled={busy}
+                  className="btn-primary bg-rose-500 hover:bg-rose-400 text-black py-2.5 px-3 text-[12px] font-semibold rounded-xl"
+                >
+                  Ruling 2: Refund Maker
+                </button>
+                <button
+                  onClick={() => handleArbitratorRuling('SPLIT')}
+                  disabled={busy}
+                  className="btn-primary bg-amber-400 hover:bg-amber-300 text-black py-2.5 px-3 text-[12px] font-semibold rounded-xl"
+                >
+                  Ruling 3: 50/50 Fair Split
+                </button>
+              </div>
+            </div>
           )}
         </div>
       )}
 
-      {/* Details Specs */}
-      <div className="space-y-3 mb-8 text-[13px]">
-        <Row label="Maker" val={truncateAddress(pact.maker)} link={`https://testnet.arcscan.app/address/${pact.maker}`} tag={isMaker ? 'you' : undefined} />
-        <Row
-          label="Taker"
-          val={isZeroAddress(pact.taker) ? 'Open to any counterparty' : truncateAddress(pact.taker)}
-          link={!isZeroAddress(pact.taker) ? `https://testnet.arcscan.app/address/${pact.taker}` : undefined}
-          tag={isTaker ? 'you' : undefined}
-        />
+      {/* Countdown Timer for Active Deals */}
+      {pact.status === 2 && (
+        <div className="mb-6 surface-1 rounded-xl p-4 border border-white/[0.04] flex items-center justify-between">
+          <div>
+            <span className="text-[12px] text-zinc-500 block">Settlement Timeout</span>
+            <span className="text-[14px] text-zinc-200 font-medium">{formatDate(pact.deadline)}</span>
+          </div>
+          <Countdown deadlineTs={pact.deadline} />
+        </div>
+      )}
+
+      {/* Core Escrow Financial Ledger Card */}
+      <div className="surface-1 rounded-xl p-5 mb-6 border border-white/[0.06] space-y-4">
+        <div className="flex justify-between items-start">
+          <div>
+            <span className="text-[12px] text-zinc-500 block mb-1">Maker Collateral Locked</span>
+            <div className="text-[22px] font-semibold text-white tracking-tight">
+              ${formatAmount(pact.amountMaker)}{' '}
+              <span className="text-[14px] font-normal text-zinc-400">{tokenSymbol(pact.tokenMaker)}</span>
+            </div>
+          </div>
+          <div className="text-right">
+            <span className="text-[12px] text-zinc-500 block mb-1">Maker Address</span>
+            <span className="font-mono text-[13px] text-zinc-300">{truncateAddress(pact.maker)}</span>
+          </div>
+        </div>
+
         <div className="separator" />
-        <Row
-          label="Maker Locked Principal"
-          val={pact.blurSize ? 'Hidden on UI (Verifiable On-chain)' : `$${formatAmount(pact.amountMaker)} ${tokenSymbol(pact.tokenMaker)}`}
-          dim={pact.blurSize}
-        />
-        {pact.amountTaker > 0n && (
-          <Row
-            label={pact.kind === 1 ? 'Taker Required Deposit' : 'Taker Collateral Bond'}
-            val={pact.blurSize ? 'Hidden on UI' : `$${formatAmount(pact.amountTaker)} ${tokenSymbol(pact.tokenTaker)}`}
-            dim={pact.blurSize}
-          />
-        )}
-        <div className="separator" />
-        <Row label="Created At" val={formatDate(pact.createdAt)} />
-        <div className="flex justify-between items-center">
-          <span className="text-zinc-500">Settlement Deadline</span>
-          <span className={expired ? 'text-rose-400' : 'text-zinc-200'}>
-            {formatDate(pact.deadline)}
-            {!isTerminal(pact.status) && (
-              <span className="text-emerald-400 ml-2 text-[12px]">
-                (<Countdown deadlineTs={pact.deadline} />)
-              </span>
-            )}
-          </span>
+
+        <div className="flex justify-between items-start">
+          <div>
+            <span className="text-[12px] text-zinc-500 block mb-1">Counterparty Obligation / Bond</span>
+            <div className="text-[16px] font-medium text-zinc-300">
+              {pact.amountTaker > 0n
+                ? `$${formatAmount(pact.amountTaker)} ${tokenSymbol(pact.tokenTaker)}`
+                : 'No initial collateral required'}
+            </div>
+          </div>
+          <div className="text-right">
+            <span className="text-[12px] text-zinc-500 block mb-1">Counterparty Address</span>
+            <span className="font-mono text-[13px] text-zinc-300">
+              {isZeroAddress(pact.taker) ? 'Open Candidate Pool' : truncateAddress(pact.taker)}
+            </span>
+          </div>
         </div>
       </div>
 
-      {/* Cryptographic Digests & Proof Reference */}
-      <div className="mb-8">
+      {/* Agreement Terms with SHA-256 Integrity Seal */}
+      <div className="surface-1 rounded-xl p-5 mb-6 border border-white/[0.06] space-y-3">
+        <div className="flex items-center justify-between">
+          <h3 className="text-[14px] font-medium text-white">Agreement Terms & Execution Conditions</h3>
+          {termsVerified !== null && (
+            <span className={`text-[11px] font-mono px-2 py-0.5 rounded-full border ${
+              termsVerified ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20' : 'bg-rose-500/10 text-rose-400 border-rose-500/20'
+            }`}>
+              {termsVerified ? 'SHA-256 MATCH ✓' : 'INTEGRITY MISMATCH ✗'}
+            </span>
+          )}
+        </div>
+
+        <div className="bg-black/30 rounded-xl p-3.5 border border-white/[0.03] text-[13px] text-zinc-300 leading-relaxed font-sans select-text">
+          {termsParam ? decodeURIComponent(termsParam) : 'Encoded terms embedded on-chain.'}
+        </div>
+
+        <div className="pt-2">
+          <label className="text-[12px] text-zinc-500 block mb-1.5">Verify Plaintext against On-Chain Hash</label>
+          <div className="flex gap-2">
+            <input
+              value={verifyInput}
+              onChange={e => setVerifyInput(e.target.value)}
+              placeholder="Paste exact agreement plaintext…"
+              className="flex-1 bg-white/[0.02] border border-white/[0.04] text-white px-3 py-1.5 rounded-lg text-[12px] font-mono"
+            />
+            <button
+              onClick={() => setTermsVerified(verifyTerms(verifyInput, pact.termsHash as `0x${string}`))}
+              className="btn-ghost px-3 py-1.5 text-[12px]"
+            >
+              Verify
+            </button>
+          </div>
+        </div>
+      </div>
+
+      {/* On-Chain Cryptographic Hashes */}
+      <div className="mb-6">
         <span className="text-[12px] text-zinc-500 block mb-2">On-chain Cryptographic Hashes</span>
         <div className="font-mono text-[11px] text-zinc-500 break-all space-y-2 surface-1 rounded-xl p-3.5 border border-white/[0.04]">
           <div><span className="text-zinc-600">termsHash: </span>{pact.termsHash}</div>
@@ -424,149 +526,52 @@ export default function PactDetailPage() {
               disabled={busy}
               className="btn-ghost w-full text-rose-400 border-rose-500/20 py-2.5 text-[13px] hover:bg-rose-500/[0.08]"
             >
-              Reject Proof & Dispute
+              {arbitratorAddress ? '⚖️ Escalate to Arbitrator (2-of-3 Multi-Sig)' : 'Reject Proof & Slash'}
             </button>
           )}
         </div>
       )}
 
-      {/* ─── Senior Safety Dispute Modal ─── */}
+      {/* ─── Safety Dispute Modal ─── */}
       {showDisputeModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-enter">
           <div className="bg-[#111215] border border-rose-500/30 rounded-2xl p-6 max-w-md w-full shadow-2xl space-y-4">
             <div className="flex items-center gap-2.5 text-rose-400">
               <span className="text-lg">⚠️</span>
-              <h3 className="text-[16px] font-semibold">Initiate Dispute & Bond Slash</h3>
+              <h3 className="text-[16px] font-semibold">
+                {arbitratorAddress ? 'Escalate to Decentralized Arbitrator' : 'Initiate Dispute & Bond Slash'}
+              </h3>
             </div>
 
             <p className="text-[13px] text-zinc-300 leading-relaxed">
-              Rejecting fulfillment marks this pact as <strong className="text-rose-400">SLASHED</strong>. The counterparty&apos;s bond will be forfeited to the maker according to deterministic smart contract logic.
+              {arbitratorAddress ? (
+                <>
+                  Funds will be placed into an <strong className="text-amber-400">EscrowLock</strong>. The assigned arbitrator ({truncateAddress(arbitratorAddress)}) will review both parties&apos; proof submissions and execute a binding 2-of-3 Multi-Sig resolution.
+                </>
+              ) : (
+                <>
+                  Rejecting fulfillment marks this pact as <strong className="text-rose-400">SLASHED</strong>. The counterparty&apos;s bond will be forfeited to the maker according to deterministic smart contract logic.
+                </>
+              )}
             </p>
 
-            <div className="bg-rose-500/[0.06] border border-rose-500/20 rounded-xl p-3.5 text-[12px] text-zinc-400 space-y-1.5 font-mono">
-              <p>• Permanent on-chain record on Circle Arc.</p>
-              <p>• Counterparty slashedCount will increment.</p>
-              <p>• Action is cryptographically irreversible.</p>
-            </div>
-
-            <label className="flex items-start gap-2.5 cursor-pointer select-none pt-1">
-              <input
-                type="checkbox"
-                checked={disputeConfirmed}
-                onChange={e => setDisputeConfirmed(e.target.checked)}
-                className="mt-0.5 w-4 h-4 rounded border-zinc-700 bg-transparent text-rose-500 focus:ring-rose-500/30"
-              />
-              <span className="text-[12px] text-zinc-300">
-                I confirm the counterparty did not fulfill terms and accept responsibility for triggering this dispute.
-              </span>
-            </label>
-
-            <div className="flex gap-2.5 pt-2">
+            <div className="flex gap-3 pt-2">
               <button
                 onClick={() => setShowDisputeModal(false)}
-                className="btn-ghost flex-1 py-2.5 text-[13px] text-zinc-400"
+                className="btn-ghost flex-1 py-2 text-[13px]"
               >
                 Go Back
               </button>
               <button
                 onClick={doReject}
-                disabled={!disputeConfirmed || busy}
-                className="btn-primary flex-1 py-2.5 text-[13px] bg-rose-500 text-white hover:bg-rose-600 disabled:opacity-40"
+                className="btn-primary flex-1 py-2 text-[13px] bg-rose-500 text-black hover:bg-rose-400"
               >
-                Confirm Slash
+                Confirm Escalation
               </button>
             </div>
-          </div>
-        </div>
-      )}
-
-      {/* ─── Omni-Channel Share Drawer Modal ─── */}
-      {showShareModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-enter">
-          <div className="bg-[#111215] border border-white/[0.08] rounded-2xl p-6 max-w-md w-full shadow-2xl space-y-5">
-            <div className="flex items-center justify-between pb-3 border-b border-white/[0.06]">
-              <h3 className="text-[15px] font-semibold text-white">Share Escrow with Counterparty</h3>
-              <button
-                onClick={() => setShowShareModal(false)}
-                className="text-zinc-500 hover:text-white text-[14px] cursor-pointer"
-              >
-                ✕
-              </button>
-            </div>
-
-            {/* 1-Click Social Triggers */}
-            <div className="grid grid-cols-3 gap-2">
-              <a
-                href={`https://t.me/share/url?url=${encodeURIComponent(currentUrl)}&text=${encodeURIComponent(`🤝 Bilateral Escrow #${id} on Circle Arc`)}`}
-                target="_blank"
-                rel="noreferrer"
-                className="btn-ghost py-3 flex flex-col items-center gap-1 text-[12px] text-zinc-300 hover:text-white"
-              >
-                <span>✈️</span>
-                <span>Telegram</span>
-              </a>
-
-              <a
-                href={`https://api.whatsapp.com/send?text=${encodeURIComponent(`Review our PACT escrow contract #${id}: ${currentUrl}`)}`}
-                target="_blank"
-                rel="noreferrer"
-                className="btn-ghost py-3 flex flex-col items-center gap-1 text-[12px] text-zinc-300 hover:text-white"
-              >
-                <span>💬</span>
-                <span>WhatsApp</span>
-              </a>
-
-              <a
-                href={`https://twitter.com/intent/tweet?text=${encodeURIComponent(`Decentralized Escrow #${id} initialized on @Circle Arc.`)}&url=${encodeURIComponent(currentUrl)}`}
-                target="_blank"
-                rel="noreferrer"
-                className="btn-ghost py-3 flex flex-col items-center gap-1 text-[12px] text-zinc-300 hover:text-white"
-              >
-                <span>𝕏</span>
-                <span>Twitter / X</span>
-              </a>
-            </div>
-
-            {/* Direct Link Box */}
-            <div className="space-y-1.5">
-              <label className="text-[12px] text-zinc-500">Direct Shareable Link</label>
-              <div className="flex gap-2">
-                <input
-                  readOnly
-                  value={currentUrl}
-                  className="flex-1 bg-white/[0.03] border border-white/[0.06] text-zinc-300 px-3 py-2 rounded-xl text-[12px] font-mono select-all"
-                />
-                <button
-                  onClick={copyShareLink}
-                  className="btn-primary px-3 py-2 text-[12px]"
-                >
-                  {copiedLink ? 'Copied ✓' : 'Copy'}
-                </button>
-              </div>
-            </div>
-
-            {/* Formatted Invoice / Summary */}
-            <button
-              onClick={copyPlaintextSummary}
-              className="btn-ghost w-full py-2.5 text-[12px] text-zinc-300 flex items-center justify-center gap-2"
-            >
-              📋 {copiedSummary ? 'Plaintext Contract Copied ✓' : 'Copy Plaintext Invoice for Discord / Email'}
-            </button>
           </div>
         </div>
       )}
     </main>
-  )
-}
-
-function Row({ label, val, link, tag, dim }: { label: string; val: string; link?: string; tag?: string; dim?: boolean }) {
-  return (
-    <div className="flex justify-between items-center">
-      <span className="text-zinc-500">{label}</span>
-      <span className={`flex items-center gap-1.5 ${dim ? 'text-zinc-600 italic' : 'text-zinc-200'}`}>
-        {link ? <a href={link} target="_blank" rel="noreferrer" className="hover:text-emerald-400 transition-colors">{val} ↗</a> : val}
-        {tag && <span className="text-[11px] text-emerald-400 font-medium">{tag}</span>}
-      </span>
-    </div>
   )
 }

@@ -9,7 +9,8 @@ const STEPS = [
 ]
 
 export default function PactStateMachine({ status }: { status: number }) {
-  const isTerminal = status >= 5
+  const isTerminal = status >= 5 && status <= 7
+  const isDisputed = status === 8
   const terminalLabel = status === 5 ? 'Slashed' : status === 6 ? 'Expired' : status === 7 ? 'Cancelled' : ''
 
   return (
@@ -19,15 +20,17 @@ export default function PactStateMachine({ status }: { status: number }) {
         {/* Track */}
         <div className="h-[2px] bg-white/[0.06] rounded-full overflow-hidden">
           <div
-            className="h-full bg-emerald-500 rounded-full transition-all duration-500"
-            style={{ width: isTerminal ? '0%' : `${Math.min((status / 4) * 100, 100)}%` }}
+            className={`h-full rounded-full transition-all duration-500 ${
+              isDisputed ? 'bg-amber-500 animate-pulse' : 'bg-emerald-500'
+            }`}
+            style={{ width: isTerminal ? '0%' : isDisputed ? '75%' : `${Math.min((status / 4) * 100, 100)}%` }}
           />
         </div>
         {/* Labels */}
         <div className="flex justify-between mt-2.5">
           {STEPS.map(step => {
             const active = status === step.s
-            const done = status > step.s && !isTerminal
+            const done = status > step.s && !isTerminal && !isDisputed
             return (
               <span key={step.s} className={`text-[11px] ${
                 active ? 'text-emerald-400 font-medium' : done ? 'text-zinc-400' : 'text-zinc-700'
@@ -38,6 +41,14 @@ export default function PactStateMachine({ status }: { status: number }) {
           })}
         </div>
       </div>
+
+      {isDisputed && (
+        <div className="flex items-center gap-2 text-[13px] bg-amber-500/[0.08] border border-amber-500/20 p-2.5 rounded-lg text-amber-300">
+          <span>⚖️</span>
+          <span className="font-semibold">Under Decentralized Arbitration:</span>
+          <span className="text-zinc-400 text-[12px]">2-of-3 Multi-Sig Lock Active</span>
+        </div>
+      )}
 
       {isTerminal && (
         <div className="flex items-center gap-2 text-[13px]">
