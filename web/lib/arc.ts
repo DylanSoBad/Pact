@@ -25,12 +25,14 @@ export const arcTestnet = defineChain({
 export const USDC_ERC20 = "0x3600000000000000000000000000000000000000"; // 6 decimals
 export const EURC = "0x89B50855Aa3bE2F677cD6303Cec089B5F319D72a";       // 6 decimals
 
+export const OFFICIAL_PACT_ADDRESS: `0x${string}` = "0x0f1d2aa5435ed94870314f6304be1ed50965313e";
+
 export function getPactAddress(): `0x${string}` {
   if (typeof window !== 'undefined') {
     const saved = localStorage.getItem('pact_contract_address')
-    if (saved && saved.startsWith('0x') && saved.length === 42) {
+    if (saved && saved.startsWith('0x') && saved.length === 42 && saved !== '0x0000000000000000000000000000000000000000') {
       return saved as `0x${string}`
     }
   }
-  return (process.env.NEXT_PUBLIC_PACT_ADDRESS || '0x0000000000000000000000000000000000000000') as `0x${string}`
+  return (process.env.NEXT_PUBLIC_PACT_ADDRESS || OFFICIAL_PACT_ADDRESS) as `0x${string}`
 }

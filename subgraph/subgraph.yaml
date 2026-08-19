@@ -6,7 +6,7 @@ dataSources:
     name: PactProtocol
     network: arc-testnet
     source:
-      address: "0x3600000000000000000000000000000000000000"
+      address: "0x0f1d2aa5435ed94870314f6304be1ed50965313e"
       abi: PactProtocol
       startBlock: 1
     mapping:
