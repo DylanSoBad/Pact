@@ -11,7 +11,7 @@ export default function WrongNetworkGate({ children }: { children: React.ReactNo
     <>
       {isConnected && chain && chain.id !== arcTestnet.id && (
         <div className="sticky top-0 z-50 bg-rose-950/90 border-b border-rose-500/30 px-4 py-2.5 backdrop-blur-md">
-          <div className="max-w-[880px] mx-auto flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 text-xs font-mono text-rose-300">
+          <div className="max-w-[880px] mx-auto flex flex-col @md:flex-row @md:items-center justify-between gap-2.5 text-xs font-mono text-rose-300">
             <span className="flex items-center gap-2">
               <span className="w-2 h-2 rounded-full bg-rose-400 animate-pulse shrink-0" />
               <span>You are connected to {chain.name || 'unsupported network'}. Switch to Circle Arc Testnet (5042002).</span>

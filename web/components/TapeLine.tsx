@@ -15,7 +15,7 @@ export default function TapeLine({ pact }: { pact: any }) {
 
   return (
     <Link href={`/p/${pact.id.toString()}`} className="group block border-b border-zinc-800 hover:bg-[#0c0d10] transition-none">
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between py-3 px-2 gap-3">
+      <div className="flex flex-col @md:flex-row @md:items-center justify-between py-3 px-2 gap-3">
         {/* Left: ID, Archetype, Status */}
         <div className="flex items-center gap-4">
           <span className="text-[13px] text-zinc-500 font-mono tabular-nums">
@@ -35,7 +35,7 @@ export default function TapeLine({ pact }: { pact: any }) {
         </div>
 
         {/* Right: Locked Amount, Maker Address */}
-        <div className="flex items-center justify-between sm:justify-end gap-6">
+        <div className="flex items-center justify-between @md:justify-end gap-6">
           <div className="text-[13px] text-zinc-400 font-mono">
             {pact.address}
           </div>

@@ -153,7 +153,7 @@ export default function PactDetailPage() {
   }
 
   if (loading) return (
-    <main className="min-h-screen max-w-[660px] mx-auto px-5 sm:px-8 pb-20 font-mono">
+    <main className="min-h-screen max-w-[660px] mx-auto px-5 @md:px-8 pb-20 font-mono">
       <Navbar />
       <TrustStrip lastUpdated={lastFetch} rpcError={rpcError} onRetry={load} />
       <div className="flex items-center justify-center py-24 text-[13px] text-zinc-500 gap-3">
@@ -164,7 +164,7 @@ export default function PactDetailPage() {
   )
 
   if (!pact) return (
-    <main className="min-h-screen max-w-[660px] mx-auto px-5 sm:px-8 pb-20 font-mono">
+    <main className="min-h-screen max-w-[660px] mx-auto px-5 @md:px-8 pb-20 font-mono">
       <Navbar />
       <TrustStrip lastUpdated={lastFetch} rpcError={rpcError} onRetry={load} />
       <div className="text-center py-24 space-y-4 border border-zinc-800 bg-[#0c0d10] mt-8">
@@ -177,7 +177,7 @@ export default function PactDetailPage() {
   const busy = txPending || txWaiting
 
   return (
-    <main className="min-h-screen max-w-[660px] mx-auto px-5 sm:px-8 pb-24 overflow-x-hidden font-mono">
+    <main className="min-h-screen max-w-[660px] mx-auto px-5 @md:px-8 pb-24 overflow-x-hidden font-mono">
       <Navbar />
       <TrustStrip lastUpdated={lastFetch} rpcError={rpcError} onRetry={load} />
 
@@ -204,7 +204,7 @@ export default function PactDetailPage() {
           </button>
           <button
             onClick={copyPlaintextSummary}
-            className="btn-ghost px-3 py-1.5 text-[12px] text-zinc-400 hover:text-white hidden sm:flex items-center gap-1.5"
+            className="btn-ghost px-3 py-1.5 text-[12px] text-zinc-400 hover:text-white hidden @md:flex items-center gap-1.5"
           >
             {copiedSummary ? 'Copied' : 'Copy Summary'}
           </button>

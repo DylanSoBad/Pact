@@ -26,13 +26,13 @@ export default function Navbar() {
       <div className="flex items-center gap-3">
         <Link
           href="/me"
-          className="hidden sm:inline text-[13px] uppercase tracking-widest text-zinc-500 hover:text-[#c8f542] transition-colors"
+          className="hidden @md:inline text-[13px] uppercase tracking-widest text-zinc-500 hover:text-[#c8f542] transition-colors"
         >
           My_Pacts
         </Link>
         <Link
           href="/deploy"
-          className="hidden sm:inline text-[13px] uppercase tracking-widest text-zinc-500 hover:text-[#c8f542] transition-colors"
+          className="hidden @md:inline text-[13px] uppercase tracking-widest text-zinc-500 hover:text-[#c8f542] transition-colors"
         >
           Deploy
         </Link>
@@ -40,7 +40,7 @@ export default function Navbar() {
           href="https://faucet.circle.com/"
           target="_blank"
           rel="noreferrer"
-          className="hidden sm:inline text-[13px] uppercase tracking-widest text-zinc-500 hover:text-[#c8f542] transition-colors"
+          className="hidden @md:inline text-[13px] uppercase tracking-widest text-zinc-500 hover:text-[#c8f542] transition-colors"
         >
           Faucet_↗
         </a>

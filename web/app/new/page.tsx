@@ -234,7 +234,7 @@ export default function NewPactPage() {
   // ── Success ──
   if (step === 'done' && createConfirmed) {
     return (
-      <main className="min-h-screen max-w-[580px] mx-auto px-5 sm:px-8 pb-20 overflow-x-hidden font-mono">
+      <main className="min-h-screen max-w-[580px] mx-auto px-5 @md:px-8 pb-20 overflow-x-hidden font-mono">
         <Navbar /><TrustStrip />
         <div className="text-center py-16 animate-enter border border-zinc-800 bg-[#0c0d10] mt-8 p-8">
           <div className="w-14 h-14 bg-[#c8f542] text-black flex items-center justify-center mx-auto mb-5 text-xl font-bold rounded-none">✓</div>
@@ -255,7 +255,7 @@ export default function NewPactPage() {
             </div>
           )}
 
-          <div className="flex flex-col sm:flex-row items-center justify-center gap-3">
+          <div className="flex flex-col @md:flex-row items-center justify-center gap-3">
             {createdPactId ? (
               <Link href={`/p/${createdPactId}?terms=${encodeURIComponent(terms)}`}
                 className="btn-primary px-6 py-2.5 text-[13px]">
@@ -292,7 +292,7 @@ export default function NewPactPage() {
   }
 
   return (
-    <main className="min-h-screen max-w-[580px] mx-auto px-5 sm:px-8 pb-24 overflow-x-hidden font-mono">
+    <main className="min-h-screen max-w-[580px] mx-auto px-5 @md:px-8 pb-24 overflow-x-hidden font-mono">
       <Navbar /><TrustStrip />
 
       {/* Arc Network Info Banner */}
@@ -348,7 +348,7 @@ export default function NewPactPage() {
         {/* Amounts */}
         <div className="space-y-4">
           <label className="text-[13px] text-zinc-500 block">Collateral & Tokens</label>
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 @md:grid-cols-2 gap-3">
             <TokenSelect label={mc.m} tokens={TOKENS} value={tokenMaker} onChange={setTokenMaker} />
             <div>
               <div className="flex justify-between items-center mb-1.5">
@@ -368,7 +368,7 @@ export default function NewPactPage() {
 
           <div className="separator" />
 
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 @md:grid-cols-2 gap-3">
             <TokenSelect label={mc.t} tokens={TOKENS} value={tokenTaker} onChange={setTokenTaker} />
             <div>
               <label className="text-[12px] text-zinc-500 block mb-1.5">{mc.ta}</label>

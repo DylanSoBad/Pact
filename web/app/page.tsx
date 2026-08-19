@@ -90,7 +90,7 @@ export default function Home() {
     }), [pacts, filter, searchQuery, address])
 
   return (
-    <main className="min-h-screen max-w-[780px] mx-auto px-5 sm:px-8 pb-24 overflow-x-hidden font-mono">
+    <main className="min-h-screen max-w-[780px] mx-auto px-5 @md:px-8 pb-24 overflow-x-hidden font-mono">
       <Navbar />
       <TrustStrip lastUpdated={lastFetchTime} rpcError={rpcError} onRetry={loadData} />
 
@@ -101,7 +101,7 @@ export default function Home() {
             &gt; PACT_FEED
           </h1>
           {latencyMs !== null && (
-            <span className="hidden sm:inline-flex items-center gap-1.5 text-[11px] font-mono text-[#c8f542]">
+            <span className="hidden @md:inline-flex items-center gap-1.5 text-[11px] font-mono text-[#c8f542]">
               <span className="w-1.5 h-1.5 bg-[#c8f542] animate-pulse-soft" />
               RPC_LATENCY: {latencyMs}ms
             </span>

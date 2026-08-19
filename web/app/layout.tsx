@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { IBM_Plex_Mono } from "next/font/google";
 import "./globals.css";
 import Web3Provider from "../components/Web3Provider";
+import LayoutWrapper from "../components/LayoutWrapper";
 
 const plexMono = IBM_Plex_Mono({
   variable: "--font-ibm-plex-mono",
@@ -32,7 +33,11 @@ export default function RootLayout({
   return (
     <html lang="en">
       <body className={`${plexMono.variable} antialiased font-mono`}>
-        <Web3Provider>{children}</Web3Provider>
+        <Web3Provider>
+          <LayoutWrapper>
+            {children}
+          </LayoutWrapper>
+        </Web3Provider>
       </body>
     </html>
   );

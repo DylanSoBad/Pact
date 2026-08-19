@@ -69,7 +69,7 @@ export default function DeployPage() {
   }
 
   return (
-    <main className="min-h-screen max-w-[620px] mx-auto px-5 sm:px-8 pb-24 overflow-x-hidden">
+    <main className="min-h-screen max-w-[620px] mx-auto px-5 @md:px-8 pb-24 overflow-x-hidden">
       <Navbar /><TrustStrip />
 
       <div className="mb-8 animate-enter">

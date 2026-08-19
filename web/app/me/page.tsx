@@ -91,7 +91,7 @@ export default function MePage() {
 
   if (!isConnected) {
     return (
-      <main className="min-h-screen max-w-[780px] mx-auto px-5 sm:px-8 pb-24 overflow-x-hidden font-mono">
+      <main className="min-h-screen max-w-[780px] mx-auto px-5 @md:px-8 pb-24 overflow-x-hidden font-mono">
         <Navbar />
         <TrustStrip lastUpdated={lastFetchTime} rpcError={rpcError} onRetry={loadUserData} />
 
@@ -109,13 +109,13 @@ export default function MePage() {
   }
 
   return (
-    <main className="min-h-screen max-w-[780px] mx-auto px-5 sm:px-8 pb-24 overflow-x-hidden font-mono">
+    <main className="min-h-screen max-w-[780px] mx-auto px-5 @md:px-8 pb-24 overflow-x-hidden font-mono">
       <Navbar />
       <TrustStrip lastUpdated={lastFetchTime} rpcError={rpcError} onRetry={loadUserData} />
 
       {/* Profile Header */}
       <div className="surface-1 rounded-none p-6 mb-8 border border-zinc-800 space-y-4 animate-enter">
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+        <div className="flex flex-col @md:flex-row @md:items-center justify-between gap-4">
           <div>
             <span className="text-[11px] uppercase tracking-widest text-zinc-500 block mb-1">Connected Account</span>
             <div className="flex items-center gap-2">
@@ -145,7 +145,7 @@ export default function MePage() {
         </div>
 
         {/* Reputation Scorecards */}
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 pt-4 border-t border-zinc-800 mt-4">
+        <div className="grid grid-cols-2 @md:grid-cols-4 gap-3 pt-4 border-t border-zinc-800 mt-4">
           <div className="p-3 rounded-none bg-black border border-zinc-800">
             <span className="text-[10px] uppercase tracking-widest text-zinc-500 block">Cleared Deals</span>
             <span className="text-[18px] font-bold text-[#c8f542] mt-0.5 tabular-nums block">
