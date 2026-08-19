@@ -305,13 +305,13 @@ export default function NewPactPage() {
     <main className="min-h-screen max-w-[580px] mx-auto px-5 sm:px-8 pb-24 overflow-x-hidden">
       <Navbar /><TrustStrip />
 
-      {/* Account Abstraction Banner */}
+      {/* Arc Network Info Banner */}
       <div className="mb-6 p-3 rounded-xl bg-emerald-500/[0.06] border border-emerald-500/20 flex items-center justify-between text-[12px] text-emerald-300 animate-enter">
         <div className="flex items-center gap-2">
-          <span><strong>Arc Native Settlement:</strong> Gas paid in native USDC · Account Abstraction</span>
+          <span><strong>Arc Testnet:</strong> Native USDC Gas · Direct On-Chain Escrow</span>
         </div>
         <span className="bg-emerald-500/10 px-2 py-0.5 rounded-full text-[10px] font-mono border border-emerald-500/20">
-          ERC-4337
+          Chain ID 5042002
         </span>
       </div>
 
