@@ -44,8 +44,7 @@ export default function PactStateMachine({ status }: { status: number }) {
 
       {isDisputed && (
         <div className="flex items-center gap-2 text-[13px] bg-amber-500/[0.08] border border-amber-500/20 p-2.5 rounded-lg text-amber-300">
-          <span>⚖️</span>
-          <span className="font-semibold">Under Decentralized Arbitration:</span>
+          <span className="font-semibold">Decentralized Arbitration:</span>
           <span className="text-zinc-400 text-[12px]">2-of-3 Multi-Sig Lock Active</span>
         </div>
       )}

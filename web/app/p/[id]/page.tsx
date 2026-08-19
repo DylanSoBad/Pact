@@ -138,7 +138,6 @@ export default function PactDetailPage() {
 
   const doReject = () => {
     if (arbitratorAddress) {
-      // Escalate to 2-of-3 Multi-Sig Decentralized Arbitration
       setArbitrationDisputed(true)
       setShowDisputeModal(false)
     } else {
@@ -173,7 +172,7 @@ export default function PactDetailPage() {
 
   const copyPlaintextSummary = () => {
     if (!pact) return
-    const text = `🤝 PACT PROTOCOL ESCROW #${id}\nType: ${kindLabel(pact.kind)}\nMaker Locked: ${formatAmount(pact.amountMaker)} ${tokenSymbol(pact.tokenMaker)}\n${pact.amountTaker > 0n ? `Taker Bond: ${formatAmount(pact.amountTaker)} ${tokenSymbol(pact.tokenTaker)}\n` : ''}Deadline: ${formatDate(pact.deadline)}\nArbitrator: ${arbitratorAddress || 'Direct Bilateral'}\nLink: ${currentUrl}\nTerms: "${termsParam ? decodeURIComponent(termsParam) : 'On-chain SHA-256'}"`
+    const text = `PACT ESCROW #${id}\nType: ${kindLabel(pact.kind)}\nMaker Locked: ${formatAmount(pact.amountMaker)} ${tokenSymbol(pact.tokenMaker)}\n${pact.amountTaker > 0n ? `Taker Bond: ${formatAmount(pact.amountTaker)} ${tokenSymbol(pact.tokenTaker)}\n` : ''}Deadline: ${formatDate(pact.deadline)}\nArbitrator: ${arbitratorAddress || 'Direct Bilateral'}\nLink: ${currentUrl}\nTerms: "${termsParam ? decodeURIComponent(termsParam) : 'On-chain SHA-256'}"`
     navigator.clipboard.writeText(text)
     setCopiedSummary(true)
     setTimeout(() => setCopiedSummary(false), 2000)
@@ -195,7 +194,6 @@ export default function PactDetailPage() {
       <Navbar />
       <TrustStrip lastUpdated={lastFetch} rpcError={rpcError} onRetry={load} />
       <div className="text-center py-24 space-y-4">
-        <div className="text-[32px]">🔍</div>
         <p className="text-[14px] text-zinc-400">Pact #{id.toString().padStart(4, '0')} does not exist or is uninitialized.</p>
         <Link href="/" className="btn-primary inline-block px-5 py-2 text-[13px]">← Return to Dashboard</Link>
       </div>
@@ -228,13 +226,13 @@ export default function PactDetailPage() {
             onClick={copyShareLink}
             className="btn-ghost px-3 py-1.5 text-[12px] text-zinc-400 hover:text-white flex items-center gap-1.5"
           >
-            {copiedLink ? 'Copied ✓' : 'Share Link ↗'}
+            {copiedLink ? 'Copied' : 'Share Link'}
           </button>
           <button
             onClick={copyPlaintextSummary}
             className="btn-ghost px-3 py-1.5 text-[12px] text-zinc-400 hover:text-white hidden sm:flex items-center gap-1.5"
           >
-            {copiedSummary ? 'Copied ✓' : 'Copy Summary 📋'}
+            {copiedSummary ? 'Copied' : 'Copy Summary'}
           </button>
         </div>
       </div>
@@ -247,7 +245,6 @@ export default function PactDetailPage() {
         <div className="mb-6 p-4 rounded-xl bg-amber-500/[0.06] border border-amber-500/20 text-[13px] space-y-2 animate-enter">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-2 font-semibold text-amber-300">
-              <span>⚖️</span>
               <span>2-of-3 Decentralized Arbitration Module Active</span>
             </div>
             <span className="text-[10px] font-mono text-amber-400 bg-amber-500/10 px-2 py-0.5 rounded-full border border-amber-500/20">
@@ -258,7 +255,7 @@ export default function PactDetailPage() {
             If a dispute is triggered, escrow funds enter a cryptographic lock and will only settle via the ruling of the designated Arbitrator:
           </p>
           <div className="font-mono text-[11px] text-amber-300/90 bg-black/40 p-2 rounded border border-amber-500/20 break-all">
-            {arbitratorAddress} {isArbitrator ? '(You are the connected Arbitrator ⚖️)' : ''}
+            {arbitratorAddress} {isArbitrator ? '(You are the connected Arbitrator)' : ''}
           </div>
         </div>
       )}
@@ -268,7 +265,7 @@ export default function PactDetailPage() {
         <div className="mb-6 p-5 rounded-xl bg-amber-500/[0.1] border border-amber-500/30 space-y-4 animate-enter shadow-2xl">
           <div className="flex items-center justify-between">
             <h3 className="text-[15px] font-semibold text-amber-300 flex items-center gap-2">
-              <span>⚖️</span> Arbitrator Multi-Sig Judgment Desk
+              Arbitrator Multi-Sig Judgment Desk
             </h3>
             <span className="text-[11px] font-mono text-amber-400 bg-amber-500/20 px-2 py-0.5 rounded-full animate-pulse">
               PENDING RULING
@@ -369,7 +366,7 @@ export default function PactDetailPage() {
             <span className={`text-[11px] font-mono px-2 py-0.5 rounded-full border ${
               termsVerified ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20' : 'bg-rose-500/10 text-rose-400 border-rose-500/20'
             }`}>
-              {termsVerified ? 'SHA-256 MATCH ✓' : 'INTEGRITY MISMATCH ✗'}
+              {termsVerified ? 'SHA-256 MATCH' : 'INTEGRITY MISMATCH'}
             </span>
           )}
         </div>
@@ -526,7 +523,7 @@ export default function PactDetailPage() {
               disabled={busy}
               className="btn-ghost w-full text-rose-400 border-rose-500/20 py-2.5 text-[13px] hover:bg-rose-500/[0.08]"
             >
-              {arbitratorAddress ? '⚖️ Escalate to Arbitrator (2-of-3 Multi-Sig)' : 'Reject Proof & Slash'}
+              {arbitratorAddress ? 'Escalate to Arbitrator (2-of-3 Multi-Sig)' : 'Reject Proof & Slash'}
             </button>
           )}
         </div>
@@ -537,7 +534,6 @@ export default function PactDetailPage() {
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-enter">
           <div className="bg-[#111215] border border-rose-500/30 rounded-2xl p-6 max-w-md w-full shadow-2xl space-y-4">
             <div className="flex items-center gap-2.5 text-rose-400">
-              <span className="text-lg">⚠️</span>
               <h3 className="text-[16px] font-semibold">
                 {arbitratorAddress ? 'Escalate to Decentralized Arbitrator' : 'Initiate Dispute & Bond Slash'}
               </h3>

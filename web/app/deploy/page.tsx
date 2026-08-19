@@ -151,10 +151,10 @@ export default function DeployPage() {
             {loading ? (
               <>
                 <div className="w-4 h-4 border-[1.5px] border-black border-t-transparent rounded-full animate-spin" />
-                <span>Confirm in wallet & deploying…</span>
+                <span>Confirming in wallet…</span>
               </>
             ) : (
-              <span>🚀 Deploy PactContract to Arc (1 Click)</span>
+              <span>Deploy Pact Contract</span>
             )}
           </button>
         </div>

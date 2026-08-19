@@ -27,9 +27,9 @@ const TOKENS = [
 
 const ARBITRATOR_PRESETS = [
   { id: 'none', label: 'Bilateral Consensus (Direct)', desc: 'Maker & Taker resolve directly without 3rd party', addr: '' },
-  { id: 'dao', label: '🏛️ PACT DAO Dispute Council', desc: 'Decentralized Community Multi-Sig Court', addr: '0x8401A7C3105B853e5eA89C1aB188981442aFa243' },
-  { id: 'kleros', label: '⚖️ Kleros Court / UMA Oracle Adapter', desc: 'Optimistic decentralized staked juror pool', addr: '0x98101E17aE184d0840A865b2fa023eAf777C2932' },
-  { id: 'custom', label: '✍️ Custom Multi-Sig / Arbitrator', desc: 'Specify your own trusted 3rd-party EVM address', addr: '' },
+  { id: 'dao', label: 'PACT DAO Dispute Council', desc: 'Decentralized Community Multi-Sig Court', addr: '0x8401A7C3105B853e5eA89C1aB188981442aFa243' },
+  { id: 'kleros', label: 'Kleros Court / UMA Oracle Adapter', desc: 'Optimistic decentralized staked juror pool', addr: '0x98101E17aE184d0840A865b2fa023eAf777C2932' },
+  { id: 'custom', label: 'Custom Multi-Sig / Arbitrator', desc: 'Specify your own trusted 3rd-party EVM address', addr: '' },
 ]
 
 export default function NewPactPage() {
@@ -148,7 +148,7 @@ export default function NewPactPage() {
     }
   }
 
-  // ─── Senior 1-Click Batched Pipeline Auto-Trigger ───
+  // ─── Batched Pipeline Auto-Trigger ───
   useEffect(() => {
     if (approveConfirmed && step === 'approving') {
       if (isBatchedRef.current) {
@@ -262,7 +262,6 @@ export default function NewPactPage() {
 
           {effectiveArbitrator && (
             <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-amber-500/10 border border-amber-500/20 text-amber-300 text-[12px] mb-6">
-              <span>⚖️</span>
               <span>Protected by 2-of-3 Decentralized Arbitration ({effectiveArbitrator.slice(0, 6)}…{effectiveArbitrator.slice(-4)})</span>
             </div>
           )}
@@ -273,7 +272,7 @@ export default function NewPactPage() {
               <div className="flex gap-2">
                 <input readOnly value={shareUrl} className="flex-1 bg-white/[0.04] border border-white/[0.06] text-zinc-300 px-3 py-2 rounded-lg text-[12px] font-mono select-all" />
                 <button onClick={copyLink} className="btn-primary px-4 py-2 text-[12px]">
-                  {copiedLink ? 'Copied ✓' : 'Copy'}
+                  {copiedLink ? 'Copied' : 'Copy'}
                 </button>
               </div>
             </div>
@@ -309,8 +308,7 @@ export default function NewPactPage() {
       {/* Account Abstraction Banner */}
       <div className="mb-6 p-3 rounded-xl bg-emerald-500/[0.06] border border-emerald-500/20 flex items-center justify-between text-[12px] text-emerald-300 animate-enter">
         <div className="flex items-center gap-2">
-          <span>⚡</span>
-          <span><strong>Arc Native AA:</strong> Gas paid in native USDC · 1-Click Batched Deploy</span>
+          <span><strong>Arc Native Settlement:</strong> Gas paid in native USDC · Account Abstraction</span>
         </div>
         <span className="bg-emerald-500/10 px-2 py-0.5 rounded-full text-[10px] font-mono border border-emerald-500/20">
           ERC-4337
@@ -334,7 +332,7 @@ export default function NewPactPage() {
           <h1 className="text-[20px] font-semibold text-white tracking-[-0.01em] mt-1">New pact</h1>
         </div>
         <button onClick={fillDemo} className="btn-ghost px-3 py-1 text-[12px] text-zinc-400">
-          Fill Demo ↓
+          Fill Demo
         </button>
       </div>
 
@@ -405,7 +403,7 @@ export default function NewPactPage() {
         <div className="surface-1 rounded-xl p-4 border border-white/[0.06] space-y-3">
           <div className="flex items-center justify-between">
             <label className="text-[13px] font-medium text-white flex items-center gap-1.5">
-              <span>⚖️</span> Decentralized Arbitration & 2-of-3 Multi-Sig
+              Decentralized Arbitration & 2-of-3 Multi-Sig
             </label>
             <span className="text-[10px] font-mono text-amber-400 bg-amber-500/10 px-2 py-0.5 rounded-full border border-amber-500/20">
               EscrowLock Active
@@ -492,7 +490,7 @@ export default function NewPactPage() {
             <label className="flex items-center gap-2.5 cursor-pointer select-none">
               <input type="checkbox" checked={sessionKeyEnabled} onChange={e => setSessionKeyEnabled(e.target.checked)}
                 className="w-4 h-4 rounded border-zinc-700 bg-transparent text-emerald-500 focus:ring-emerald-500/30" />
-              <span className="text-[13px] text-emerald-400">⚡ Pre-approve Session Key (1-Click Auto-Settlement)</span>
+              <span className="text-[13px] text-emerald-400">Pre-approve Session Key (Automatic Settlement)</span>
             </label>
           </div>
         </div>
@@ -513,14 +511,14 @@ export default function NewPactPage() {
           </p>
         )}
 
-        {/* Submit with 1-Click Batched Fast Track Pipeline */}
+        {/* Submit with Clean Professional Buttons */}
         <div>
           {!isConnected ? (
             <button
               onClick={() => openModal(true)}
               className="btn-primary w-full py-3 text-[14px]"
             >
-              Connect Wallet / Passkey to Deploy
+              Connect Wallet to Continue
             </button>
           ) : disabled ? (
             <button disabled className="w-full bg-white/[0.04] text-zinc-600 py-3 rounded-xl text-[14px] cursor-not-allowed">{reason}</button>
@@ -534,7 +532,7 @@ export default function NewPactPage() {
               onClick={handleDeployProtocolContract}
               className="btn-primary w-full py-3.5 text-[14px] flex items-center justify-center gap-2 bg-amber-400 text-black hover:bg-amber-300"
             >
-              <span>🚀 1-Click Initialize & Deploy Protocol Contract</span>
+              <span>Initialize Protocol Contract</span>
             </button>
           ) : step === 'creating' || createPending || createReceiptLoading ? (
             <div className="w-full py-3.5 rounded-xl text-[14px] text-center text-emerald-400 flex items-center justify-center gap-2 bg-emerald-500/[0.08] border border-emerald-500/20">
@@ -544,7 +542,7 @@ export default function NewPactPage() {
           ) : step === 'approving' || approvePending || approveReceiptLoading ? (
             <div className="w-full py-3.5 rounded-xl text-[14px] text-center text-amber-400 flex items-center justify-center gap-2 bg-amber-500/[0.08] border border-amber-500/20">
               <div className="w-4 h-4 border-[1.5px] border-amber-400 border-t-transparent rounded-full animate-spin" />
-              <span>[Step 1/2] Authorizing {tokenLabel} Collateral… (Auto-advancing)</span>
+              <span>[Step 1/2] Authorizing {tokenLabel} Collateral…</span>
             </div>
           ) : needsApproval ? (
             <div className="space-y-2">
@@ -552,10 +550,10 @@ export default function NewPactPage() {
                 onClick={doBatched1ClickDeploy}
                 className="btn-primary w-full py-3.5 text-[14px] flex items-center justify-center gap-2 bg-white text-black hover:bg-zinc-200"
               >
-                <span>⚡ 1-Click Fast Track Deploy</span>
+                <span>Authorize & Deploy Pact</span>
               </button>
               <p className="text-[11px] text-zinc-500 text-center">
-                Batched ERC-4337 pipeline automatically executes Permit/Approve and deploys in a single continuous flow.
+                Batched pipeline automatically executes Approve and initializes the escrow contract.
               </p>
             </div>
           ) : (
