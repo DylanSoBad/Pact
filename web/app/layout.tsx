@@ -49,7 +49,7 @@ export default function RootLayout({
           <AppShell>
             <Navbar />
             <SideNav />
-            <main className="flex-1 w-full max-w-terminal mx-auto px-gutter py-xl @lg:pl-64 @lg:max-w-none pb-32">
+            <main className="flex-1 w-full max-w-terminal mx-auto px-3 @md:px-gutter py-4 @md:py-xl @lg:pl-64 @lg:max-w-none pb-28 @md:pb-32">
               {children}
             </main>
             <BottomNav />

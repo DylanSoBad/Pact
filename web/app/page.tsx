@@ -67,50 +67,50 @@ export default function Home() {
 
   const getFilterClass = (f: string) => {
     if (filter === f) {
-      return 'px-3 py-1 border border-primary-fixed text-primary-fixed bg-primary-fixed/10 rounded-DEFAULT'
+      return 'px-2.5 @md:px-3 py-1 border border-primary-fixed text-primary-fixed bg-primary-fixed/10 rounded-DEFAULT text-[11px] font-label-caps uppercase transition-all'
     }
-    return 'px-3 py-1 border border-outline-hairline text-text-muted hover:border-text-dim hover:text-on-surface transition-colors rounded-DEFAULT'
+    return 'px-2.5 @md:px-3 py-1 border border-outline-hairline text-text-muted hover:border-text-dim hover:text-on-surface transition-colors rounded-DEFAULT text-[11px] font-label-caps uppercase'
   }
 
   return (
-    <>
+    <div className="w-full px-2 @md:px-0">
       {/* Header & Subhead */}
-      <header className="mb-xl @lg:max-w-terminal @lg:mx-auto">
-        <h1 className="font-display-mono text-[32px] leading-tight text-on-surface tracking-tighter uppercase mb-2 cmd-prompt animate-enter">
+      <header className="mb-4 @md:mb-xl @lg:max-w-terminal @lg:mx-auto">
+        <h1 className="font-display-mono text-[24px] @md:text-[32px] leading-tight text-on-surface tracking-tighter uppercase mb-1 @md:mb-2 cmd-prompt animate-enter">
           The Tape
         </h1>
-        <p className="font-code-hash text-code-hash text-text-muted animate-enter-delay">
+        <p className="font-code-hash text-[11px] @md:text-code-hash text-text-muted animate-enter-delay">
           economic contracts with collateral. not a dex.
         </p>
       </header>
 
       {/* Filters & Telemetry Strip */}
-      <div className="flex flex-col @sm:flex-row justify-between items-start @sm:items-center gap-md mb-md @lg:max-w-terminal @lg:mx-auto animate-enter" style={{ animationDelay: '100ms' }}>
-        {/* Filter Chips */}
-        <div className="flex flex-wrap items-center gap-2 font-label-caps text-label-caps uppercase">
+      <div className="flex flex-col @sm:flex-row justify-between items-start @sm:items-center gap-3 mb-3 @md:mb-md @lg:max-w-terminal @lg:mx-auto animate-enter" style={{ animationDelay: '100ms' }}>
+        {/* Filter Chips - smooth horizontal scroll on small devices */}
+        <div className="flex items-center gap-1.5 @md:gap-2 font-label-caps text-label-caps uppercase overflow-x-auto hide-scroll w-full @sm:w-auto pb-1 @sm:pb-0">
           <button onClick={() => setFilter('ALL')} className={getFilterClass('ALL')}>ALL</button>
           <button onClick={() => setFilter('DELIVERY')} className={getFilterClass('DELIVERY')}>DELIVERY</button>
           <button onClick={() => setFilter('FX')} className={getFilterClass('FX')}>FX</button>
           <button onClick={() => setFilter('JOB')} className={getFilterClass('JOB')}>JOB</button>
           <button 
             onClick={() => setFilter('LIVE')} 
-            className={`flex items-center gap-1 ${filter === 'LIVE' ? 'px-3 py-1 border border-status-error text-status-error bg-status-error/10 rounded-DEFAULT' : 'px-3 py-1 border border-outline-hairline text-text-muted hover:border-status-error hover:text-status-error transition-colors rounded-DEFAULT'}`}
+            className={`flex items-center gap-1.5 shrink-0 ${filter === 'LIVE' ? 'px-2.5 @md:px-3 py-1 border border-status-error text-status-error bg-status-error/10 rounded-DEFAULT text-[11px] font-label-caps uppercase' : 'px-2.5 @md:px-3 py-1 border border-outline-hairline text-text-muted hover:border-status-error hover:text-status-error transition-colors rounded-DEFAULT text-[11px] font-label-caps uppercase'}`}
           >
             <span className="w-1.5 h-1.5 rounded-full bg-status-error"></span> LIVE
           </button>
         </div>
 
         {/* Real-time block counter */}
-        <div className="font-code-hash text-code-hash text-text-muted flex items-center gap-2 bg-surface-container-low px-2 py-1 rounded-DEFAULT border border-outline-hairline">
-          <span className="material-symbols-outlined text-[14px]">timer</span>
+        <div className="font-code-hash text-[11px] @md:text-code-hash text-text-muted flex items-center gap-1.5 @md:gap-2 bg-surface-container-low px-2 py-1 rounded-DEFAULT border border-outline-hairline shrink-0">
+          <span className="material-symbols-outlined text-[13px] @md:text-[14px]">timer</span>
           Last block: <span className="text-primary-fixed">{secondsAgo}s ago</span>
         </div>
       </div>
 
       {/* The Tape (Data Grid) */}
       <div className="@lg:max-w-terminal @lg:mx-auto bg-[#0c0d10] border border-outline-hairline rounded-DEFAULT overflow-hidden animate-enter" style={{ animationDelay: '150ms' }}>
-        {/* Table Header */}
-        <div className="grid grid-cols-5 gap-4 px-md py-sm border-b border-outline-hairline bg-surface-container-low font-label-caps text-label-caps text-text-muted uppercase">
+        {/* Table Header (Desktop) */}
+        <div className="hidden @md:grid grid-cols-5 gap-4 px-md py-sm border-b border-outline-hairline bg-surface-container-low font-label-caps text-label-caps text-text-muted uppercase">
           <div className="col-span-1">TIME / ID</div>
           <div className="col-span-1">KIND</div>
           <div className="col-span-1 text-right">AMOUNT</div>
@@ -118,21 +118,27 @@ export default function Home() {
           <div className="col-span-1 text-right">COUNTERPARTY</div>
         </div>
 
+        {/* Table Header (Mobile) */}
+        <div className="@md:hidden flex items-center justify-between px-3 py-2 border-b border-outline-hairline bg-surface-container-low font-label-caps text-[10px] text-text-muted uppercase tracking-wider">
+          <span>CONTRACT / TIME</span>
+          <span>AMOUNT / COUNTERPARTY</span>
+        </div>
+
         {/* Tape Rows */}
-        <div className="flex flex-col font-code-hash text-code-hash">
+        <div className="flex flex-col font-code-hash text-code-hash divide-y divide-outline-hairline/40">
           {loading ? (
-            <div className="flex items-center justify-center py-24 text-[14px] text-text-muted gap-3 font-code-hash">
-              <div className="w-3 h-3 bg-primary-fixed radar-pulse rounded-full" />
+            <div className="flex items-center justify-center py-20 text-[13px] text-text-muted gap-3 font-code-hash">
+              <div className="w-2.5 h-2.5 bg-primary-fixed radar-pulse rounded-full" />
               POLLING CHAIN DATA...
             </div>
           ) : filtered.length === 0 ? (
-            <div className="flex flex-col items-center justify-center py-24 text-center">
-              <p className="font-code-hash text-text-muted mb-1">
+            <div className="flex flex-col items-center justify-center py-20 text-center">
+              <p className="font-code-hash text-text-muted text-[12px] mb-1">
                 DATA STREAM EMPTY
               </p>
               <Link
                 href="/new"
-                className="font-code-hash text-primary-fixed underline mt-4"
+                className="font-code-hash text-primary-fixed underline text-[12px] mt-3"
               >
                 &gt; create new pact
               </Link>
@@ -147,7 +153,7 @@ export default function Home() {
                 <div 
                   key={p.id} 
                   className="animate-enter"
-                  style={{ animationDelay: `${(index * 50) + 200}ms`, animationFillMode: 'both' }}
+                  style={{ animationDelay: `${Math.min(index * 30, 300) + 100}ms`, animationFillMode: 'both' }}
                 >
                   <TapeLine pact={{
                     id: p.id,
@@ -164,10 +170,10 @@ export default function Home() {
         </div>
 
         {/* Tape Footer */}
-        <div className="px-md py-sm bg-surface-container-lowest text-center border-t border-outline-hairline">
-          <span className="font-code-hash text-code-hash text-text-dim">End of Tape. Awaiting new prints...</span>
+        <div className="px-3 @md:px-md py-2.5 @md:py-sm bg-surface-container-lowest text-center border-t border-outline-hairline">
+          <span className="font-code-hash text-[11px] @md:text-code-hash text-text-dim">End of Tape. Awaiting new prints...</span>
         </div>
       </div>
-    </>
+    </div>
   )
 }
