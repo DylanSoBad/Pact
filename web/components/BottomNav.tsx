@@ -7,7 +7,7 @@ export default function BottomNav() {
   const pathname = usePathname()
 
   return (
-    <nav className="lg:hidden fixed bottom-0 left-0 w-full z-50 flex justify-around items-center h-16 pb-safe bg-surface-container-lowest border-t border-outline-hairline">
+    <nav className="@lg:hidden fixed bottom-0 left-0 w-full z-50 flex justify-around items-center h-16 pb-safe bg-surface-container-lowest border-t border-outline-hairline">
       <Link 
         href="/"
         className={`flex flex-col items-center justify-center active:bg-surface-container-high transition-transform active:scale-95 w-full h-full ${

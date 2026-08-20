@@ -75,7 +75,7 @@ export default function Home() {
   return (
     <>
       {/* Header & Subhead */}
-      <header className="mb-xl lg:max-w-terminal lg:mx-auto">
+      <header className="mb-xl @lg:max-w-terminal @lg:mx-auto">
         <h1 className="font-display-mono text-[32px] leading-tight text-on-surface tracking-tighter uppercase mb-2 cmd-prompt animate-enter">
           The Tape
         </h1>
@@ -85,7 +85,7 @@ export default function Home() {
       </header>
 
       {/* Filters & Telemetry Strip */}
-      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-md mb-md lg:max-w-terminal lg:mx-auto animate-enter" style={{ animationDelay: '100ms' }}>
+      <div className="flex flex-col @sm:flex-row justify-between items-start @sm:items-center gap-md mb-md @lg:max-w-terminal @lg:mx-auto animate-enter" style={{ animationDelay: '100ms' }}>
         {/* Filter Chips */}
         <div className="flex flex-wrap items-center gap-2 font-label-caps text-label-caps uppercase">
           <button onClick={() => setFilter('ALL')} className={getFilterClass('ALL')}>ALL</button>
@@ -108,7 +108,7 @@ export default function Home() {
       </div>
 
       {/* The Tape (Data Grid) */}
-      <div className="lg:max-w-terminal lg:mx-auto bg-[#0c0d10] border border-outline-hairline rounded-DEFAULT overflow-hidden animate-enter" style={{ animationDelay: '150ms' }}>
+      <div className="@lg:max-w-terminal @lg:mx-auto bg-[#0c0d10] border border-outline-hairline rounded-DEFAULT overflow-hidden animate-enter" style={{ animationDelay: '150ms' }}>
         {/* Table Header */}
         <div className="grid grid-cols-5 gap-4 px-md py-sm border-b border-outline-hairline bg-surface-container-low font-label-caps text-label-caps text-text-muted uppercase">
           <div className="col-span-1">TIME / ID</div>

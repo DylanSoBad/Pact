@@ -7,7 +7,7 @@ export default function SideNav() {
   const pathname = usePathname()
   
   return (
-    <aside className="hidden lg:flex flex-col h-screen fixed left-0 top-0 w-64 bg-surface-container-lowest text-primary-fixed border-r border-outline-hairline z-30 transition-all duration-200 pt-16">
+    <aside className="hidden @lg:flex flex-col h-screen fixed left-0 top-0 w-64 bg-surface-container-lowest text-primary-fixed border-r border-outline-hairline z-30 transition-all duration-200 pt-16">
       <div className="p-lg border-b border-outline-hairline">
         <h2 className="font-display-mono text-display-mono text-primary-fixed">PACT PROTOCOL</h2>
         <p className="font-code-hash text-code-hash text-text-muted mt-2 cmd-prompt">ARC TESTNET 5042002</p>
