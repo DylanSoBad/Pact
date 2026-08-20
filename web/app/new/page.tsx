@@ -2,8 +2,6 @@
 
 import { useState, useEffect, useRef } from 'react'
 import Link from 'next/link'
-import Navbar from '../../components/Navbar'
-import TrustStrip from '../../components/TrustStrip'
 import { useAccount, useWalletClient, usePublicClient, useWriteContract, useWaitForTransactionReceipt, useReadContract, useChainId, useSwitchChain } from 'wagmi'
 import { useModal } from 'connectkit'
 import { parseUnits, formatUnits, maxUint256, decodeEventLog, isAddress } from 'viem'
@@ -276,8 +274,7 @@ export default function NewPactPage() {
   if (step === 'done' && createConfirmed) {
     return (
       <main className="min-h-screen max-w-[580px] mx-auto px-5 @md:px-8 pb-20 overflow-x-hidden font-mono">
-        <Navbar /><TrustStrip />
-        <div className="text-center py-16 animate-enter border border-zinc-800 bg-[#0c0d10] mt-8 p-8">
+                <div className="text-center py-16 animate-enter border border-zinc-800 bg-[#0c0d10] mt-8 p-8">
           <div className="w-14 h-14 bg-[#c8f542] text-black flex items-center justify-center mx-auto mb-5 text-xl font-bold rounded-none">✓</div>
           <h2 className="text-xl font-semibold text-white mb-1">
             Pact {createdPactId ? `#${createdPactId.toString().padStart(4, '0')}` : ''} created
@@ -334,8 +331,7 @@ export default function NewPactPage() {
 
   return (
     <main className="min-h-screen max-w-[580px] mx-auto px-5 @md:px-8 pb-24 overflow-x-hidden font-mono">
-      <Navbar /><TrustStrip />
-
+      
       {/* Arc Network Info Banner */}
       <div className="mb-6 p-3 bg-[#c8f542]/10 border border-[#c8f542]/30 flex items-center justify-between text-[12px] text-[#c8f542] animate-enter rounded-none">
         <div className="flex items-center gap-2">

@@ -2,8 +2,6 @@
 
 import { useState } from 'react'
 import Link from 'next/link'
-import Navbar from '../../components/Navbar'
-import TrustStrip from '../../components/TrustStrip'
 import { useAccount, useWalletClient, usePublicClient, useChainId, useSwitchChain } from 'wagmi'
 import { PACT_ABI } from '../../lib/abi'
 import { USDC_ERC20, EURC } from '../../lib/arc'
@@ -70,8 +68,7 @@ export default function DeployPage() {
 
   return (
     <main className="min-h-screen max-w-[620px] mx-auto px-5 @md:px-8 pb-24 overflow-x-hidden">
-      <Navbar /><TrustStrip />
-
+      
       <div className="mb-8 animate-enter">
         <Link href="/" className="text-[13px] text-zinc-600 hover:text-zinc-400 transition-colors">← Back</Link>
         <h1 className="text-[22px] font-semibold text-white tracking-[-0.01em] mt-2">

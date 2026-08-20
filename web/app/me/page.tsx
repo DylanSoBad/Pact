@@ -2,8 +2,6 @@
 
 import { useState, useEffect, useMemo } from 'react'
 import Link from 'next/link'
-import Navbar from '../../components/Navbar'
-import TrustStrip from '../../components/TrustStrip'
 import TapeLine from '../../components/TapeLine'
 import { useAccount } from 'wagmi'
 import { useModal } from 'connectkit'
@@ -92,9 +90,7 @@ export default function MePage() {
   if (!isConnected) {
     return (
       <main className="min-h-screen max-w-[780px] mx-auto px-5 @md:px-8 pb-24 overflow-x-hidden font-mono">
-        <Navbar />
-        <TrustStrip lastUpdated={lastFetchTime} rpcError={rpcError} onRetry={loadUserData} />
-
+                
         <div className="text-center py-24 space-y-4 animate-enter border border-zinc-800 bg-[#0c0d10]">
           <h1 className="text-[20px] font-bold text-white uppercase tracking-widest">Connect Wallet</h1>
           <p className="text-[12px] text-zinc-500 max-w-sm mx-auto uppercase tracking-wider">
@@ -110,9 +106,7 @@ export default function MePage() {
 
   return (
     <main className="min-h-screen max-w-[780px] mx-auto px-5 @md:px-8 pb-24 overflow-x-hidden font-mono">
-      <Navbar />
-      <TrustStrip lastUpdated={lastFetchTime} rpcError={rpcError} onRetry={loadUserData} />
-
+            
       {/* Profile Header */}
       <div className="surface-1 rounded-none p-6 mb-8 border border-zinc-800 space-y-4 animate-enter">
         <div className="flex flex-col @md:flex-row @md:items-center justify-between gap-4">

@@ -3,8 +3,6 @@
 import { useEffect, useState } from 'react'
 import { useParams, useSearchParams } from 'next/navigation'
 import Link from 'next/link'
-import Navbar from '../../../components/Navbar'
-import TrustStrip from '../../../components/TrustStrip'
 import PactStateMachine from '../../../components/PactStateMachine'
 import { useAccount, useWriteContract, useWaitForTransactionReceipt } from 'wagmi'
 import { fetchSinglePact, fetchReputation, PactData } from '../../../lib/reads'
@@ -170,9 +168,7 @@ export default function PactDetailPage() {
 
   if (loading) return (
     <main className="min-h-screen max-w-[660px] mx-auto px-5 @md:px-8 pb-20 font-mono">
-      <Navbar />
-      <TrustStrip lastUpdated={lastFetch} rpcError={rpcError} onRetry={load} />
-      <div className="flex items-center justify-center py-24 text-[13px] text-zinc-500 gap-3">
+                  <div className="flex items-center justify-center py-24 text-[13px] text-zinc-500 gap-3">
         <div className="w-3 h-3 bg-[#c8f542] animate-pulse-soft" />
         LOADING_PACT_DATA...
       </div>
@@ -181,9 +177,7 @@ export default function PactDetailPage() {
 
   if (!pact) return (
     <main className="min-h-screen max-w-[660px] mx-auto px-5 @md:px-8 pb-20 font-mono">
-      <Navbar />
-      <TrustStrip lastUpdated={lastFetch} rpcError={rpcError} onRetry={load} />
-      <div className="text-center py-24 space-y-4 border border-zinc-800 bg-[#0c0d10] mt-8">
+                  <div className="text-center py-24 space-y-4 border border-zinc-800 bg-[#0c0d10] mt-8">
         <p className="text-[13px] text-zinc-500">Pact #{id.toString().padStart(4, '0')} does not exist or is uninitialized.</p>
         <Link href="/" className="text-[12px] text-[#c8f542] underline inline-block">← return_to_feed</Link>
       </div>
@@ -194,9 +188,7 @@ export default function PactDetailPage() {
 
   return (
     <main className="min-h-screen max-w-[660px] mx-auto px-5 @md:px-8 pb-24 overflow-x-hidden font-mono">
-      <Navbar />
-      <TrustStrip lastUpdated={lastFetch} rpcError={rpcError} onRetry={load} />
-
+            
       {/* Header & Quick Action Share */}
       <div className="flex items-center justify-between mb-6 animate-enter border-b border-zinc-800 pb-4">
         <div>
