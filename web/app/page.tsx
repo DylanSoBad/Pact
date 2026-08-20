@@ -2,9 +2,6 @@
 
 import { useState, useEffect, useMemo } from 'react'
 import Link from 'next/link'
-import { useRouter } from 'next/navigation'
-import Navbar from '../components/Navbar'
-import TrustStrip from '../components/TrustStrip'
 import TapeLine from '../components/TapeLine'
 import { fetchPacts, PactData } from '../lib/reads'
 import { getPactAddress } from '../lib/arc'
@@ -15,35 +12,27 @@ import {
 } from '../lib/format'
 
 export default function Home() {
-  const router = useRouter()
   const { address } = useAccount()
   const [filter, setFilter] = useState('ALL')
-  const [searchQuery, setSearchQuery] = useState('')
   const [pacts, setPacts] = useState<PactData[]>([])
-  const [latencyMs, setLatencyMs] = useState<number | null>(null)
   const [loading, setLoading] = useState(true)
-  const [rpcError, setRpcError] = useState(false)
   const [lastFetchTime, setLastFetchTime] = useState<number>(Date.now())
+  const [secondsAgo, setSecondsAgo] = useState(0)
 
-  // Use wagmi's optimized block watcher instead of manual aggressive polling
   const { data: blockNumber } = useBlockNumber({ watch: true })
 
-  useEffect(() => { document.title = 'PACT · Escrows' }, [])
+  useEffect(() => { document.title = 'PACT Protocol - The Tape' }, [])
 
-  // Spec §9 Compliant: Direct Multicall3 poll every 2s
   async function loadData() {
     if (document.hidden) return
-    const start = performance.now()
     try {
       const contractAddress = getPactAddress()
       const data = await fetchPacts(50, contractAddress)
       setPacts(data)
-      setLatencyMs(Math.round(performance.now() - start))
-      setRpcError(false)
       setLastFetchTime(Date.now())
+      setSecondsAgo(0)
     } catch (err) {
       console.error('RPC Multicall poll error:', err)
-      setRpcError(true)
     } finally {
       setLoading(false)
     }
@@ -52,132 +41,133 @@ export default function Home() {
   useEffect(() => {
     let ok = true
     loadData()
-    // Fallback visibility listener
     const vis = () => { if (!document.hidden && ok) loadData() }
     document.addEventListener('visibilitychange', vis)
     return () => { ok = false; document.removeEventListener('visibilitychange', vis) }
   }, [])
 
-  // Refetch when block number changes
   useEffect(() => {
     if (blockNumber) loadData()
   }, [blockNumber])
 
-  const handleSearchKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
-    if (e.key === 'Enter') {
-      const clean = searchQuery.trim().replace(/^#/, '')
-      if (/^\d+$/.test(clean)) {
-        router.push(`/p/${clean}`)
-      }
-    }
-  }
+  useEffect(() => {
+    const t = setInterval(() => setSecondsAgo(p => p + 1), 1000)
+    return () => clearInterval(t)
+  }, [lastFetchTime])
 
   const filtered = useMemo(() =>
     pacts.filter(p => {
-      // Search filter
-      if (searchQuery.trim()) {
-        const q = searchQuery.toLowerCase().trim().replace(/^#/, '')
-        const matchId = p.id.toString() === q || p.id.toString().includes(q)
-        const matchMaker = p.maker.toLowerCase().includes(q)
-        const matchTaker = p.taker.toLowerCase().includes(q)
-        if (!matchId && !matchMaker && !matchTaker) return false
-      }
-
-      // Tab filters
       if (filter === 'ALL') return true
-      if (filter === 'MY') {
-        if (!address) return true
-        return p.maker.toLowerCase() === address.toLowerCase() || p.taker.toLowerCase() === address.toLowerCase()
-      }
       if (filter === 'LIVE') return p.status === 2 || p.status === 3
       if (filter === 'DELIVERY') return p.kind === 0
       if (filter === 'FX') return p.kind === 1
       if (filter === 'JOB') return p.kind === 2
       return true
-    }), [pacts, filter, searchQuery, address])
+    }), [pacts, filter])
+
+  const getFilterClass = (f: string) => {
+    if (filter === f) {
+      return 'px-3 py-1 border border-primary-fixed text-primary-fixed bg-primary-fixed/10 rounded-DEFAULT'
+    }
+    return 'px-3 py-1 border border-outline-hairline text-text-muted hover:border-text-dim hover:text-on-surface transition-colors rounded-DEFAULT'
+  }
 
   return (
-    <main className="min-h-screen max-w-[780px] mx-auto px-5 @md:px-8 pb-24 overflow-x-hidden font-mono">
-      <Navbar />
-      <TrustStrip lastUpdated={lastFetchTime} rpcError={rpcError} onRetry={loadData} />
+    <>
+      {/* Header & Subhead */}
+      <header className="mb-xl lg:max-w-terminal lg:mx-auto">
+        <h1 className="font-display-mono text-[32px] leading-tight text-on-surface tracking-tighter uppercase mb-2 cmd-prompt animate-enter">
+          The Tape
+        </h1>
+        <p className="font-code-hash text-code-hash text-text-muted animate-enter-delay">
+          economic contracts with collateral. not a dex.
+        </p>
+      </header>
 
-      {/* Hero with Direct Arc RPC Latency Indicator */}
-      <div className="mb-6 animate-enter border-b border-zinc-800 pb-4">
-        <div className="flex items-center justify-between gap-2 mb-2">
-          <h1 className="text-[20px] font-bold text-white tracking-widest uppercase">
-            &gt; PACT FEED
-          </h1>
-          {latencyMs !== null && (
-            <span className="hidden @md:inline-flex items-center gap-1.5 text-[11px] font-mono text-[#c8f542]">
-              <span className="w-1.5 h-1.5 bg-[#c8f542] animate-pulse-soft" />
-              RPC LATENCY: {latencyMs}ms
-            </span>
+      {/* Filters & Telemetry Strip */}
+      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-md mb-md lg:max-w-terminal lg:mx-auto animate-enter" style={{ animationDelay: '100ms' }}>
+        {/* Filter Chips */}
+        <div className="flex flex-wrap items-center gap-2 font-label-caps text-label-caps uppercase">
+          <button onClick={() => setFilter('ALL')} className={getFilterClass('ALL')}>ALL</button>
+          <button onClick={() => setFilter('DELIVERY')} className={getFilterClass('DELIVERY')}>DELIVERY</button>
+          <button onClick={() => setFilter('FX')} className={getFilterClass('FX')}>FX</button>
+          <button onClick={() => setFilter('JOB')} className={getFilterClass('JOB')}>JOB</button>
+          <button 
+            onClick={() => setFilter('LIVE')} 
+            className={`flex items-center gap-1 ${filter === 'LIVE' ? 'px-3 py-1 border border-status-error text-status-error bg-status-error/10 rounded-DEFAULT' : 'px-3 py-1 border border-outline-hairline text-text-muted hover:border-status-error hover:text-status-error transition-colors rounded-DEFAULT'}`}
+          >
+            <span className="w-1.5 h-1.5 rounded-full bg-status-error"></span> LIVE
+          </button>
+        </div>
+
+        {/* Real-time block counter */}
+        <div className="font-code-hash text-code-hash text-text-muted flex items-center gap-2 bg-surface-container-low px-2 py-1 rounded-DEFAULT border border-outline-hairline">
+          <span className="material-symbols-outlined text-[14px]">timer</span>
+          Last block: <span className="text-primary-fixed">{secondsAgo}s ago</span>
+        </div>
+      </div>
+
+      {/* The Tape (Data Grid) */}
+      <div className="lg:max-w-terminal lg:mx-auto bg-[#0c0d10] border border-outline-hairline rounded-DEFAULT overflow-hidden animate-enter" style={{ animationDelay: '150ms' }}>
+        {/* Table Header */}
+        <div className="grid grid-cols-5 gap-4 px-md py-sm border-b border-outline-hairline bg-surface-container-low font-label-caps text-label-caps text-text-muted uppercase">
+          <div className="col-span-1">TIME / ID</div>
+          <div className="col-span-1">KIND</div>
+          <div className="col-span-1 text-right">AMOUNT</div>
+          <div className="col-span-1 text-center">STATUS</div>
+          <div className="col-span-1 text-right">COUNTERPARTY</div>
+        </div>
+
+        {/* Tape Rows */}
+        <div className="flex flex-col font-code-hash text-code-hash">
+          {loading ? (
+            <div className="flex items-center justify-center py-24 text-[14px] text-text-muted gap-3 font-code-hash">
+              <div className="w-3 h-3 bg-primary-fixed radar-pulse rounded-full" />
+              POLLING CHAIN DATA...
+            </div>
+          ) : filtered.length === 0 ? (
+            <div className="flex flex-col items-center justify-center py-24 text-center">
+              <p className="font-code-hash text-text-muted mb-1">
+                DATA STREAM EMPTY
+              </p>
+              <Link
+                href="/new"
+                className="font-code-hash text-primary-fixed underline mt-4"
+              >
+                &gt; create new pact
+              </Link>
+            </div>
+          ) : (
+            filtered.map((p, index) => {
+              const amt = p.kind === 1
+                ? `${formatAmount(p.amountMaker)} ${tokenSymbol(p.tokenMaker)} ↔ ${formatAmount(p.amountTaker)} ${tokenSymbol(p.tokenTaker)}`
+                : `${formatAmount(p.amountMaker)} ${tokenSymbol(p.tokenMaker)}`
+              
+              return (
+                <div 
+                  key={p.id} 
+                  className="animate-enter"
+                  style={{ animationDelay: `${(index * 50) + 200}ms`, animationFillMode: 'both' }}
+                >
+                  <TapeLine pact={{
+                    id: p.id,
+                    time: formatTimestamp(p.updatedAt),
+                    kind: kindLabel(p.kind),
+                    status: p.status === 2 ? 'ACTIVE' : p.status === 3 ? 'PROOF IN' : statusLabel(p.status),
+                    amount: amt,
+                    address: truncateAddress(p.maker),
+                  }} />
+                </div>
+              )
+            })
           )}
         </div>
-        <p className="text-[12px] text-zinc-500 max-w-md">
-          Live bilateral settlement stream on Circle Arc Testnet.
-        </p>
+
+        {/* Tape Footer */}
+        <div className="px-md py-sm bg-surface-container-lowest text-center border-t border-outline-hairline">
+          <span className="font-code-hash text-code-hash text-text-dim">End of Tape. Awaiting new prints...</span>
+        </div>
       </div>
-
-      {/* Terminal Filter Input */}
-      <div className="mb-4 animate-enter-delay relative">
-        <span className="absolute left-3 top-1/2 -translate-y-1/2 text-[#c8f542] text-[13px]">&gt;</span>
-        <input
-          type="text"
-          value={searchQuery}
-          onChange={e => setSearchQuery(e.target.value)}
-          onKeyDown={handleSearchKeyDown}
-          placeholder="filter by id or address..."
-          className="w-full bg-[#07080a] border border-zinc-800 focus:border-[#c8f542] text-white pl-8 pr-3 py-2 rounded-none text-[13px] placeholder:text-zinc-700 transition-colors focus:ring-0 outline-none"
-        />
-      </div>
-
-
-
-      {/* Content */}
-      {loading ? (
-        <div className="flex items-center justify-center py-24 text-[14px] text-zinc-600 gap-3">
-          <div className="w-3 h-3 bg-[#c8f542] animate-pulse-soft" />
-          POLLING CHAIN DATA...
-        </div>
-      ) : filtered.length === 0 ? (
-        <div className="flex flex-col items-center justify-center py-24 text-center animate-enter">
-          <p className="text-[13px] text-zinc-500 mb-1">
-            {searchQuery ? `0 matches for "${searchQuery}"` : 'DATA STREAM EMPTY'}
-          </p>
-          <Link
-            href="/new"
-            className="text-[12px] text-[#c8f542] underline mt-4"
-          >
-            &gt; create new pact
-          </Link>
-        </div>
-      ) : (
-        <div className="border-t border-zinc-800">
-          {filtered.map((p, index) => {
-            const amt = p.kind === 1
-              ? `${formatAmount(p.amountMaker)} ${tokenSymbol(p.tokenMaker)} ↔ ${formatAmount(p.amountTaker)} ${tokenSymbol(p.tokenTaker)}`
-              : `${formatAmount(p.amountMaker)} ${tokenSymbol(p.tokenMaker)}`
-            return (
-              <div 
-                key={p.id} 
-                className="animate-enter"
-                style={{ animationDelay: `${index * 50}ms`, animationFillMode: 'both' }}
-              >
-                <TapeLine pact={{
-                  id: p.id,
-                  time: formatTimestamp(p.updatedAt),
-                  kind: kindLabel(p.kind),
-                  status: p.status === 2 ? 'ACTIVE' : p.status === 3 ? 'PROOF IN' : statusLabel(p.status),
-                  amount: amt,
-                  address: truncateAddress(p.maker),
-                  blurSize: false,
-                }} />
-              </div>
-            )
-          })}
-        </div>
-      )}
-    </main>
+    </>
   )
 }

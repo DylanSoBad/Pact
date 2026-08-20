@@ -5,44 +5,52 @@ import Link from 'next/link'
 export default function TapeLine({ pact }: { pact: any }) {
   const isTerminal = ['CLEARED', 'SLASHED', 'EXPIRED', 'CANCELLED'].includes(pact.status)
   const isActive = ['ACTIVE', 'PROOF IN'].includes(pact.status)
-  const isProofIn = pact.status === 'PROOF IN'
+  const isSlashed = pact.status === 'SLASHED'
+  const isCleared = pact.status === 'CLEARED'
   
-  const statusColor = isTerminal
-    ? 'text-zinc-600'
+  const statusColorClass = isCleared 
+    ? 'text-status-cleared' 
+    : isActive 
+    ? 'text-status-error pulse-live border border-status-error/30 rounded-sm px-2' 
+    : isSlashed
+    ? 'text-status-warning'
+    : 'text-text-muted'
+
+  const amountColorClass = isTerminal && !isCleared
+    ? 'text-text-dim line-through opacity-50'
+    : isCleared
+    ? 'text-primary-fixed'
     : isActive
-    ? 'text-[#c8f542]'
-    : 'text-zinc-400'
+    ? 'text-on-surface'
+    : 'text-text-muted'
+
+  const bgClass = isActive ? 'bg-surface-container-low/30' : 'bg-transparent'
 
   return (
-    <Link href={`/p/${pact.id.toString()}`} className="group block border-b border-zinc-800 hover:bg-[#0c0d10] transition-none">
-      <div className="flex flex-col @md:flex-row @md:items-center justify-between py-3 px-2 gap-3">
-        {/* Left: ID, Archetype, Status */}
-        <div className="flex items-center gap-4">
-          <span className="text-[13px] text-zinc-500 font-mono tabular-nums">
-            {pact.id.toString().padStart(4, '0')}
-          </span>
-
-          <span className="text-[11px] font-mono text-zinc-400 uppercase tracking-widest w-16">
-            {pact.kind}
-          </span>
-
-          <span className={`text-[11px] font-mono font-bold tracking-wider flex items-center gap-2 ${statusColor} w-24`}>
-            {isActive && (
-              <span className={`w-1.5 h-1.5 rounded-none ${isProofIn ? 'bg-amber-400' : 'bg-[#c8f542] animate-pulse'}`} />
-            )}
-            [{pact.status}]
-          </span>
-        </div>
-
-        {/* Right: Locked Amount, Maker Address */}
-        <div className="flex items-center justify-between @md:justify-end gap-6">
-          <div className="text-[13px] text-zinc-400 font-mono">
-            {pact.address}
-          </div>
-          <div className="text-[13px] font-bold text-white tabular-nums font-mono min-w-[120px] text-right">
-            {pact.amount}
-          </div>
-        </div>
+    <Link href={`/p/${pact.id.toString()}`} className={`grid grid-cols-5 gap-4 px-md py-3 border-b border-outline-hairline tape-row items-center border-l-2 border-l-transparent ${bgClass}`}>
+      <div className="col-span-1 flex flex-col">
+        <span className="text-text-muted font-body-mono">{pact.time}</span>
+        <span className="text-on-surface font-headline-mono">#{pact.id.toString()}</span>
+      </div>
+      <div className="col-span-1">
+        <span className="px-1.5 py-0.5 bg-surface-container border border-outline-hairline text-text-dim rounded-sm font-body-mono uppercase">
+          {pact.kind}
+        </span>
+      </div>
+      <div className="col-span-1 text-right flex items-center justify-end">
+        <span className={`${amountColorClass} font-headline-mono truncate max-w-full`} title={pact.amount}>
+          {pact.amount}
+        </span>
+      </div>
+      <div className="col-span-1 flex justify-center">
+        <span className={`${statusColorClass} font-body-mono uppercase`}>
+          [{pact.status}]
+        </span>
+      </div>
+      <div className="col-span-1 text-right">
+        <span className="text-text-muted font-body-mono">
+          {pact.address}
+        </span>
       </div>
     </Link>
   )
