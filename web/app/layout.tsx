@@ -7,6 +7,7 @@ import Navbar from "../components/Navbar";
 import SideNav from "../components/SideNav";
 import BottomNav from "../components/BottomNav";
 import Link from "next/link";
+import AppShell from "../components/AppShell";
 
 const plexMono = IBM_Plex_Mono({
   variable: "--font-ibm-plex-mono",
