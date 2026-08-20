@@ -330,7 +330,7 @@ export default function NewPactPage() {
   }
 
   return (
-    <main className="min-h-screen max-w-[580px] mx-auto px-5 @md:px-8 pb-24 overflow-x-hidden font-mono">
+    <div className="w-full max-w-terminal mx-auto font-mono">
       
       {/* Arc Network Info Banner */}
       <div className="mb-6 p-3 bg-[#c8f542]/10 border border-[#c8f542]/30 flex items-center justify-between text-[12px] text-[#c8f542] animate-enter rounded-none">
@@ -559,6 +559,6 @@ export default function NewPactPage() {
           )}
         </div>
       </div>
-    </main>
+    </div>
   )
 }

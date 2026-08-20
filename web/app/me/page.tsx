@@ -89,9 +89,8 @@ export default function MePage() {
 
   if (!isConnected) {
     return (
-      <main className="min-h-screen max-w-[780px] mx-auto px-5 @md:px-8 pb-24 overflow-x-hidden font-mono">
-                
-        <div className="text-center py-24 space-y-4 animate-enter border border-zinc-800 bg-[#0c0d10]">
+      <div className="w-full max-w-terminal mx-auto font-mono">
+        <div className="text-center py-20 space-y-4 animate-enter border border-zinc-800 bg-[#0c0d10] px-4">
           <h1 className="text-[20px] font-bold text-white uppercase tracking-widest">Connect Wallet</h1>
           <p className="text-[12px] text-zinc-500 max-w-sm mx-auto uppercase tracking-wider">
             Connect your Arc wallet to view your on-chain settlement reputation, active pact commitments, and transaction history.
@@ -100,19 +99,18 @@ export default function MePage() {
             Connect Wallet
           </button>
         </div>
-      </main>
+      </div>
     )
   }
 
   return (
-    <main className="min-h-screen max-w-[780px] mx-auto px-5 @md:px-8 pb-24 overflow-x-hidden font-mono">
-            
+    <div className="w-full max-w-terminal mx-auto font-mono">
       {/* Profile Header */}
-      <div className="surface-1 rounded-none p-6 mb-8 border border-zinc-800 space-y-4 animate-enter">
-        <div className="flex flex-col @md:flex-row @md:items-center justify-between gap-4">
+      <div className="surface-1 rounded-none p-4 @md:p-6 mb-6 @md:mb-8 border border-zinc-800 space-y-4 animate-enter">
+        <div className="flex flex-col @sm:flex-row @sm:items-center justify-between gap-4">
           <div>
             <span className="text-[11px] uppercase tracking-widest text-zinc-500 block mb-1">Connected Account</span>
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-2 flex-wrap">
               <span className="text-[14px] font-bold text-white uppercase">
                 {truncateAddress(address || '')}
               </span>
@@ -128,18 +126,18 @@ export default function MePage() {
                 rel="noreferrer"
                 className="text-[11px] uppercase tracking-widest text-zinc-500 hover:text-[#c8f542] underline ml-1"
               >
-                ArcScan_↗
+                ArcScan ↗
               </a>
             </div>
           </div>
 
-          <Link href="/new" className="btn-primary px-4 py-2 text-[12px] uppercase tracking-widest text-center">
-            init_pact
+          <Link href="/new" className="btn-primary px-4 py-2 text-[12px] uppercase tracking-widest text-center shrink-0">
+            NEW PACT
           </Link>
         </div>
 
         {/* Reputation Scorecards */}
-        <div className="grid grid-cols-2 @md:grid-cols-4 gap-3 pt-4 border-t border-zinc-800 mt-4">
+        <div className="grid grid-cols-2 @md:grid-cols-4 gap-2.5 @md:gap-3 pt-4 border-t border-zinc-800 mt-4">
           <div className="p-3 rounded-none bg-black border border-zinc-800">
             <span className="text-[10px] uppercase tracking-widest text-zinc-500 block">Cleared Deals</span>
             <span className="text-[18px] font-bold text-[#c8f542] mt-0.5 tabular-nums block">
@@ -171,8 +169,8 @@ export default function MePage() {
       </div>
 
       {/* Role Filters */}
-      <div className="flex items-center justify-between gap-3 mb-6 animate-enter-delay">
-        <div className="flex items-center gap-1.5 border border-zinc-800 bg-[#0c0d10] p-1">
+      <div className="flex items-center justify-between gap-3 mb-6 animate-enter-delay overflow-x-auto hide-scroll">
+        <div className="flex items-center gap-1.5 border border-zinc-800 bg-[#0c0d10] p-1 shrink-0">
           <button
             onClick={() => setRoleFilter('ALL')}
             className={`px-3 py-1.5 text-[11px] uppercase tracking-widest transition-none ${
@@ -181,7 +179,7 @@ export default function MePage() {
                 : 'text-zinc-500 hover:text-zinc-200 hover:bg-zinc-800'
             }`}
           >
-            All_Pacts ({pacts.length})
+            ALL PACTS ({pacts.length})
           </button>
           <button
             onClick={() => setRoleFilter('MAKER')}
@@ -191,7 +189,7 @@ export default function MePage() {
                 : 'text-zinc-500 hover:text-zinc-200 hover:bg-zinc-800'
             }`}
           >
-            As_Maker ({makerCount})
+            AS MAKER ({makerCount})
           </button>
           <button
             onClick={() => setRoleFilter('TAKER')}
@@ -201,7 +199,7 @@ export default function MePage() {
                 : 'text-zinc-500 hover:text-zinc-200 hover:bg-zinc-800'
             }`}
           >
-            As_Counterparty ({takerCount})
+            AS COUNTERPARTY ({takerCount})
           </button>
         </div>
       </div>
@@ -210,13 +208,13 @@ export default function MePage() {
       {loading ? (
         <div className="flex items-center justify-center py-20 text-[12px] text-zinc-500 gap-3">
           <div className="w-3 h-3 bg-[#c8f542] animate-pulse-soft" />
-          FETCHING_ONCHAIN_RECORDS...
+          FETCHING ON-CHAIN RECORDS...
         </div>
       ) : filteredPacts.length === 0 ? (
         <div className="text-center py-16 surface-1 rounded-none border border-zinc-800 p-8 space-y-3 bg-[#0c0d10]">
           <p className="text-[12px] text-zinc-500 uppercase tracking-widest">No pact contracts found for this account.</p>
           <Link href="/new" className="text-[#c8f542] inline-block px-5 py-2 text-[12px] uppercase tracking-widest underline">
-            init_new_pact
+            CREATE NEW PACT
           </Link>
         </div>
       ) : (
@@ -239,6 +237,6 @@ export default function MePage() {
           })}
         </div>
       )}
-    </main>
+    </div>
   )
 }

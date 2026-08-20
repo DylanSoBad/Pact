@@ -1,155 +1,162 @@
 'use client'
 
-import { useEffect, useState } from 'react'
-import { useParams, useSearchParams } from 'next/navigation'
+import { useState, useEffect, use } from 'react'
 import Link from 'next/link'
-import PactStateMachine from '../../../components/PactStateMachine'
 import { useAccount, useWriteContract, useWaitForTransactionReceipt } from 'wagmi'
-import { fetchSinglePact, fetchReputation, PactData } from '../../../lib/reads'
-import { PACT_ABI, ERC20_ABI } from '../../../lib/abi'
-import { kindLabel, formatAmount, tokenSymbol, formatDate, truncateAddress, isTerminal, isZeroAddress } from '../../../lib/format'
-import { verifyTerms } from '../../../lib/terms'
-import Countdown from '../../../components/Countdown'
+import { fetchPacts, fetchReputation, PactData } from '../../../lib/reads'
 import { getPactAddress } from '../../../lib/arc'
-import { toast } from 'sonner'
+import {
+  kindLabel, statusLabel, formatAmount, tokenSymbol,
+  formatDate, truncateAddress, isZeroAddress, isTerminal
+} from '../../../lib/format'
+import { PACT_ABI, ERC20_ABI } from '../../../lib/abi'
+import { verifyTerms } from '../../../lib/terms'
+import PactStateMachine from '../../../components/PactStateMachine'
+import Countdown from '../../../components/Countdown'
 
-export default function PactDetailPage() {
-  const params = useParams()
-  const searchParams = useSearchParams()
-  const id = Number(params.id)
-  const termsParam = searchParams.get('terms')
-
+export default function PactDetailPage({ params }: { params: Promise<{ id: string }> }) {
+  const resolvedParams = use(params)
+  const id = resolvedParams.id
   const { address, isConnected } = useAccount()
   const [pact, setPact] = useState<PactData | null>(null)
   const [loading, setLoading] = useState(true)
+  const [rpcError, setRpcError] = useState(false)
+  const [lastFetch, setLastFetch] = useState<number>(Date.now())
   const [proofInput, setProofInput] = useState('')
-  const [verifyInput, setVerifyInput] = useState(termsParam || '')
   const [termsVerified, setTermsVerified] = useState<boolean | null>(null)
-  const [makerRep, setMakerRep] = useState<{ cleared: number; slashed: number; notional: bigint } | null>(null)
-  const [takerRep, setTakerRep] = useState<{ cleared: number; slashed: number; notional: bigint } | null>(null)
-  const [showShareModal, setShowShareModal] = useState(false)
+  const [verifyInput, setVerifyInput] = useState('')
   const [showDisputeModal, setShowDisputeModal] = useState(false)
-  const [disputeConfirmed, setDisputeConfirmed] = useState(false)
+  const [termsParam, setTermsParam] = useState<string | null>(null)
   const [copiedLink, setCopiedLink] = useState(false)
   const [copiedSummary, setCopiedSummary] = useState(false)
-  const [notificationsEnabled, setNotificationsEnabled] = useState(false)
-  const [lastFetch, setLastFetch] = useState(Date.now())
-  const [rpcError, setRpcError] = useState(false)
 
+  const [makerRep, setMakerRep] = useState<{ cleared: number; slashed: number; notional: bigint } | null>(null)
+  const [takerRep, setTakerRep] = useState<{ cleared: number; slashed: number; notional: bigint } | null>(null)
 
-  useEffect(() => { if (id) document.title = `PACT · #${id.toString().padStart(4, '0')}` }, [id])
-
-  const { writeContract, data: txHash, isPending: txPending, error: writeError } = useWriteContract()
-  const { isSuccess: txConfirmed, isLoading: txWaiting } = useWaitForTransactionReceipt({ hash: txHash })
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      const sp = new URLSearchParams(window.location.search)
+      setTermsParam(sp.get('terms'))
+    }
+  }, [])
 
   async function load() {
-    if (document.hidden) return
     try {
-      const d = await fetchSinglePact(id)
-      if (d) {
-        if (pact && pact.status !== d.status && notificationsEnabled && typeof window !== 'undefined' && 'Notification' in window) {
-          if (Notification.permission === 'granted') {
-            new Notification(`PACT #${id} Status Updated`, {
-              body: `Current state is now: ${d.status === 2 ? 'ACTIVE' : d.status === 3 ? 'PROOF SUBMITTED' : d.status === 4 ? 'CLEARED' : 'SETTLED'}`,
-              icon: '/logo.png'
-            })
-          }
+      const contractAddress = getPactAddress()
+      const data = await fetchPacts(50, contractAddress)
+      const found = data.find(p => p.id.toString() === id)
+      if (found) {
+        setPact(found)
+        document.title = `PACT #${found.id} · ${kindLabel(found.kind)}`
+
+        // Fetch reputation for maker and taker asynchronously
+        fetchReputation(found.maker as `0x${string}`, contractAddress).then(setMakerRep)
+        if (!isZeroAddress(found.taker)) {
+          fetchReputation(found.taker as `0x${string}`, contractAddress).then(setTakerRep)
         }
 
-        setPact(d)
-        setRpcError(false)
-        setLastFetch(Date.now())
-        if (termsParam) setTermsVerified(verifyTerms(termsParam, d.termsHash as `0x${string}`))
-        setMakerRep(await fetchReputation(d.maker as `0x${string}`))
-        if (!isZeroAddress(d.taker)) {
-          setTakerRep(await fetchReputation(d.taker as `0x${string}`))
+        // Verify terms from URL param if available
+        if (typeof window !== 'undefined') {
+          const sp = new URLSearchParams(window.location.search)
+          const termsFromUrl = sp.get('terms')
+          if (termsFromUrl) {
+            const raw = decodeURIComponent(termsFromUrl)
+            const ok = verifyTerms(raw, found.termsHash as `0x${string}`)
+            setTermsVerified(ok)
+          }
         }
       }
-    } catch { setRpcError(true) }
-    finally { setLoading(false) }
+      setRpcError(false)
+      setLastFetch(Date.now())
+    } catch (err) {
+      console.error(err)
+      setRpcError(true)
+    } finally {
+      setLoading(false)
+    }
   }
 
   useEffect(() => {
-    let ok = true; load()
-    const iv = setInterval(() => { if (ok && !document.hidden) load() }, 10000)
+    let ok = true
+    load()
+    const iv = setInterval(() => { if (ok && !document.hidden) load() }, 3000)
     const vis = () => { if (!document.hidden) load() }
     document.addEventListener('visibilitychange', vis)
     return () => { ok = false; clearInterval(iv); document.removeEventListener('visibilitychange', vis) }
-  }, [id, termsParam, notificationsEnabled])
+  }, [id])
 
-  useEffect(() => { 
-    if (txConfirmed) {
-      toast.success('Transaction confirmed on Circle Arc!')
-      load() 
-    }
-  }, [txConfirmed])
+  const { writeContract, data: txHash, isPending: txPending } = useWriteContract()
+  const { isLoading: txWaiting, isSuccess: txSuccess } = useWaitForTransactionReceipt({ hash: txHash })
 
   useEffect(() => {
-    if (writeError) {
-      toast.error(writeError.message || 'Transaction failed')
+    if (txSuccess) {
+      setTimeout(() => load(), 1500)
     }
-  }, [writeError])
+  }, [txSuccess])
 
-  const requestNotifications = () => {
-    if (typeof window !== 'undefined' && 'Notification' in window) {
-      Notification.requestPermission().then(permission => {
-        if (permission === 'granted') {
-          setNotificationsEnabled(true)
-          new Notification('PACT Notifications Active', {
-            body: `You will be alerted when Pact #${id} receives funds or proof.`,
-            icon: '/logo.png'
-          })
-        }
-      })
-    }
-  }
+  const isMaker = !!address && !!pact && pact.maker.toLowerCase() === address.toLowerCase()
+  const isTaker = !!address && !!pact && !isZeroAddress(pact.taker) && pact.taker.toLowerCase() === address.toLowerCase()
+  const isOpenCandidate = !!address && !!pact && isZeroAddress(pact.taker) && !isMaker
 
-  const isMaker = address && pact && pact.maker.toLowerCase() === address.toLowerCase()
-  const isTaker = address && pact && !isZeroAddress(pact.taker) && pact.taker.toLowerCase() === address.toLowerCase()
-  const isOpenTaker = pact && isZeroAddress(pact.taker) && !isMaker
+  const canFund = isConnected && !!pact && pact.status === 0 && (isTaker || isOpenCandidate)
+  const canProof = isConnected && !!pact && pact.status === 2 && (isMaker || isTaker)
+  const canRelease = isConnected && !!pact && (pact.status === 2 || pact.status === 3) && isMaker
+  const canCancel = isConnected && !!pact && pact.status === 0 && isMaker
+  const canReject = isConnected && !!pact && pact.status === 3 && isMaker
+  const canExpire = isConnected && !!pact && pact.status === 2 && Math.floor(Date.now() / 1000) > pact.deadline
 
-  const currentEffectiveStatus = pact ? pact.status : 0
-
-  const canFund = pact && pact.status === 0 && !isMaker && (isOpenTaker || isTaker)
-  const canCancel = pact && pact.status === 0 && isMaker
-  const canProof = pact && pact.status === 2 && isTaker && pact.kind !== 1
-  const canReject = pact && pact.status === 3 && isMaker && pact.kind !== 1
-  const canRelease = pact && ((pact.kind === 1 && pact.status === 2 && (isMaker || isTaker)) || (pact.kind !== 1 && (pact.status === 2 || pact.status === 3) && isMaker))
-  const expired = pact && Number(pact.deadline) < Math.floor(Date.now() / 1000)
-  const canExpire = pact && expired && !isTerminal(pact.status) && [0, 2, 3].includes(pact.status)
-
-  const doFund = () => {
-    if (!pact) return
-    const pactAddress = getPactAddress()
-    if (pact.amountTaker > 0n) {
-      writeContract({ address: pact.tokenTaker as `0x${string}`, abi: ERC20_ABI, functionName: 'approve', args: [pactAddress, pact.amountTaker] })
-    }
-    writeContract({ address: pactAddress, abi: PACT_ABI, functionName: 'fund', args: [BigInt(id)] })
-  }
-
-  const doCancel = () => writeContract({ address: getPactAddress(), abi: PACT_ABI, functionName: 'cancel', args: [BigInt(id)] })
+  // Optimistic effective status for real-time progress transitions
+  const currentEffectiveStatus = txPending || txWaiting
+    ? (canFund ? 2 : canProof ? 3 : canRelease ? 4 : canCancel ? 1 : pact?.status ?? 0)
+    : pact?.status ?? 0
 
   const doProof = () => {
     if (!proofInput) return
-    import('viem').then(({ keccak256, toHex }) => {
+    const encoder = new TextEncoder()
+    const data = encoder.encode(proofInput)
+    crypto.subtle.digest('SHA-256', data).then(hashBuffer => {
+      const hashArray = Array.from(new Uint8Array(hashBuffer))
+      const hashHex = '0x' + hashArray.map(b => b.toString(16).padStart(2, '0')).join('') as `0x${string}`
       writeContract({
         address: getPactAddress(),
         abi: PACT_ABI,
         functionName: 'submitProof',
-        args: [BigInt(id), keccak256(toHex(new TextEncoder().encode(proofInput)))]
+        args: [BigInt(id), hashHex]
       })
     })
   }
 
+  const doFund = () => {
+    if (!pact) return
+    const pactAddress = getPactAddress()
+
+    // If taker bond is required, execute approve -> fund flow
+    if (pact.amountTaker > 0n) {
+      writeContract({
+        address: pact.tokenTaker as `0x${string}`,
+        abi: ERC20_ABI,
+        functionName: 'approve',
+        args: [pactAddress, pact.amountTaker]
+      })
+      // Trigger fund upon confirmation
+      return
+    }
+
+    writeContract({
+      address: pactAddress,
+      abi: PACT_ABI,
+      functionName: 'fund',
+      args: [BigInt(id)]
+    })
+  }
+
+  const doCancel = () => writeContract({ address: getPactAddress(), abi: PACT_ABI, functionName: 'cancel', args: [BigInt(id)] })
   const doReject = () => {
     writeContract({ address: getPactAddress(), abi: PACT_ABI, functionName: 'reject', args: [BigInt(id)] })
     setShowDisputeModal(false)
   }
-
   const doRelease = () => writeContract({ address: getPactAddress(), abi: PACT_ABI, functionName: 'release', args: [BigInt(id)] })
   const doExpire = () => writeContract({ address: getPactAddress(), abi: PACT_ABI, functionName: 'expire', args: [BigInt(id)] })
-
-
 
   const currentUrl = typeof window !== 'undefined' ? window.location.href : ''
   const copyShareLink = () => {
@@ -167,32 +174,31 @@ export default function PactDetailPage() {
   }
 
   if (loading) return (
-    <main className="min-h-screen max-w-[660px] mx-auto px-5 @md:px-8 pb-20 font-mono">
-                  <div className="flex items-center justify-center py-24 text-[13px] text-zinc-500 gap-3">
+    <div className="w-full max-w-terminal mx-auto font-mono">
+      <div className="flex items-center justify-center py-24 text-[13px] text-zinc-500 gap-3">
         <div className="w-3 h-3 bg-[#c8f542] animate-pulse-soft" />
-        LOADING_PACT_DATA...
+        LOADING PACT DATA...
       </div>
-    </main>
+    </div>
   )
 
   if (!pact) return (
-    <main className="min-h-screen max-w-[660px] mx-auto px-5 @md:px-8 pb-20 font-mono">
-                  <div className="text-center py-24 space-y-4 border border-zinc-800 bg-[#0c0d10] mt-8">
+    <div className="w-full max-w-terminal mx-auto font-mono">
+      <div className="text-center py-24 space-y-4 border border-zinc-800 bg-[#0c0d10] mt-8 px-4">
         <p className="text-[13px] text-zinc-500">Pact #{id.toString().padStart(4, '0')} does not exist or is uninitialized.</p>
-        <Link href="/" className="text-[12px] text-[#c8f542] underline inline-block">← return_to_feed</Link>
+        <Link href="/" className="text-[12px] text-[#c8f542] underline inline-block">← RETURN TO FEED</Link>
       </div>
-    </main>
+    </div>
   )
 
   const busy = txPending || txWaiting
 
   return (
-    <main className="min-h-screen max-w-[660px] mx-auto px-5 @md:px-8 pb-24 overflow-x-hidden font-mono">
-            
+    <div className="w-full max-w-terminal mx-auto font-mono">
       {/* Header & Quick Action Share */}
       <div className="flex items-center justify-between mb-6 animate-enter border-b border-zinc-800 pb-4">
         <div>
-          <Link href="/" className="text-[12px] text-zinc-500 hover:text-[#c8f542] transition-colors underline mb-2 inline-block">← return_to_feed</Link>
+          <Link href="/" className="text-[12px] text-zinc-500 hover:text-[#c8f542] transition-colors underline mb-2 inline-block">← RETURN TO FEED</Link>
           <div className="flex items-center gap-3">
             <h1 className="text-[20px] font-bold text-white uppercase tracking-widest">
               &gt; PACT #{id.toString().padStart(4, '0')}
@@ -221,8 +227,6 @@ export default function PactDetailPage() {
 
       {/* Multi-step Visual Progress State Machine */}
       <PactStateMachine status={currentEffectiveStatus} />
-
-
 
       {/* Countdown Timer for Active Deals */}
       {pact.status === 2 && (
@@ -259,13 +263,13 @@ export default function PactDetailPage() {
             <div className="text-[14px] font-bold text-zinc-400">
               {pact.amountTaker > 0n
                 ? `$${formatAmount(pact.amountTaker)} ${tokenSymbol(pact.tokenTaker)}`
-                : 'NO_INITIAL_COLLATERAL'}
+                : 'NO INITIAL COLLATERAL'}
             </div>
           </div>
           <div className="text-right">
             <span className="text-[12px] text-zinc-500 block mb-1 uppercase tracking-widest">Counterparty Address</span>
             <span className="font-mono text-[13px] text-zinc-400">
-              {isZeroAddress(pact.taker) ? 'OPEN_CANDIDATE_POOL' : truncateAddress(pact.taker)}
+              {isZeroAddress(pact.taker) ? 'OPEN CANDIDATE POOL' : truncateAddress(pact.taker)}
             </span>
           </div>
         </div>
@@ -279,7 +283,7 @@ export default function PactDetailPage() {
             <span className={`text-[10px] font-mono px-2 py-0.5 border ${
               termsVerified ? 'bg-[#c8f542]/10 text-[#c8f542] border-[#c8f542]/30' : 'bg-rose-500/10 text-rose-400 border-rose-500/30'
             }`}>
-              {termsVerified ? 'SHA256_MATCH' : 'INTEGRITY_MISMATCH'}
+              {termsVerified ? 'SHA-256 VERIFIED' : 'INTEGRITY MISMATCH'}
             </span>
           )}
         </div>
@@ -359,8 +363,6 @@ export default function PactDetailPage() {
           )}
         </div>
       )}
-
-
 
       {/* Primary & Secondary Role Actions */}
       {isConnected && !isTerminal(pact.status) && (
@@ -457,7 +459,7 @@ export default function PactDetailPage() {
             </div>
 
             <p className="text-[13px] text-zinc-400 leading-relaxed">
-                  Rejecting fulfillment marks this pact as <strong className="text-rose-400">SLASHED</strong>. The counterparty's bond will be forfeited to the maker according to deterministic smart contract logic.
+              Rejecting fulfillment marks this pact as <strong className="text-rose-400">SLASHED</strong>. The counterparty&apos;s bond will be forfeited to the maker according to deterministic smart contract logic.
             </p>
 
             <div className="flex gap-3 pt-4 border-t border-zinc-800">
@@ -477,6 +479,6 @@ export default function PactDetailPage() {
           </div>
         </div>
       )}
-    </main>
+    </div>
   )
 }
