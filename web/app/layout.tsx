@@ -1,4 +1,4 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import { IBM_Plex_Mono, IBM_Plex_Sans } from "next/font/google";
 import "./globals.css";
 import Web3Provider from "../components/Web3Provider";
@@ -8,25 +8,71 @@ import SideNav from "../components/SideNav";
 import BottomNav from "../components/BottomNav";
 import Link from "next/link";
 import AppShell from "../components/AppShell";
+import A11yAuditor from "../components/A11yAuditor";
 
 const plexMono = IBM_Plex_Mono({
   variable: "--font-ibm-plex-mono",
   subsets: ["latin"],
   weight: ["400", "500", "700"],
+  display: "swap",
+  preload: true,
 });
 
 const plexSans = IBM_Plex_Sans({
   variable: "--font-ibm-plex-sans",
   subsets: ["latin"],
   weight: ["400", "500", "600", "700"],
+  display: "swap",
+  preload: true,
 });
 
+export const viewport: Viewport = {
+  themeColor: "#07080a",
+  colorScheme: "dark",
+};
+
 export const metadata: Metadata = {
+  metadataBase: new URL("https://pact-protocol-five.vercel.app"),
   title: {
-    default: "PACT Protocol - The Tape",
+    default: "PACT Protocol — Economic Contracts on ARC",
     template: "PACT · %s",
   },
-  description: "A promise with money locked behind it. economic contracts with collateral. not a dex.",
+  description: "Create, manage, and track economic contracts with collateral on ARC Testnet. Not a DEX — real agreements.",
+  keywords: ["PACT Protocol", "Arc Testnet", "Smart Contracts", "Collateral", "Economic Contracts", "Web3", "Blockchain"],
+  authors: [{ name: "PACT Team" }],
+  openGraph: {
+    title: "PACT Protocol — Economic Contracts on ARC",
+    description: "Create, manage, and track economic contracts with collateral on ARC Testnet. Not a DEX — real agreements.",
+    url: "https://pact-protocol-five.vercel.app",
+    siteName: "PACT Protocol",
+    images: [
+      {
+        url: "/og-image.png",
+        width: 1200,
+        height: 630,
+        alt: "PACT Protocol — The Tape",
+      },
+    ],
+    locale: "en_US",
+    type: "website",
+  },
+  twitter: {
+    card: "summary_large_image",
+    title: "PACT Protocol — Economic Contracts on ARC",
+    description: "Create, manage, and track economic contracts with collateral on ARC Testnet. Not a DEX — real agreements.",
+    images: ["/og-image.png"],
+  },
+  robots: {
+    index: true,
+    follow: true,
+    googleBot: {
+      index: true,
+      follow: true,
+      "max-video-preview": -1,
+      "max-image-preview": "large",
+      "max-snippet": -1,
+    },
+  },
   icons: {
     icon: "/icon.png",
     shortcut: "/icon.png",
@@ -45,6 +91,7 @@ export default function RootLayout({
         <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&display=swap" rel="stylesheet" />
       </head>
       <body className={`${plexMono.variable} ${plexSans.variable} bg-surface-black text-on-background selection:bg-primary-fixed selection:text-on-primary-fixed min-h-screen flex flex-col antialiased`}>
+        <A11yAuditor />
         <Web3Provider>
           <AppShell>
             <Navbar />
@@ -55,7 +102,11 @@ export default function RootLayout({
             <BottomNav />
             
             {/* Floating Action Button (FAB) */}
-            <Link href="/new" className="hidden @lg:flex fixed bottom-xl right-xl z-40 items-center justify-center gap-2 px-6 py-3 border border-primary-fixed bg-primary-fixed text-on-primary-fixed font-headline-mono text-headline-mono uppercase rounded-DEFAULT shadow-[0_0_15px_rgba(198,243,64,0.3)] hover:shadow-[0_0_25px_rgba(198,243,64,0.5)] hover:bg-transparent hover:text-primary-fixed transition-all duration-200">
+            <Link 
+              href="/new" 
+              aria-label="Create new contract agreement"
+              className="hidden @lg:flex fixed bottom-xl right-xl z-40 items-center justify-center gap-2 px-6 py-3 border border-primary-fixed bg-primary-fixed text-on-primary-fixed font-headline-mono text-headline-mono uppercase rounded-DEFAULT shadow-[0_0_15px_rgba(198,243,64,0.3)] hover:shadow-[0_0_25px_rgba(198,243,64,0.5)] hover:bg-transparent hover:text-primary-fixed transition-all duration-200 focus-visible:ring-2 focus-visible:ring-primary-fixed focus-visible:outline-none"
+            >
               <span className="material-symbols-outlined">add</span>
               NEW PACT
             </Link>

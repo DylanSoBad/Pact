@@ -1,75 +1,89 @@
 'use client'
 
-import { useState, useEffect, useMemo } from 'react'
+import { useState, useEffect, useMemo, useCallback } from 'react'
 import Link from 'next/link'
+import { useQuery } from '@tanstack/react-query'
 import TapeLine from '../components/TapeLine'
+import TableSkeleton from '../components/TableSkeleton'
+import NetworkStatusBanner from '../components/NetworkStatusBanner'
+import ErrorBoundary from '../components/ErrorBoundary'
 import { fetchPacts, PactData } from '../lib/reads'
 import { getPactAddress } from '../lib/arc'
-import { useAccount, useBlockNumber } from 'wagmi'
+import { useBlockNumber } from 'wagmi'
+import { usePactStore, FilterCategory } from '../lib/store/usePactStore'
+import { usePactStream } from '../hooks/usePactStream'
 import {
   kindLabel, statusLabel, formatAmount, tokenSymbol,
   formatTimestamp, truncateAddress
 } from '../lib/format'
 
-export default function Home() {
-  const { address } = useAccount()
-  const [filter, setFilter] = useState('ALL')
-  const [pacts, setPacts] = useState<PactData[]>([])
-  const [loading, setLoading] = useState(true)
-  const [lastFetchTime, setLastFetchTime] = useState<number>(Date.now())
+function TapeDashboard() {
+  const { filter, setFilter, sseConnected, lastBlockTimestamp, setBlockInfo } = usePactStore()
   const [secondsAgo, setSecondsAgo] = useState(0)
 
-  const { data: blockNumber } = useBlockNumber({ watch: true })
+  // Wagmi block number watcher
+  const { data: wagmiBlockNumber } = useBlockNumber({ watch: true })
 
-  useEffect(() => { document.title = 'PACT Protocol - The Tape' }, [])
-
-  async function loadData() {
-    if (document.hidden) return
-    try {
+  // TanStack Query for caching and smart RPC fetching
+  const {
+    data: pacts = [],
+    isLoading,
+    isError,
+    refetch,
+    isFetching,
+  } = useQuery({
+    queryKey: ['pacts', getPactAddress()],
+    queryFn: async () => {
       const contractAddress = getPactAddress()
-      const data = await fetchPacts(50, contractAddress)
-      setPacts(data)
-      setLastFetchTime(Date.now())
-      setSecondsAgo(0)
-    } catch (err) {
-      console.error('RPC Multicall poll error:', err)
-    } finally {
-      setLoading(false)
+      return await fetchPacts(50, contractAddress)
+    },
+    staleTime: 5000,
+    gcTime: 60000,
+    retry: 2,
+  })
+
+  // SSE real-time stream listener
+  const handleNewBlock = useCallback((blockNum: bigint) => {
+    refetch()
+  }, [refetch])
+
+  usePactStream(handleNewBlock)
+
+  // Sync Wagmi block update
+  useEffect(() => {
+    if (wagmiBlockNumber) {
+      setBlockInfo(wagmiBlockNumber)
+      refetch()
     }
-  }
+  }, [wagmiBlockNumber, setBlockInfo, refetch])
 
+  // Timer counter for "Last block: Xs ago"
   useEffect(() => {
-    let ok = true
-    loadData()
-    const vis = () => { if (!document.hidden && ok) loadData() }
-    document.addEventListener('visibilitychange', vis)
-    return () => { ok = false; document.removeEventListener('visibilitychange', vis) }
-  }, [])
-
-  useEffect(() => {
-    if (blockNumber) loadData()
-  }, [blockNumber])
-
-  useEffect(() => {
-    const t = setInterval(() => setSecondsAgo(p => p + 1), 1000)
+    const updateTimer = () => {
+      const diff = Math.max(0, Math.floor((Date.now() - lastBlockTimestamp) / 1000))
+      setSecondsAgo(diff)
+    }
+    updateTimer()
+    const t = setInterval(updateTimer, 1000)
     return () => clearInterval(t)
-  }, [lastFetchTime])
+  }, [lastBlockTimestamp])
 
-  const filtered = useMemo(() =>
-    pacts.filter(p => {
+  const filtered = useMemo(() => {
+    return (pacts as PactData[]).filter((p) => {
       if (filter === 'ALL') return true
       if (filter === 'LIVE') return p.status === 2 || p.status === 3
       if (filter === 'DELIVERY') return p.kind === 0
       if (filter === 'FX') return p.kind === 1
       if (filter === 'JOB') return p.kind === 2
       return true
-    }), [pacts, filter])
+    })
+  }, [pacts, filter])
 
-  const getFilterClass = (f: string) => {
+  const getFilterClass = (f: FilterCategory) => {
     if (filter === f) {
-      return 'px-2.5 @md:px-3 py-1 border border-primary-fixed text-primary-fixed bg-primary-fixed/10 rounded-DEFAULT text-[11px] font-label-caps uppercase transition-all'
+      return 'px-2.5 @md:px-3 py-1 border border-primary-fixed text-primary-fixed bg-primary-fixed/10 rounded-DEFAULT text-[11px] font-label-caps uppercase transition-all focus-visible:ring-2 focus-visible:ring-primary-fixed'
     }
-    return 'px-2.5 @md:px-3 py-1 border border-outline-hairline text-text-muted hover:border-text-dim hover:text-on-surface transition-colors rounded-DEFAULT text-[11px] font-label-caps uppercase'
+    return 'px-2.5 @md:px-3 py-1 border border-outline-hairline text-text-muted hover:border-text-dim hover:text-on-surface transition-colors rounded-DEFAULT text-[11px] font-label-caps uppercase focus-visible:ring-2 focus-visible:ring-primary-fixed'
   }
 
   return (
@@ -84,61 +98,128 @@ export default function Home() {
         </p>
       </header>
 
+      {/* Network Error Banner */}
+      {isError && (
+        <div className="@lg:max-w-terminal @lg:mx-auto">
+          <NetworkStatusBanner onRetry={() => refetch()} isRetrying={isFetching} />
+        </div>
+      )}
+
       {/* Filters & Telemetry Strip */}
-      <div className="flex flex-col @sm:flex-row justify-between items-start @sm:items-center gap-3 mb-3 @md:mb-md @lg:max-w-terminal @lg:mx-auto animate-enter" style={{ animationDelay: '100ms' }}>
-        {/* Filter Chips - smooth horizontal scroll on small devices */}
-        <div className="flex items-center gap-1.5 @md:gap-2 font-label-caps text-label-caps uppercase overflow-x-auto hide-scroll w-full @sm:w-auto pb-1 @sm:pb-0">
-          <button onClick={() => setFilter('ALL')} className={getFilterClass('ALL')}>ALL</button>
-          <button onClick={() => setFilter('DELIVERY')} className={getFilterClass('DELIVERY')}>DELIVERY</button>
-          <button onClick={() => setFilter('FX')} className={getFilterClass('FX')}>FX</button>
-          <button onClick={() => setFilter('JOB')} className={getFilterClass('JOB')}>JOB</button>
+      <div 
+        className="flex flex-col @sm:flex-row justify-between items-start @sm:items-center gap-3 mb-3 @md:mb-md @lg:max-w-terminal @lg:mx-auto animate-enter" 
+        style={{ animationDelay: '100ms' }}
+      >
+        {/* Filter Chips with Accessible Group */}
+        <div 
+          role="group" 
+          aria-label="Filter contract categories" 
+          className="flex items-center gap-1.5 @md:gap-2 font-label-caps text-label-caps uppercase overflow-x-auto hide-scroll w-full @sm:w-auto pb-1 @sm:pb-0"
+        >
+          <button 
+            onClick={() => setFilter('ALL')} 
+            aria-pressed={filter === 'ALL'}
+            className={getFilterClass('ALL')}
+          >
+            ALL
+          </button>
+          <button 
+            onClick={() => setFilter('DELIVERY')} 
+            aria-pressed={filter === 'DELIVERY'}
+            className={getFilterClass('DELIVERY')}
+          >
+            DELIVERY
+          </button>
+          <button 
+            onClick={() => setFilter('FX')} 
+            aria-pressed={filter === 'FX'}
+            className={getFilterClass('FX')}
+          >
+            FX
+          </button>
+          <button 
+            onClick={() => setFilter('JOB')} 
+            aria-pressed={filter === 'JOB'}
+            className={getFilterClass('JOB')}
+          >
+            JOB
+          </button>
           <button 
             onClick={() => setFilter('LIVE')} 
-            className={`flex items-center gap-1.5 shrink-0 ${filter === 'LIVE' ? 'px-2.5 @md:px-3 py-1 border border-status-error text-status-error bg-status-error/10 rounded-DEFAULT text-[11px] font-label-caps uppercase' : 'px-2.5 @md:px-3 py-1 border border-outline-hairline text-text-muted hover:border-status-error hover:text-status-error transition-colors rounded-DEFAULT text-[11px] font-label-caps uppercase'}`}
+            aria-pressed={filter === 'LIVE'}
+            className={`flex items-center gap-1.5 shrink-0 focus-visible:ring-2 focus-visible:ring-status-error ${
+              filter === 'LIVE' 
+                ? 'px-2.5 @md:px-3 py-1 border border-status-error text-status-error bg-status-error/10 rounded-DEFAULT text-[11px] font-label-caps uppercase' 
+                : 'px-2.5 @md:px-3 py-1 border border-outline-hairline text-text-muted hover:border-status-error hover:text-status-error transition-colors rounded-DEFAULT text-[11px] font-label-caps uppercase'
+            }`}
           >
-            <span className="w-1.5 h-1.5 rounded-full bg-status-error"></span> LIVE
+            <span className="w-1.5 h-1.5 rounded-full bg-status-error" /> LIVE
           </button>
         </div>
 
-        {/* Real-time block counter */}
-        <div className="font-code-hash text-[11px] @md:text-code-hash text-text-muted flex items-center gap-1.5 @md:gap-2 bg-surface-container-low px-2 py-1 rounded-DEFAULT border border-outline-hairline shrink-0">
+        {/* Real-time block & stream counter */}
+        <div 
+          role="status"
+          aria-live="polite"
+          className="font-code-hash text-[11px] @md:text-code-hash text-text-muted flex items-center gap-1.5 @md:gap-2 bg-surface-container-low px-2.5 py-1 rounded-DEFAULT border border-outline-hairline shrink-0"
+        >
+          <span 
+            className={`w-2 h-2 rounded-full ${sseConnected ? 'bg-primary-fixed radar-pulse' : 'bg-status-warning'}`} 
+            title={sseConnected ? 'Real-time SSE connected' : 'Polling mode active'}
+          />
           <span className="material-symbols-outlined text-[13px] @md:text-[14px]">timer</span>
           Last block: <span className="text-primary-fixed">{secondsAgo}s ago</span>
         </div>
       </div>
 
-      {/* The Tape (Data Grid) */}
-      <div className="@lg:max-w-terminal @lg:mx-auto bg-[#0c0d10] border border-outline-hairline rounded-DEFAULT overflow-hidden animate-enter" style={{ animationDelay: '150ms' }}>
+      {/* The Tape (Semantic Data Table) */}
+      <div 
+        role="table" 
+        aria-label="PACT economic contracts feed"
+        className="@lg:max-w-terminal @lg:mx-auto bg-[#0c0d10] border border-outline-hairline rounded-DEFAULT overflow-hidden animate-enter" 
+        style={{ animationDelay: '150ms' }}
+      >
         {/* Table Header (Desktop) */}
-        <div className="hidden @md:grid grid-cols-5 gap-4 px-md py-sm border-b border-outline-hairline bg-surface-container-low font-label-caps text-label-caps text-text-muted uppercase">
-          <div className="col-span-1">TIME / ID</div>
-          <div className="col-span-1">KIND</div>
-          <div className="col-span-1 text-right">AMOUNT</div>
-          <div className="col-span-1 text-center">STATUS</div>
-          <div className="col-span-1 text-right">COUNTERPARTY</div>
+        <div 
+          role="rowgroup" 
+          className="hidden @md:grid grid-cols-5 gap-4 px-md py-sm border-b border-outline-hairline bg-surface-container-low font-label-caps text-label-caps text-text-muted uppercase"
+        >
+          <div role="row" className="contents">
+            <div role="columnheader" className="col-span-1">TIME / ID</div>
+            <div role="columnheader" className="col-span-1">KIND</div>
+            <div role="columnheader" className="col-span-1 text-right">AMOUNT</div>
+            <div role="columnheader" className="col-span-1 text-center">STATUS</div>
+            <div role="columnheader" className="col-span-1 text-right">COUNTERPARTY</div>
+          </div>
         </div>
 
         {/* Table Header (Mobile) */}
-        <div className="@md:hidden flex items-center justify-between px-3 py-2 border-b border-outline-hairline bg-surface-container-low font-label-caps text-[10px] text-text-muted uppercase tracking-wider">
-          <span>CONTRACT / TIME</span>
-          <span>AMOUNT / COUNTERPARTY</span>
+        <div 
+          role="rowgroup" 
+          className="@md:hidden flex items-center justify-between px-3 py-2 border-b border-outline-hairline bg-surface-container-low font-label-caps text-[10px] text-text-muted uppercase tracking-wider"
+        >
+          <div role="row" className="contents">
+            <div role="columnheader">CONTRACT / TIME</div>
+            <div role="columnheader">AMOUNT / COUNTERPARTY</div>
+          </div>
         </div>
 
         {/* Tape Rows */}
-        <div className="flex flex-col font-code-hash text-code-hash divide-y divide-outline-hairline/40">
-          {loading ? (
-            <div className="flex items-center justify-center py-20 text-[13px] text-text-muted gap-3 font-code-hash">
-              <div className="w-2.5 h-2.5 bg-primary-fixed radar-pulse rounded-full" />
-              POLLING CHAIN DATA...
-            </div>
+        <div role="rowgroup" className="flex flex-col font-code-hash text-code-hash divide-y divide-outline-hairline/40">
+          {isLoading ? (
+            <TableSkeleton rows={6} />
           ) : filtered.length === 0 ? (
-            <div className="flex flex-col items-center justify-center py-20 text-center">
+            <div 
+              role="status" 
+              aria-live="polite" 
+              className="flex flex-col items-center justify-center py-20 text-center"
+            >
               <p className="font-code-hash text-text-muted text-[12px] mb-1">
                 DATA STREAM EMPTY
               </p>
               <Link
                 href="/new"
-                className="font-code-hash text-primary-fixed underline text-[12px] mt-3"
+                className="font-code-hash text-primary-fixed underline text-[12px] mt-3 focus-visible:ring-2 focus-visible:ring-primary-fixed focus-visible:outline-none"
               >
                 &gt; create new pact
               </Link>
@@ -175,5 +256,13 @@ export default function Home() {
         </div>
       </div>
     </div>
+  )
+}
+
+export default function Home() {
+  return (
+    <ErrorBoundary>
+      <TapeDashboard />
+    </ErrorBoundary>
   )
 }

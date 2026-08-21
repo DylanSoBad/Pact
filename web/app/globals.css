@@ -51,8 +51,9 @@
   --color-on-surface-variant: #c4c9af;
   --color-primary: #ffffff;
   --color-on-surface: #e3e2e5;
-  --color-text-dim: #71717a;
-  --color-outline-border: #27272a;
+  --color-text-muted: #a1a1aa;
+  --color-text-dim: #9ca3af;
+  --color-outline-border: #3f3f46;
   --color-on-error: #690005;
   --color-on-tertiary-fixed: #031e2e;
   --color-on-primary-container: #556d00;
@@ -131,11 +132,11 @@ body {
   color: var(--color-on-primary-fixed);
 }
 
-/* ─── Focus ─── */
+/* ─── Focus & A11y ─── */
 *:focus-visible {
   outline: none;
-  box-shadow: 0 0 0 1px var(--color-primary-fixed);
-  border-radius: 0;
+  box-shadow: 0 0 0 2px var(--color-primary-fixed);
+  border-radius: 2px;
 }
 
 /* Terminal input prompt */

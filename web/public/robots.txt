@@ -1,0 +1,4 @@
+User-agent: *
+Allow: /
+
+Sitemap: https://pact-protocol-five.vercel.app/sitemap.xml

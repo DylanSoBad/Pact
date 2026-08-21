@@ -2,7 +2,17 @@
 
 import Link from 'next/link'
 
-export default function TapeLine({ pact }: { pact: any }) {
+export interface TapeLinePactProps {
+  id: number
+  time: string
+  kind: string
+  status: string
+  amount: string
+  address: string
+  blurSize?: boolean
+}
+
+export default function TapeLine({ pact }: { pact: TapeLinePactProps }) {
   const isTerminal = ['CLEARED', 'SLASHED', 'EXPIRED', 'CANCELLED'].includes(pact.status)
   const isActive = ['ACTIVE', 'PROOF IN', 'OPEN', 'LIVE'].includes(pact.status)
   const isSlashed = pact.status === 'SLASHED'
@@ -27,29 +37,34 @@ export default function TapeLine({ pact }: { pact: any }) {
   const bgClass = isActive ? 'bg-surface-container-low/20' : 'bg-transparent'
 
   return (
-    <Link href={`/p/${pact.id.toString()}`} className={`block border-b border-outline-hairline tape-row border-l-2 border-l-transparent ${bgClass}`}>
+    <Link 
+      href={`/p/${pact.id.toString()}`} 
+      role="row"
+      aria-label={`Pact #${pact.id}, kind ${pact.kind}, amount ${pact.amount}, status ${pact.status}`}
+      className={`block border-b border-outline-hairline tape-row border-l-2 border-l-transparent focus-visible:ring-2 focus-visible:ring-primary-fixed focus-visible:outline-none ${bgClass}`}
+    >
       {/* ─── Desktop 5-column Grid View (@md+) ─── */}
       <div className="hidden @md:grid grid-cols-5 gap-4 px-md py-3 items-center">
-        <div className="col-span-1 flex flex-col">
+        <div role="cell" className="col-span-1 flex flex-col">
           <span className="text-text-muted font-body-mono">{pact.time}</span>
           <span className="text-on-surface font-headline-mono">#{pact.id.toString()}</span>
         </div>
-        <div className="col-span-1">
+        <div role="cell" className="col-span-1">
           <span className="px-1.5 py-0.5 bg-surface-container border border-outline-hairline text-text-dim rounded-sm font-body-mono uppercase text-xs">
             {pact.kind}
           </span>
         </div>
-        <div className="col-span-1 text-right flex items-center justify-end">
+        <div role="cell" className="col-span-1 text-right flex items-center justify-end">
           <span className={`${amountColorClass} font-headline-mono truncate max-w-full`} title={pact.amount}>
             {pact.amount}
           </span>
         </div>
-        <div className="col-span-1 flex justify-center">
+        <div role="cell" className="col-span-1 flex justify-center">
           <span className={`${statusColorClass} font-body-mono uppercase text-xs`}>
             [{pact.status}]
           </span>
         </div>
-        <div className="col-span-1 text-right">
+        <div role="cell" className="col-span-1 text-right">
           <span className="text-text-muted font-body-mono text-xs">
             {pact.address}
           </span>
