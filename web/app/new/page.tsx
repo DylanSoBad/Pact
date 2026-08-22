@@ -55,6 +55,7 @@ export default function NewPactPage() {
   const [deadlineMinutes, setDeadlineMinutes] = useState('1440')
   const [blurSize, setBlurSize] = useState(false)
   const [confirmation, setConfirmation] = useState<'approve' | 'create' | null>(null)
+  const [bannersCollapsed, setBannersCollapsed] = useState(false)
 
 
   const [step, setStep] = useState<'form' | 'approving' | 'creating' | 'done'>('form')
@@ -65,10 +66,12 @@ export default function NewPactPage() {
   const [repLoading, setRepLoading] = useState(false)
 
   useEffect(() => {
-    document.title = 'PACT · New'
+    document.title = 'PACT · New Pact'
     const addr = getPactAddress()
     setPactAddress(addr)
   }, [])
+
+  useEffect(() => setBannersCollapsed(localStorage.getItem('pact-hide-network-banners') === 'true'), [])
 
   // Auto-fetch reputation when counterparty address is valid
   useEffect(() => {
@@ -120,6 +123,9 @@ export default function NewPactPage() {
   const needsTakerToken = kind === 1 || parseTaker() > 0n
   const effectiveTokenTaker = needsTakerToken ? tokenTaker : '0x0000000000000000000000000000000000000000'
   const deadline = new Date(Date.now() + Number(deadlineMinutes || 0) * 60000)
+  const deadlineHours = Number(deadlineMinutes || 0) / 60
+  const deadlineRelative = deadlineHours >= 24 && deadlineHours % 24 === 0 ? `in ${deadlineHours / 24}d` : deadlineHours >= 1 && Number.isInteger(deadlineHours) ? `in ${deadlineHours}h` : `in ${deadlineMinutes || '0'}m`
+  const deadlineShort = deadline.toLocaleString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })
   const deadlineTs = BigInt(Math.floor(deadline.getTime() / 1000))
 
   const isWrongChain = isConnected && chainId !== TARGET_CHAIN_ID
@@ -278,6 +284,23 @@ export default function NewPactPage() {
     setAmountTaker('2')
     setTerms('Delivery of 1x Server Hardware unit to Singapore DC. Courier tracking reference required upon fulfillment.')
     setDeadlineMinutes('1440')
+    toast.info('Demo data filled. Review before submitting.')
+  }
+
+  const clearDemo = () => {
+    setAmountMaker('')
+    setAmountTaker('')
+    setTaker('')
+    setTerms('')
+    setDeadlineMinutes('1440')
+    toast.info('Form cleared')
+  }
+
+  const toggleBanners = () => {
+    setBannersCollapsed(value => {
+      localStorage.setItem('pact-hide-network-banners', String(!value))
+      return !value
+    })
   }
 
   const shareUrl = createdPactId
@@ -352,8 +375,10 @@ export default function NewPactPage() {
   return (
     <div className="w-full max-w-terminal mx-auto font-mono">
       
-      {/* Arc Network Info Banner */}
-      <div className="mb-6 p-3 bg-[#c8f542]/10 border border-[#c8f542]/30 flex items-center justify-between text-[12px] text-[#c8f542] animate-enter rounded-none">
+      <button type="button" onClick={toggleBanners} className="mb-3 flex w-full items-center justify-between border border-outline-border px-3 py-2 text-[11px] text-text-muted hover:text-primary-fixed" aria-expanded={!bannersCollapsed}>
+        <span>{bannersCollapsed ? 'Network and risk notices hidden' : 'Hide network and risk notices'}</span><span aria-hidden="true" className="material-symbols-outlined text-[16px]">{bannersCollapsed ? 'expand_more' : 'expand_less'}</span>
+      </button>
+      {!bannersCollapsed && <><div className="mb-3 p-3 bg-[#c8f542]/10 border border-[#c8f542]/30 flex items-center justify-between text-[12px] text-[#c8f542] animate-enter rounded-none">
         <div className="flex items-center gap-2">
           <span><strong>Arc Testnet:</strong> Native USDC Gas · Direct On-Chain Pact</span>
         </div>
@@ -365,6 +390,7 @@ export default function NewPactPage() {
       <div role="note" className="mb-6 p-3 border border-status-warning/60 bg-status-warning/10 text-[12px] text-[#f7d36b]">
         <strong>⚠ Testnet deployment.</strong> Smart contracts involve risk. Always verify terms before locking collateral.
       </div>
+      </>}
 
       {isWrongChain && (
         <div className="bg-rose-500/[0.08] border border-rose-500/20 p-3.5 mb-6 text-[13px] flex items-center justify-between text-rose-300 rounded-none">
@@ -382,9 +408,7 @@ export default function NewPactPage() {
           <Link href="/" className="text-[13px] text-zinc-600 hover:text-zinc-400 transition-colors">← Back</Link>
           <h1 className="text-[20px] font-semibold text-white tracking-[-0.01em] mt-1">New pact</h1>
         </div>
-        <button onClick={fillDemo} className="btn-ghost px-3 py-1 text-[12px] text-zinc-400">
-          Fill Demo
-        </button>
+        <div className="flex gap-2"><button onClick={fillDemo} title="Auto-fill with sample values for testing" className="btn-ghost px-3 py-1 text-[12px] text-zinc-400">Fill Demo</button><button onClick={clearDemo} className="btn-ghost px-3 py-1 text-[12px] text-zinc-400">Clear</button></div>
       </div>
 
       <div className="space-y-8 animate-enter-delay">
@@ -505,7 +529,7 @@ export default function NewPactPage() {
               </button>
             ))}
           </div>
-          {deadlineError ? <p className="text-[11px] text-status-error mt-1.5">Settlement deadline must be in the future</p> : <p className="text-[11px] text-zinc-500 mt-1.5">in {deadlineMinutes} minutes ({deadline.toLocaleString()})</p>}
+          {deadlineError ? <p className="text-[11px] text-status-error mt-1.5">Settlement deadline must be in the future</p> : <p className="text-[11px] text-zinc-500 mt-1.5" title={deadline.toLocaleString()}>{deadlineRelative} ({deadlineShort})</p>}
 
           <div className="mt-4 space-y-2">
             <label className="flex items-center gap-2.5 cursor-pointer select-none">
@@ -522,7 +546,7 @@ export default function NewPactPage() {
           <div className="flex justify-between"><span className="text-zinc-500">Total locked principal</span><span className="text-[#c8f542]">{amountMaker || '0'} + {amountTaker || '0'} {tokenLabel}</span></div>
           <div className="flex justify-between"><span className="text-zinc-500">Counterparty</span><span className="text-zinc-200">{taker ? `${taker.slice(0,6)}…${taker.slice(-4)}` : 'Open'}</span></div>
           <div className="flex justify-between"><span className="text-zinc-500">Arbitrator mode</span><span className="text-zinc-300 font-mono text-[11px]">Direct Bilateral</span></div>
-          <div className="flex justify-between"><span className="text-zinc-500">Settlement deadline</span><span className="text-zinc-200 text-right">in {deadlineMinutes || '0'}m<br />{deadline.toLocaleString()}</span></div>
+          <div className="flex justify-between"><span className="text-zinc-500">Settlement deadline</span><span className="text-zinc-200 text-right" title={deadline.toLocaleString()}>{deadlineRelative}<br />{deadlineShort}</span></div>
         </div>
 
         {/* Errors */}

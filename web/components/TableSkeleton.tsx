@@ -7,7 +7,6 @@ interface TableSkeletonProps {
 export default function TableSkeleton({ rows = 5 }: TableSkeletonProps) {
   return (
     <div 
-      role="status" 
       aria-label="Loading contracts stream" 
       className="divide-y divide-outline-hairline/40 w-full font-code-hash animate-pulse"
     >

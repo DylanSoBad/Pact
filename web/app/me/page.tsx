@@ -24,7 +24,7 @@ export default function MePage() {
   const [lastFetchTime, setLastFetchTime] = useState<number>(Date.now())
   const [rpcError, setRpcError] = useState(false)
 
-  useEffect(() => { document.title = 'PACT · My Portfolio & Reputation' }, [])
+  useEffect(() => { document.title = 'PACT · My Profile' }, [])
 
   async function loadUserData() {
     if (!address) {
@@ -98,6 +98,13 @@ export default function MePage() {
           <button onClick={() => openModal(true)} className="btn-primary px-6 py-2.5 text-[12px] uppercase tracking-widest">
             Connect Wallet
           </button>
+          <a href="#reputation-system" className="block text-[11px] text-primary-fixed underline">What is this?</a>
+          <div className="mt-8 max-w-2xl mx-auto text-left opacity-45 blur-[1px] pointer-events-none select-none border border-zinc-800 bg-black p-4 space-y-3" aria-hidden="true">
+            <div className="flex justify-between text-[11px] text-zinc-500 uppercase"><span>Reputation score</span><span className="text-[#c8f542]">92%</span></div>
+            <div className="grid grid-cols-3 gap-2"><div className="h-14 border border-zinc-800 bg-zinc-950 p-2 text-[10px] text-zinc-500">Cleared<br /><b className="text-[#c8f542] text-lg">12</b></div><div className="h-14 border border-zinc-800 bg-zinc-950 p-2 text-[10px] text-zinc-500">Active<br /><b className="text-white text-lg">3</b></div><div className="h-14 border border-zinc-800 bg-zinc-950 p-2 text-[10px] text-zinc-500">History<br /><b className="text-white text-lg">18</b></div></div>
+            <div className="h-10 border border-zinc-800 bg-zinc-950 text-[10px] text-zinc-500 p-3">PACT #0042 · ACTIVE · 250 USDC</div>
+          </div>
+          <p id="reputation-system" className="max-w-md mx-auto text-[11px] leading-relaxed text-zinc-500">Your profile shows on-chain pact history, completed settlements, and outcomes. Connect a wallet to load your real record.</p>
         </div>
       </div>
     )

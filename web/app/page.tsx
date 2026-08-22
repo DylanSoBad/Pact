@@ -7,6 +7,7 @@ import TapeLine from '../components/TapeLine'
 import TableSkeleton from '../components/TableSkeleton'
 import NetworkStatusBanner from '../components/NetworkStatusBanner'
 import ErrorBoundary from '../components/ErrorBoundary'
+import OnboardingModal from '../components/OnboardingModal'
 import { fetchPacts, PactData } from '../lib/reads'
 import { getPactAddress } from '../lib/arc'
 import { useBlockNumber } from 'wagmi'
@@ -20,6 +21,17 @@ import {
 function TapeDashboard() {
   const { filter, setFilter, sseConnected, lastBlockTimestamp, setBlockInfo } = usePactStore()
   const [secondsAgo, setSecondsAgo] = useState(0)
+  const [showOnboarding, setShowOnboarding] = useState(false)
+
+  useEffect(() => {
+    if (localStorage.getItem('pact-onboarding-seen') !== 'true') setShowOnboarding(true)
+    document.title = 'PACT · The Tape'
+  }, [])
+
+  const dismissOnboarding = useCallback(() => {
+    localStorage.setItem('pact-onboarding-seen', 'true')
+    setShowOnboarding(false)
+  }, [])
 
   // Wagmi block number watcher
   const { data: wagmiBlockNumber } = useBlockNumber({ watch: true })
@@ -88,9 +100,9 @@ function TapeDashboard() {
 
   const getFilterClass = (f: FilterCategory) => {
     if (filter === f) {
-      return 'px-2.5 @md:px-3 py-1 border border-primary-fixed text-primary-fixed bg-primary-fixed/10 rounded-DEFAULT text-[11px] font-label-caps uppercase transition-all focus-visible:ring-2 focus-visible:ring-primary-fixed'
+      return 'px-2.5 @md:px-3 py-1 border border-primary-fixed text-primary-fixed bg-primary-fixed/20 font-bold rounded-DEFAULT text-[11px] font-label-caps uppercase transition-all focus-visible:ring-2 focus-visible:ring-primary-fixed'
     }
-    return 'px-2.5 @md:px-3 py-1 border border-outline-hairline text-text-muted hover:border-text-dim hover:text-on-surface transition-colors rounded-DEFAULT text-[11px] font-label-caps uppercase focus-visible:ring-2 focus-visible:ring-primary-fixed'
+    return 'px-2.5 @md:px-3 py-1 border border-outline-hairline text-text-muted hover:border-primary-fixed hover:bg-primary-fixed/10 hover:text-primary-fixed hover:scale-105 transition-all rounded-DEFAULT text-[11px] font-label-caps uppercase focus-visible:ring-2 focus-visible:ring-primary-fixed'
   }
 
   return (
@@ -113,6 +125,7 @@ function TapeDashboard() {
       )}
 
       {/* Filters & Telemetry Strip */}
+      <OnboardingModal open={showOnboarding && !isLoading && pacts.length === 0} onClose={dismissOnboarding} />
       <div 
         className="flex flex-col @sm:flex-row justify-between items-start @sm:items-center gap-3 mb-3 @md:mb-md @lg:max-w-terminal @lg:mx-auto animate-enter" 
         style={{ animationDelay: '100ms' }}
@@ -168,8 +181,6 @@ function TapeDashboard() {
 
         {/* Real-time block & stream counter */}
         <div 
-          role="status"
-          aria-live="polite"
           className="font-code-hash text-[11px] @md:text-code-hash text-text-muted flex items-center gap-1.5 @md:gap-2 bg-surface-container-low px-2.5 py-1 rounded-DEFAULT border border-outline-hairline shrink-0"
         >
           <span 
@@ -183,59 +194,45 @@ function TapeDashboard() {
 
       {/* The Tape (Semantic Data Table) */}
       <div 
-        role="table" 
         aria-label="PACT economic contracts feed"
-        aria-live="polite"
         className="@lg:max-w-terminal @lg:mx-auto bg-[#0c0d10] border border-outline-hairline rounded-DEFAULT overflow-hidden animate-enter" 
         style={{ animationDelay: '150ms' }}
       >
         {/* Table Header (Desktop) */}
         <div 
-          role="rowgroup" 
           className="hidden @md:grid grid-cols-5 gap-4 px-md py-sm border-b border-outline-hairline bg-surface-container-low font-label-caps text-label-caps text-text-muted uppercase"
         >
-          <div role="row" className="contents">
-            <div role="columnheader" className="col-span-1">TIME / ID</div>
-            <div role="columnheader" className="col-span-1">KIND</div>
-            <div role="columnheader" className="col-span-1 text-right">AMOUNT</div>
-            <div role="columnheader" className="col-span-1 text-center">STATUS</div>
-            <div role="columnheader" className="col-span-1 text-right">COUNTERPARTY</div>
+          <div className="contents">
+            <div className="col-span-1">TIME / ID</div>
+            <div className="col-span-1">KIND</div>
+            <div className="col-span-1 text-right">AMOUNT</div>
+            <div className="col-span-1 text-center">STATUS</div>
+            <div className="col-span-1 text-right">COUNTERPARTY</div>
           </div>
         </div>
 
         {/* Table Header (Mobile) */}
         <div 
-          role="rowgroup" 
           className="@md:hidden flex items-center justify-between px-3 py-2 border-b border-outline-hairline bg-surface-container-low font-label-caps text-[10px] text-text-muted uppercase tracking-wider"
         >
-          <div role="row" className="contents">
-            <div role="columnheader">CONTRACT / TIME</div>
-            <div role="columnheader">AMOUNT / COUNTERPARTY</div>
+          <div className="contents">
+            <div>CONTRACT / TIME</div>
+            <div>AMOUNT / COUNTERPARTY</div>
           </div>
         </div>
 
         {/* Tape Rows */}
-        <div role="rowgroup" className="flex flex-col font-code-hash text-code-hash divide-y divide-outline-hairline/40">
+        <div className="flex flex-col font-code-hash text-code-hash divide-y divide-outline-hairline/40">
           {isLoading ? (
             <TableSkeleton rows={6} />
           ) : filtered.length === 0 ? (
             <div 
-              role="status" 
-              aria-live="polite" 
               className="flex flex-col items-center justify-center py-20 text-center"
             >
               <p className="font-code-hash text-text-muted text-[12px] mb-5">
                 DATA STREAM EMPTY
               </p>
               <div className="w-full max-w-xl px-4 grid gap-3 text-left">
-                <div className="border border-primary-fixed/40 bg-primary-fixed/5 p-4">
-                  <p className="text-primary-fixed text-[11px] uppercase mb-3">How a pact settles</p>
-                  <ol className="grid @md:grid-cols-3 gap-3 text-[11px] text-text-muted">
-                    <li><span className="text-primary-fixed">01</span> Create a pact — choose Delivery, FX, or Job.</li>
-                    <li><span className="text-primary-fixed">02</span> Lock collateral — both parties deposit USDC.</li>
-                    <li><span className="text-primary-fixed">03</span> Settle — fulfill conditions or claim timeout.</li>
-                  </ol>
-                </div>
                 {[
                   ['#0001', 'DELIVERY', '250.00 USDC', 'OPEN'],
                   ['#0002', 'FX SWAP', '500.00 USDC', 'ACTIVE'],

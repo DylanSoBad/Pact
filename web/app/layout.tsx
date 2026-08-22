@@ -101,18 +101,18 @@ export default function RootLayout({
             </main>
             <BottomNav />
             <footer className="@lg:pl-64 px-4 pb-20 @lg:pb-5 text-center text-[11px] text-text-muted font-code-hash">
-              <a className="hover:text-primary-fixed" href="#">Docs</a><span aria-hidden="true"> · </span><a className="hover:text-primary-fixed" href="#">Source Code</a><span aria-hidden="true"> · </span><a className="hover:text-primary-fixed" href="#">Audit Report</a>
+              <a className="hover:text-primary-fixed" href="https://github.com/DylanSoBad/Pact" target="_blank" rel="noreferrer" title="Read PACT documentation and source code">Docs</a><span aria-hidden="true"> · </span><a className="hover:text-primary-fixed" href="https://github.com/DylanSoBad/Pact" target="_blank" rel="noreferrer" title="View PACT source code on GitHub">Source Code</a><span aria-hidden="true"> · </span><span title="Independent audit report is coming soon">Audit Report (Coming Soon)</span>
             </footer>
             
             {/* Floating Action Button (FAB) */}
-            <Link 
+            <aside aria-label="Quick actions"><Link
               href="/new" 
               aria-label="Create new contract agreement"
               className="hidden @lg:flex fixed bottom-xl right-xl z-40 items-center justify-center gap-2 px-6 py-3 border border-primary-fixed bg-primary-fixed text-on-primary-fixed font-headline-mono text-headline-mono uppercase rounded-DEFAULT shadow-[0_0_15px_rgba(198,243,64,0.3)] hover:shadow-[0_0_25px_rgba(198,243,64,0.5)] hover:bg-transparent hover:text-primary-fixed transition-all duration-200 focus-visible:ring-2 focus-visible:ring-primary-fixed focus-visible:outline-none"
             >
               <span className="material-symbols-outlined">add</span>
               NEW PACT
-            </Link>
+            </Link></aside>
 
             <Toaster 
               theme="dark"

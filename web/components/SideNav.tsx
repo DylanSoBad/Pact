@@ -12,11 +12,12 @@ export default function SideNav() {
         <h2 className="font-display-mono text-display-mono text-primary-fixed">PACT PROTOCOL</h2>
         <p className="font-code-hash text-code-hash text-text-muted mt-2 cmd-prompt">ARC TESTNET 5042002</p>
       </div>
-      <nav className="flex-1 overflow-y-auto py-md">
+      <nav aria-label="Pact navigation" className="flex-1 overflow-y-auto py-md">
         <ul className="flex flex-col gap-1 px-sm">
           <li>
             <Link 
               href="/"
+              aria-label="View transaction tape"
               className={`flex items-center gap-md px-md py-sm font-body-mono text-body-mono uppercase transition-all duration-200 ${
                 pathname === '/' 
                   ? 'bg-secondary-container text-primary-fixed border-l-2 border-primary-fixed'
@@ -27,10 +28,10 @@ export default function SideNav() {
               TAPE
             </Link>
           </li>
-          <li className="pt-4 px-md text-label-caps font-label-caps text-text-muted uppercase">My pacts</li>
+          <li className="pt-4 px-md flex items-center gap-2 text-label-caps font-label-caps text-text-muted uppercase"><span aria-hidden="true" className="material-symbols-outlined text-[16px]">folder_open</span>My pacts</li>
           {['Active', 'Completed', 'Disputed'].map((tab) => (
             <li key={tab}>
-              <Link href={`/me?status=${tab.toLowerCase()}`} className="flex items-center gap-md px-md py-sm ml-3 font-body-mono text-body-mono uppercase text-text-dim hover:text-on-surface-variant hover:bg-surface-container-low border-l-2 border-transparent">
+              <Link href={`/me?status=${tab.toLowerCase()}`} aria-label={`View ${tab.toLowerCase()} pacts`} className="flex items-center gap-md px-md py-sm ml-3 font-body-mono text-body-mono uppercase text-text-dim hover:text-on-surface-variant hover:bg-surface-container-low border-l-2 border-transparent">
                 <span className="material-symbols-outlined text-[16px]">{tab === 'Active' ? 'play_circle' : tab === 'Completed' ? 'task_alt' : 'gavel'}</span>
                 {tab}
               </Link>
@@ -39,6 +40,7 @@ export default function SideNav() {
           <li>
             <Link 
               href="/new"
+              aria-label="Create new pact"
               className={`flex items-center gap-md px-md py-sm font-body-mono text-body-mono uppercase transition-all duration-200 ${
                 pathname === '/new'
                   ? 'bg-secondary-container text-primary-fixed border-l-2 border-primary-fixed'
@@ -52,6 +54,7 @@ export default function SideNav() {
           <li>
             <Link 
               href="/me"
+              aria-label="View my profile"
               title="Your profile and pact history"
               className={`flex items-center gap-md px-md py-sm font-body-mono text-body-mono uppercase transition-all duration-200 ${
                 pathname === '/me'
@@ -68,11 +71,14 @@ export default function SideNav() {
       <div className="p-lg border-t border-outline-hairline mt-auto">
         <Link 
           href={pathname === '/new' ? '/' : '/new'}
+          aria-label={pathname === '/new' ? 'Back to transaction tape' : 'Create new pact'}
           className="w-full flex items-center justify-center gap-2 px-4 py-2 border border-primary-fixed bg-transparent text-primary-fixed font-label-caps text-label-caps uppercase rounded-DEFAULT hover:bg-primary-fixed hover:text-on-primary-fixed transition-colors duration-200"
         >
           {pathname === '/new' ? '← Back to Tape' : 'NEW PACT'}
         </Link>
-        <a href={`https://testnet.arcscan.app/address/${process.env.NEXT_PUBLIC_PACT_ADDRESS || '0x0000000000000000000000000000000000000000'}`} target="_blank" rel="noreferrer" className="block mt-3 text-[10px] text-text-dim hover:text-primary-fixed" title="View protocol contract on ArcScan">Contract ↗</a>
+        {process.env.NEXT_PUBLIC_PACT_ADDRESS && (
+          <a href={`https://testnet.arcscan.app/address/${process.env.NEXT_PUBLIC_PACT_ADDRESS}`} target="_blank" rel="noreferrer" className="mt-3 flex items-center gap-1 text-[10px] text-text-dim hover:text-primary-fixed" title="View verified protocol contract on ArcScan"><span aria-hidden="true" className="material-symbols-outlined text-[13px]">verified</span> Verified contract ↗</a>
+        )}
       </div>
     </aside>
   )
