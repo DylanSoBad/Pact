@@ -7,7 +7,7 @@ export default function BottomNav() {
   const pathname = usePathname()
 
   return (
-    <nav aria-label="Mobile navigation" className="mobile-safe-nav @md:hidden fixed bottom-0 left-0 z-50 grid w-full grid-cols-3 items-start border-t border-outline-hairline bg-surface-container-lowest">
+    <nav aria-label="Mobile navigation" className="mobile-safe-nav @md:hidden z-50 grid w-full shrink-0 grid-cols-3 items-start border-t border-outline-hairline bg-surface-container-lowest">
       <Link 
         href="/"
         className={`flex min-h-16 w-full flex-col items-center justify-center active:bg-surface-container-high transition-transform active:scale-95 ${

@@ -93,13 +93,15 @@ export default function RootLayout({
         <Web3Provider>
           <AppShell>
             <Navbar />
-            <main className="mx-auto w-full max-w-terminal flex-1 px-4 py-6 @md:px-6 @md:py-10 pb-24 @md:pb-12">
-              {children}
-            </main>
+            <div className="min-h-0 flex-1 overflow-y-auto">
+              <main className="mx-auto w-full max-w-terminal px-4 py-6 @md:px-6 @md:py-10 pb-10 @md:pb-12">
+                {children}
+              </main>
+              <footer className="px-4 pb-6 text-center text-[11px] text-text-muted font-code-hash">
+                <a className="hover:text-primary-fixed" href="https://github.com/DylanSoBad/Pact" target="_blank" rel="noreferrer" title="Read PACT documentation and source code">Docs</a><span aria-hidden="true"> · </span><a className="hover:text-primary-fixed" href="https://github.com/DylanSoBad/Pact" target="_blank" rel="noreferrer" title="View PACT source code on GitHub">Source Code</a><span aria-hidden="true"> · </span><span title="Independent audit report is coming soon">Audit Report (Coming Soon)</span>
+              </footer>
+            </div>
             <BottomNav />
-            <footer className="px-4 pb-20 @md:pb-6 text-center text-[11px] text-text-muted font-code-hash">
-              <a className="hover:text-primary-fixed" href="https://github.com/DylanSoBad/Pact" target="_blank" rel="noreferrer" title="Read PACT documentation and source code">Docs</a><span aria-hidden="true"> · </span><a className="hover:text-primary-fixed" href="https://github.com/DylanSoBad/Pact" target="_blank" rel="noreferrer" title="View PACT source code on GitHub">Source Code</a><span aria-hidden="true"> · </span><span title="Independent audit report is coming soon">Audit Report (Coming Soon)</span>
-            </footer>
             
             <Toaster 
               theme="dark"

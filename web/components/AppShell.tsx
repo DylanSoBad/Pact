@@ -33,8 +33,8 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
 
       <div className={`@container mx-auto flex w-full flex-col bg-background text-on-background transition-[max-width,border-color] duration-300 ${
         activeView === 'mobile'
-          ? 'my-4 min-h-[760px] max-h-[calc(100vh-2rem)] max-w-[420px] overflow-y-auto border border-outline-border transform-gpu'
-          : 'min-h-screen'
+          ? 'my-4 h-[calc(100dvh-2rem)] max-w-[420px] overflow-hidden border border-outline-border'
+          : 'h-dvh overflow-hidden'
       }`}>
         {children}
       </div>
