@@ -1,8 +1,9 @@
 'use client'
 
-import { useState, useEffect, use } from 'react'
+import { useState, useEffect, use, useRef } from 'react'
 import Link from 'next/link'
 import { useAccount, useWriteContract, useWaitForTransactionReceipt } from 'wagmi'
+import { isAddress } from 'viem'
 import { fetchPacts, fetchReputation, PactData } from '../../../lib/reads'
 import { getPactAddress } from '../../../lib/arc'
 import {
@@ -29,6 +30,8 @@ export default function PactDetailPage({ params }: { params: Promise<{ id: strin
   const [termsParam, setTermsParam] = useState<string | null>(null)
   const [copiedLink, setCopiedLink] = useState(false)
   const [copiedSummary, setCopiedSummary] = useState(false)
+  const pendingFundId = useRef<bigint | null>(null)
+  const processedApprovalHash = useRef<string | null>(null)
 
   const [makerRep, setMakerRep] = useState<{ cleared: number; slashed: number; notional: bigint } | null>(null)
   const [takerRep, setTakerRep] = useState<{ cleared: number; slashed: number; notional: bigint } | null>(null)
@@ -40,9 +43,17 @@ export default function PactDetailPage({ params }: { params: Promise<{ id: strin
     }
   }, [])
 
+  const getActivePactAddress = (): `0x${string}` => {
+    if (typeof window !== 'undefined') {
+      const sharedAddress = new URLSearchParams(window.location.search).get('contract')
+      if (sharedAddress && isAddress(sharedAddress)) return sharedAddress
+    }
+    return getPactAddress()
+  }
+
   async function load() {
     try {
-      const contractAddress = getPactAddress()
+      const contractAddress = getActivePactAddress()
       const data = await fetchPacts(50, contractAddress)
       const found = data.find(p => p.id.toString() === id)
       if (found) {
@@ -89,21 +100,33 @@ export default function PactDetailPage({ params }: { params: Promise<{ id: strin
   const { isLoading: txWaiting, isSuccess: txSuccess } = useWaitForTransactionReceipt({ hash: txHash })
 
   useEffect(() => {
+    if (txSuccess && txHash && pendingFundId.current !== null && processedApprovalHash.current !== txHash) {
+      const idToFund = pendingFundId.current
+      pendingFundId.current = null
+      processedApprovalHash.current = txHash
+      writeContract({
+        address: getActivePactAddress(),
+        abi: PACT_ABI,
+        functionName: 'fund',
+        args: [idToFund],
+      })
+      return
+    }
     if (txSuccess) {
       setTimeout(() => load(), 1500)
     }
-  }, [txSuccess])
+  }, [txSuccess, txHash])
 
   const isMaker = !!address && !!pact && pact.maker.toLowerCase() === address.toLowerCase()
   const isTaker = !!address && !!pact && !isZeroAddress(pact.taker) && pact.taker.toLowerCase() === address.toLowerCase()
   const isOpenCandidate = !!address && !!pact && isZeroAddress(pact.taker) && !isMaker
 
   const canFund = isConnected && !!pact && pact.status === 0 && (isTaker || isOpenCandidate)
-  const canProof = isConnected && !!pact && pact.status === 2 && (isMaker || isTaker)
-  const canRelease = isConnected && !!pact && (pact.status === 2 || pact.status === 3) && isMaker
+  const canProof = isConnected && !!pact && pact.kind !== 1 && pact.status === 2 && isTaker
+  const canRelease = isConnected && !!pact && (pact.status === 2 || pact.status === 3) && (isMaker || (pact.kind === 1 && isTaker))
   const canCancel = isConnected && !!pact && pact.status === 0 && isMaker
   const canReject = isConnected && !!pact && pact.status === 3 && isMaker
-  const canExpire = isConnected && !!pact && pact.status === 2 && Math.floor(Date.now() / 1000) > pact.deadline
+  const canExpire = isConnected && !!pact && [0, 2, 3].includes(pact.status) && Math.floor(Date.now() / 1000) > pact.deadline
 
   // Optimistic effective status for real-time progress transitions
   const currentEffectiveStatus = txPending || txWaiting
@@ -118,7 +141,7 @@ export default function PactDetailPage({ params }: { params: Promise<{ id: strin
       const hashArray = Array.from(new Uint8Array(hashBuffer))
       const hashHex = '0x' + hashArray.map(b => b.toString(16).padStart(2, '0')).join('') as `0x${string}`
       writeContract({
-        address: getPactAddress(),
+        address: getActivePactAddress(),
         abi: PACT_ABI,
         functionName: 'submitProof',
         args: [BigInt(id), hashHex]
@@ -128,17 +151,17 @@ export default function PactDetailPage({ params }: { params: Promise<{ id: strin
 
   const doFund = () => {
     if (!pact) return
-    const pactAddress = getPactAddress()
+    const pactAddress = getActivePactAddress()
 
     // If taker bond is required, execute approve -> fund flow
     if (pact.amountTaker > 0n) {
+      pendingFundId.current = BigInt(id)
       writeContract({
         address: pact.tokenTaker as `0x${string}`,
         abi: ERC20_ABI,
         functionName: 'approve',
         args: [pactAddress, pact.amountTaker]
       })
-      // Trigger fund upon confirmation
       return
     }
 
@@ -150,15 +173,15 @@ export default function PactDetailPage({ params }: { params: Promise<{ id: strin
     })
   }
 
-  const doCancel = () => writeContract({ address: getPactAddress(), abi: PACT_ABI, functionName: 'cancel', args: [BigInt(id)] })
+  const doCancel = () => writeContract({ address: getActivePactAddress(), abi: PACT_ABI, functionName: 'cancel', args: [BigInt(id)] })
   const doReject = () => {
-    writeContract({ address: getPactAddress(), abi: PACT_ABI, functionName: 'reject', args: [BigInt(id)] })
+    writeContract({ address: getActivePactAddress(), abi: PACT_ABI, functionName: 'reject', args: [BigInt(id)] })
     setShowDisputeModal(false)
   }
-  const doRelease = () => writeContract({ address: getPactAddress(), abi: PACT_ABI, functionName: 'release', args: [BigInt(id)] })
-  const doExpire = () => writeContract({ address: getPactAddress(), abi: PACT_ABI, functionName: 'expire', args: [BigInt(id)] })
+  const doRelease = () => writeContract({ address: getActivePactAddress(), abi: PACT_ABI, functionName: 'release', args: [BigInt(id)] })
+  const doExpire = () => writeContract({ address: getActivePactAddress(), abi: PACT_ABI, functionName: 'expire', args: [BigInt(id)] })
 
-  const currentUrl = typeof window !== 'undefined' ? window.location.href : ''
+  const currentUrl = typeof window !== 'undefined' ? `${window.location.origin}/p/${id}?contract=${encodeURIComponent(getActivePactAddress())}` : ''
   const copyShareLink = () => {
     navigator.clipboard.writeText(currentUrl)
     setCopiedLink(true)
@@ -289,7 +312,7 @@ export default function PactDetailPage({ params }: { params: Promise<{ id: strin
         </div>
 
         <div className="bg-black p-3.5 border border-zinc-800 text-[12px] text-zinc-400 font-mono select-text leading-loose whitespace-pre-wrap">
-          {termsParam ? decodeURIComponent(termsParam) : 'Encoded terms embedded on-chain.'}
+          {termsParam ? decodeURIComponent(termsParam) : 'Terms are shared off-chain. Paste them below to verify their on-chain hash.'}
         </div>
 
         <div className="pt-2">

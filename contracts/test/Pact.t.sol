@@ -351,6 +351,29 @@ contract PactTest is Test {
         pact.submitProof(id, proofHash);
     }
 
+    function test_jobExpire_returnsTakerBond() public {
+        vm.prank(maker);
+        uint256 id = pact.createPact(Kind.Job, taker, address(usdc), address(eurc), 100, 50, uint64(block.timestamp + 100), termsHash, false);
+        vm.prank(taker);
+        pact.fund(id);
+
+        vm.warp(block.timestamp + 200);
+        uint256 makerUsdcBefore = usdc.balanceOf(maker);
+        uint256 takerEurcBefore = eurc.balanceOf(taker);
+        pact.expire(id);
+
+        assertEq(usdc.balanceOf(maker) - makerUsdcBefore, 100);
+        assertEq(eurc.balanceOf(taker) - takerEurcBefore, 50);
+    }
+
+    function test_unknownPactReverts() public {
+        vm.expectRevert("pact not found");
+        pact.fund(999);
+
+        vm.expectRevert("pact not found");
+        pact.expire(999);
+    }
+
     // 22. test_noReceiveFunction
     function test_noReceiveFunction() public {
         (bool success, ) = address(pact).call{value: 1 ether}("");

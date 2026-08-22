@@ -4,7 +4,7 @@ import { useState, useEffect, useRef } from 'react'
 import Link from 'next/link'
 import { useAccount, useWalletClient, usePublicClient, useWriteContract, useWaitForTransactionReceipt, useReadContract, useChainId, useSwitchChain } from 'wagmi'
 import { useModal } from 'connectkit'
-import { parseUnits, formatUnits, maxUint256, decodeEventLog, isAddress } from 'viem'
+import { parseUnits, formatUnits, decodeEventLog, isAddress } from 'viem'
 import { toast } from 'sonner'
 import { PACT_ABI, ERC20_ABI } from '../../lib/abi'
 import { USDC_ERC20, EURC, getPactAddress } from '../../lib/arc'
@@ -242,7 +242,7 @@ export default function NewPactPage() {
     if (needsApproval) {
       isBatchedRef.current = true
       setStep('approving')
-      writeApprove({ address: tokenMaker as `0x${string}`, abi: ERC20_ABI, functionName: 'approve', args: [pactAddress, maxUint256] })
+      writeApprove({ address: tokenMaker as `0x${string}`, abi: ERC20_ABI, functionName: 'approve', args: [pactAddress, makerBn] })
     } else {
       doCreate()
     }
@@ -304,7 +304,7 @@ export default function NewPactPage() {
   }
 
   const shareUrl = createdPactId
-    ? `${typeof window !== 'undefined' ? window.location.origin : ''}/p/${createdPactId}?terms=${encodeURIComponent(terms)}`
+    ? `${typeof window !== 'undefined' ? window.location.origin : ''}/p/${createdPactId}?contract=${encodeURIComponent(pactAddress)}`
     : ''
 
   const copyLink = () => { if (shareUrl) { navigator.clipboard.writeText(shareUrl); setCopiedLink(true); toast.success('Link copied to clipboard!'); setTimeout(() => setCopiedLink(false), 2500) } }
@@ -338,7 +338,7 @@ export default function NewPactPage() {
 
           <div className="flex flex-col @md:flex-row items-center justify-center gap-3">
             {createdPactId ? (
-              <Link href={`/p/${createdPactId}?terms=${encodeURIComponent(terms)}`}
+              <Link href={`/p/${createdPactId}?contract=${encodeURIComponent(pactAddress)}`}
                 className="btn-primary px-6 py-2.5 text-[13px]">
                 Open pact →
               </Link>

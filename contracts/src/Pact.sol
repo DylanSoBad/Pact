@@ -29,6 +29,10 @@ contract PactContract is IPact, ReentrancyGuard {
         EURC = _eurc;
     }
 
+    function _requirePactExists(Pact storage p) internal view {
+        require(p.maker != address(0), "pact not found");
+    }
+
     function _payout(address token, address to, uint256 amount) internal {
         if (amount == 0) return;
         (bool ok, bytes memory ret) = token.call(
@@ -106,6 +110,7 @@ contract PactContract is IPact, ReentrancyGuard {
 
     function fund(uint256 id) external nonReentrant {
         Pact storage p = pacts[id];
+        _requirePactExists(p);
         require(p.status == Status.Open, "not Open");
         require(msg.sender != p.maker, "maker cannot fund");
         
@@ -127,6 +132,7 @@ contract PactContract is IPact, ReentrancyGuard {
 
     function cancel(uint256 id) external nonReentrant {
         Pact storage p = pacts[id];
+        _requirePactExists(p);
         require(p.maker == msg.sender, "only maker");
         require(p.status == Status.Open, "not Open");
 
@@ -140,6 +146,7 @@ contract PactContract is IPact, ReentrancyGuard {
 
     function submitProof(uint256 id, bytes32 proofHash) external nonReentrant {
         Pact storage p = pacts[id];
+        _requirePactExists(p);
         require(p.kind != Kind.Fx, "Kind.Fx");
         require(p.taker == msg.sender, "not taker");
         require(p.status == Status.Active, "not Active");
@@ -153,6 +160,7 @@ contract PactContract is IPact, ReentrancyGuard {
 
     function reject(uint256 id) external nonReentrant {
         Pact storage p = pacts[id];
+        _requirePactExists(p);
         require(p.kind != Kind.Fx, "Kind.Fx");
         require(p.maker == msg.sender, "only maker");
         require(p.status == Status.ProofSubmitted, "not ProofSubmitted");
@@ -167,6 +175,7 @@ contract PactContract is IPact, ReentrancyGuard {
 
     function release(uint256 id) external nonReentrant {
         Pact storage p = pacts[id];
+        _requirePactExists(p);
         
         if (p.kind == Kind.Fx) {
             require(p.status == Status.Active, "not Active");
@@ -206,6 +215,7 @@ contract PactContract is IPact, ReentrancyGuard {
 
     function expire(uint256 id) external nonReentrant {
         Pact storage p = pacts[id];
+        _requirePactExists(p);
         require(block.timestamp > deadlines[id], "before deadline");
         
         if (p.status == Status.Open) {
@@ -260,6 +270,9 @@ contract PactContract is IPact, ReentrancyGuard {
                     p.status = Status.Expired;
                     p.updatedAt = uint64(block.timestamp);
                     _payout(p.tokenMaker, p.maker, p.amountMaker);
+                    if (p.amountTaker > 0) {
+                        _payout(p.tokenTaker, p.taker, p.amountTaker);
+                    }
                     emit PactExpired(id);
                 }
             } else {
