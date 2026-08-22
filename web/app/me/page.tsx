@@ -92,7 +92,7 @@ export default function MePage() {
       <div className="w-full max-w-terminal mx-auto font-mono">
         <div className="text-center py-20 space-y-4 animate-enter border border-zinc-800 bg-[#0c0d10] px-4">
           <h1 className="text-[20px] font-bold text-white uppercase tracking-widest">Connect Wallet</h1>
-          <p className="text-[12px] text-zinc-500 max-w-sm mx-auto uppercase tracking-wider">
+          <p className="text-[12px] text-zinc-500 max-w-[24rem] mx-auto uppercase tracking-wider">
             Connect your Arc wallet to view your on-chain settlement reputation, active pact commitments, and transaction history.
           </p>
           <button onClick={() => openModal(true)} className="btn-primary px-6 py-2.5 text-[12px] uppercase tracking-widest">
@@ -104,7 +104,7 @@ export default function MePage() {
             <div className="grid grid-cols-3 gap-2"><div className="h-14 border border-zinc-800 bg-zinc-950 p-2 text-[10px] text-zinc-500">Cleared<br /><b className="text-[#c8f542] text-lg">12</b></div><div className="h-14 border border-zinc-800 bg-zinc-950 p-2 text-[10px] text-zinc-500">Active<br /><b className="text-white text-lg">3</b></div><div className="h-14 border border-zinc-800 bg-zinc-950 p-2 text-[10px] text-zinc-500">History<br /><b className="text-white text-lg">18</b></div></div>
             <div className="h-10 border border-zinc-800 bg-zinc-950 text-[10px] text-zinc-500 p-3">PACT #0042 · ACTIVE · 250 USDC</div>
           </div>
-          <p id="reputation-system" className="max-w-md mx-auto text-[11px] leading-relaxed text-zinc-500">Your profile shows on-chain pact history, completed settlements, and outcomes. Connect a wallet to load your real record.</p>
+          <p id="reputation-system" className="max-w-[28rem] mx-auto text-[11px] leading-relaxed text-zinc-500">Your profile shows on-chain pact history, completed settlements, and outcomes. Connect a wallet to load your real record.</p>
         </div>
       </div>
     )

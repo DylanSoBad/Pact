@@ -325,7 +325,7 @@ export default function NewPactPage() {
           <p className="text-[14px] text-zinc-500 mb-8">${amountMaker} {tokenLabel} locked on-chain via Arc Native Settlement.</p>
 
           {createdPactId && (
-            <div className="surface-1 p-4 mb-8 text-left max-w-sm mx-auto">
+            <div className="surface-1 p-4 mb-8 text-left max-w-[24rem] mx-auto">
               <p className="text-[12px] text-zinc-500 mb-2">Share with counterparty</p>
               <div className="flex gap-2">
                 <input readOnly value={shareUrl} className="flex-1 bg-black border border-zinc-700 text-[#c8f542] px-3 py-2 rounded-none text-[12px] font-mono select-all focus:ring-0 outline-none" />
@@ -610,7 +610,7 @@ export default function NewPactPage() {
       </div>
       {confirmation && (
         <div role="dialog" aria-modal="true" aria-labelledby="confirm-lock-title" className="fixed inset-0 z-[60] flex items-center justify-center bg-black/75 p-4">
-          <div className="w-full max-w-md border border-primary-fixed/70 bg-[#0c0d10] p-5 shadow-2xl">
+          <div className="w-full max-w-[28rem] border border-primary-fixed/70 bg-[#0c0d10] p-5 shadow-2xl">
             <p className="font-label-caps text-[10px] uppercase tracking-[0.16em] text-primary-fixed">Final review</p>
             <h2 id="confirm-lock-title" className="mt-2 font-display-mono text-lg text-white">{confirmation === 'approve' ? 'Approve collateral' : 'Create and lock pact'}</h2>
             <p className="mt-2 text-sm leading-6 text-text-muted">{confirmation === 'approve' ? `Approve exactly ${amountMaker || '0'} ${tokenLabel} for this single pact, then create it.` : 'Review the agreement summary before you sign the creation transaction.'}</p>

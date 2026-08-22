@@ -474,7 +474,7 @@ export default function PactDetailPage({ params }: { params: Promise<{ id: strin
       {/* ─── Safety Dispute Modal ─── */}
       {showDisputeModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-enter font-mono">
-          <div className="bg-[#0c0d10] border border-rose-500/30 rounded-none p-6 max-w-md w-full shadow-2xl space-y-4">
+          <div className="bg-[#0c0d10] border border-rose-500/30 rounded-none p-6 max-w-[28rem] w-full shadow-2xl space-y-4">
             <div className="flex items-center gap-2.5 text-rose-400">
               <h3 className="text-[15px] font-bold uppercase tracking-widest">
                 Initiate Dispute & Bond Slash

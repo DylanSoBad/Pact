@@ -49,7 +49,7 @@ export default class ErrorBoundary extends Component<Props, State> {
           aria-live="assertive"
           className="min-h-[400px] w-full flex flex-col items-center justify-center p-6 bg-surface-container-lowest border border-status-error/40 rounded-DEFAULT text-on-surface font-code-hash shadow-2xl my-6"
         >
-          <div className="w-full max-w-md p-6 bg-[#0e0a0d] border border-status-error/60 rounded-DEFAULT relative overflow-hidden">
+          <div className="w-full max-w-[28rem] p-6 bg-[#0e0a0d] border border-status-error/60 rounded-DEFAULT relative overflow-hidden">
             {/* Top error badge */}
             <div className="flex items-center gap-2 text-status-error mb-4 border-b border-status-error/30 pb-3">
               <span className="material-symbols-outlined text-[22px]">error</span>

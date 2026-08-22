@@ -66,8 +66,12 @@
   --spacing-unit: 4px;
   --spacing-md: 16px;
   --spacing-lg: 24px;
-  --spacing-max-width-terminal: 780px;
-  --spacing-max-width-inspector: 660px;
+  /*
+   * Tailwind resolves custom `max-w-*` utilities through the
+   * `--container-*` namespace.
+   */
+  --container-terminal: 780px;
+  --container-inspector: 660px;
   --spacing-xs: 4px;
   --spacing-sm: 8px;
   --spacing-xl: 32px;

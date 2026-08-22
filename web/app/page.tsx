@@ -135,7 +135,7 @@ function TapeDashboard() {
       <section className="@lg:max-w-terminal @lg:mx-auto mb-5 grid gap-3 @md:grid-cols-[1.45fr_1fr] animate-enter" style={{ animationDelay: '70ms' }}>
         <div className="relative overflow-hidden border border-primary-fixed/35 bg-gradient-to-br from-primary-fixed/12 via-[#101409] to-[#0c0d10] p-4 @md:p-5">
           <div className="ambient-orbit absolute -right-10 -top-12 h-32 w-32 rounded-full border border-primary-fixed/20" />
-          <p className="relative max-w-xl font-body-sans text-[13px] leading-6 text-text-muted"><strong className="mr-1.5 font-display-mono text-[17px] text-primary-fixed @md:text-[19px]">Collateral agreements.</strong> Clear terms and clear settlement for delivery, FX, and job pacts, with deadlines and verifiable on-chain states.</p>
+          <p className="relative max-w-[36rem] font-body-sans text-[13px] leading-6 text-text-muted"><strong className="mr-1.5 font-display-mono text-[17px] text-primary-fixed @md:text-[19px]">Collateral agreements.</strong> Clear terms and clear settlement for delivery, FX, and job pacts, with deadlines and verifiable on-chain states.</p>
         </div>
 
         <div className="grid grid-cols-3 gap-px border border-outline-hairline bg-outline-hairline">
@@ -259,7 +259,7 @@ function TapeDashboard() {
               <p className="font-display-mono text-[14px] uppercase tracking-wider text-on-surface">
                 {filter === 'ALL' ? 'No pacts yet' : `No ${filter.toLowerCase()} pacts found`}
               </p>
-              <p className="mt-2 max-w-sm font-body-sans text-[13px] leading-5 text-text-muted">The tape only shows verified on-chain activity. Create the first agreement to start your shared history.</p>
+              <p className="mt-2 max-w-[24rem] font-body-sans text-[13px] leading-5 text-text-muted">The tape only shows verified on-chain activity. Create the first agreement to start your shared history.</p>
               <p className="mt-5 font-label-caps text-[10px] uppercase tracking-wider text-primary-fixed">Use New Pact in the top bar to begin</p>
             </div>
           ) : (
