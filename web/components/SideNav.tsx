@@ -39,20 +39,6 @@ export default function SideNav() {
           ))}
           <li>
             <Link 
-              href="/new"
-              aria-label="Create new pact"
-              className={`flex items-center gap-md px-md py-sm font-body-mono text-body-mono uppercase transition-all duration-200 ${
-                pathname === '/new'
-                  ? 'bg-secondary-container text-primary-fixed border-l-2 border-primary-fixed'
-                  : 'text-text-dim hover:text-on-surface-variant hover:bg-surface-container-low border-l-2 border-transparent'
-              }`}
-            >
-              <span className="material-symbols-outlined text-[18px]">add_box</span>
-              NEW
-            </Link>
-          </li>
-          <li>
-            <Link 
               href="/me"
               aria-label="View my profile"
               title="Your profile and pact history"
@@ -69,13 +55,6 @@ export default function SideNav() {
         </ul>
       </nav>
       <div className="p-lg border-t border-outline-hairline mt-auto">
-        <Link 
-          href={pathname === '/new' ? '/' : '/new'}
-          aria-label={pathname === '/new' ? 'Back to transaction tape' : 'Create new pact'}
-          className="w-full flex items-center justify-center gap-2 px-4 py-2 border border-primary-fixed bg-transparent text-primary-fixed font-label-caps text-label-caps uppercase rounded-DEFAULT hover:bg-primary-fixed hover:text-on-primary-fixed transition-colors duration-200"
-        >
-          {pathname === '/new' ? '← Back to Tape' : 'NEW PACT'}
-        </Link>
         {process.env.NEXT_PUBLIC_PACT_ADDRESS && (
           <a href={`https://testnet.arcscan.app/address/${process.env.NEXT_PUBLIC_PACT_ADDRESS}`} target="_blank" rel="noreferrer" className="mt-3 flex items-center gap-1 text-[10px] text-text-dim hover:text-primary-fixed" title="View verified protocol contract on ArcScan"><span aria-hidden="true" className="material-symbols-outlined text-[13px]">verified</span> Verified contract ↗</a>
         )}

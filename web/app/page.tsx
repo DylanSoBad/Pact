@@ -132,19 +132,12 @@ function TapeDashboard() {
 
       {/* Decision-first overview */}
       <OnboardingModal open={showOnboarding && !isLoading && pacts.length === 0} onClose={dismissOnboarding} />
-      <section className="@lg:max-w-terminal @lg:mx-auto mb-5 @md:mb-7 grid gap-3 @md:grid-cols-[1.45fr_1fr] animate-enter" style={{ animationDelay: '70ms' }}>
-        <div className="relative overflow-hidden border border-primary-fixed/35 bg-gradient-to-br from-primary-fixed/12 via-[#101409] to-[#0c0d10] p-5 @md:p-6">
-          <div className="absolute -right-14 -top-16 h-44 w-44 rounded-full border border-primary-fixed/20" />
-          <div className="absolute -right-8 -top-8 h-28 w-28 rounded-full border border-primary-fixed/20" />
-          <p className="font-label-caps text-[10px] uppercase tracking-[0.18em] text-primary-fixed">Collateral agreements, made legible</p>
-          <h2 className="mt-3 max-w-xl font-display-mono text-[22px] leading-tight text-on-surface @md:text-[28px]">Make the agreement clear before funds move.</h2>
-          <p className="mt-3 max-w-lg font-body-sans text-[13px] leading-6 text-text-muted">Create a delivery, FX, or job pact with a deadline, escrowed collateral, and a verifiable terms hash.</p>
-          <div className="mt-5 flex flex-wrap items-center gap-3">
-            <Link href="/new" className="inline-flex items-center gap-2 border border-primary-fixed bg-primary-fixed px-4 py-2.5 font-label-caps text-[11px] uppercase tracking-wider text-on-primary-fixed transition hover:bg-transparent hover:text-primary-fixed">
-              Create a pact <span aria-hidden="true">→</span>
-            </Link>
-            <a href="#how-it-works" className="px-2 py-2 font-label-caps text-[11px] uppercase tracking-wider text-text-muted underline-offset-4 hover:text-primary-fixed hover:underline">How it works</a>
-          </div>
+      <section className="@lg:max-w-terminal @lg:mx-auto mb-5 grid gap-3 @md:grid-cols-[1.45fr_1fr] animate-enter" style={{ animationDelay: '70ms' }}>
+        <div className="relative overflow-hidden border border-primary-fixed/35 bg-gradient-to-br from-primary-fixed/12 via-[#101409] to-[#0c0d10] p-4 @md:p-5">
+          <div className="absolute -right-10 -top-12 h-32 w-32 rounded-full border border-primary-fixed/20" />
+          <p className="font-label-caps text-[10px] uppercase tracking-[0.18em] text-primary-fixed">Collateral agreements</p>
+          <h2 className="mt-2 max-w-xl font-display-mono text-[19px] leading-tight text-on-surface @md:text-[23px]">Clear terms. Clear settlement.</h2>
+          <p className="mt-2 max-w-lg font-body-sans text-[12px] leading-5 text-text-muted">Delivery, FX, and job pacts with deadlines and verifiable on-chain states.</p>
         </div>
 
         <div className="grid grid-cols-3 gap-px border border-outline-hairline bg-outline-hairline">
@@ -153,7 +146,7 @@ function TapeDashboard() {
             ['Active', activity.inProgress, 'In progress'],
             ['Cleared', activity.settled, 'Settled'],
           ].map(([label, value, hint]) => (
-            <div key={label as string} className="flex min-h-36 flex-col justify-between bg-[#0c0d10] p-3 @md:p-4">
+            <div key={label as string} className="flex min-h-28 flex-col justify-between bg-[#0c0d10] p-3 @md:p-4">
               <span className="font-label-caps text-[10px] uppercase tracking-wider text-text-muted">{label}</span>
               <strong className="font-display-mono text-[26px] text-on-surface">{value as number}</strong>
               <span className="font-body-sans text-[11px] leading-4 text-text-dim">{hint as string}</span>
@@ -269,12 +262,7 @@ function TapeDashboard() {
                 {filter === 'ALL' ? 'No pacts yet' : `No ${filter.toLowerCase()} pacts found`}
               </p>
               <p className="mt-2 max-w-sm font-body-sans text-[13px] leading-5 text-text-muted">The tape only shows verified on-chain activity. Create the first agreement to start your shared history.</p>
-              <Link
-                href="/new"
-                className="mt-5 border border-primary-fixed bg-primary-fixed px-4 py-2.5 font-label-caps text-[11px] uppercase tracking-wider text-on-primary-fixed transition hover:bg-transparent hover:text-primary-fixed focus-visible:ring-2 focus-visible:ring-primary-fixed focus-visible:outline-none"
-              >
-                Create a pact
-              </Link>
+              <p className="mt-5 font-label-caps text-[10px] uppercase tracking-wider text-primary-fixed">Use New Pact in the top bar to begin</p>
             </div>
           ) : (
             filtered.map((p, index) => {

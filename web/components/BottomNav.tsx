@@ -18,15 +18,6 @@ export default function BottomNav() {
         <span className="font-label-caps text-label-caps uppercase">Tape</span>
       </Link>
       <Link 
-        href="/new"
-        className={`flex flex-col items-center justify-center active:bg-surface-container-high transition-transform active:scale-95 w-full h-full ${
-          pathname === '/new' ? 'text-primary-fixed' : 'text-text-dim'
-        }`}
-      >
-        <span className="material-symbols-outlined mb-1">add_box</span>
-        <span className="font-label-caps text-label-caps uppercase">New</span>
-      </Link>
-      <Link 
         href="/me"
         className={`flex flex-col items-center justify-center active:bg-surface-container-high transition-transform active:scale-95 w-full h-full ${
           pathname === '/me' ? 'text-primary-fixed' : 'text-text-dim'

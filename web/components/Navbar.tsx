@@ -22,6 +22,9 @@ export default function Navbar() {
       </div>
 
       <div className="flex items-center gap-3">
+        <Link href="/new" className="border border-primary-fixed bg-primary-fixed px-3 py-1.5 font-label-caps text-[10px] uppercase tracking-wider text-on-primary-fixed transition hover:bg-transparent hover:text-primary-fixed">
+          New Pact
+        </Link>
         <ConnectButton />
         <button aria-label="Network status: live" className="text-primary-fixed hover:text-primary-fixed transition-colors duration-150 p-1" title="Network Live">
           <span className="material-symbols-outlined text-[20px]" style={{ fontVariationSettings: "'FILL' 0" }}>sensors</span>
