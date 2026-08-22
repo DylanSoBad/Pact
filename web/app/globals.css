@@ -7,37 +7,37 @@
   --color-secondary: #c4c9af;
   --color-on-secondary-fixed-variant: #444935;
   --color-primary-container: #c6f340;
-  --color-surface-container-low: #1b1c1e;
-  --color-background: #121316;
+  --color-surface-container-low: #171a1e;
+  --color-background: #090b0d;
   --color-on-tertiary: #1a3344;
   --color-text-muted: #9e9e9e;
   --color-surface-bright: #38393c;
   --color-outline: #8e937b;
-  --color-surface: #121316;
-  --color-surface-dim: #121316;
+  --color-surface: #101317;
+  --color-surface-dim: #090b0d;
   --color-on-secondary-container: #b6bba1;
   --color-on-background: #e3e2e5;
   --color-status-cleared: #c8f542;
-  --color-surface-container-high: #292a2c;
-  --color-surface-container: #1f2022;
+  --color-surface-container-high: #20242a;
+  --color-surface-container: #171b20;
   --color-primary-fixed-dim: #abd61f;
   --color-on-secondary-fixed: #191d0c;
   --color-on-error-container: #ffdad6;
   --color-on-tertiary-container: #4f677a;
-  --color-surface-container-highest: #343537;
+  --color-surface-container-highest: #292e35;
   --color-inverse-primary: #4f6600;
   --color-surface-variant: #343537;
   --color-secondary-fixed: #e0e5ca;
   --color-outline-variant: #444935;
   --color-on-secondary: #2e3220;
-  --color-primary-fixed: #c6f340;
+  --color-primary-fixed: #d8ff63;
   --color-on-tertiary-fixed-variant: #32495c;
   --color-secondary-container: #464b37;
   --color-tertiary: #ffffff;
   --color-inverse-on-surface: #2f3033;
   --color-status-error: #f43f5e;
-  --color-surface-container-lowest: #0d0e10;
-  --color-outline-hairline: #1c1f26;
+  --color-surface-container-lowest: #0c0f12;
+  --color-outline-hairline: #232830;
   --color-error-container: #93000a;
   --color-status-warning: #fbbf24;
   --color-on-primary-fixed-variant: #3b4d00;
@@ -50,10 +50,10 @@
   --color-on-primary-fixed: #161f00;
   --color-on-surface-variant: #c4c9af;
   --color-primary: #ffffff;
-  --color-on-surface: #e3e2e5;
+  --color-on-surface: #f2f4f7;
   --color-text-muted: #9e9e9e;
   --color-text-dim: #8a8a8a;
-  --color-outline-border: #3f3f46;
+  --color-outline-border: #343b45;
   --color-on-error: #690005;
   --color-on-tertiary-fixed: #031e2e;
   --color-on-primary-container: #556d00;
@@ -70,7 +70,7 @@
    * Tailwind resolves custom `max-w-*` utilities through the
    * `--container-*` namespace.
    */
-  --container-terminal: 780px;
+  --container-terminal: 1120px;
   --container-inspector: 660px;
   --spacing-xs: 4px;
   --spacing-sm: 8px;
@@ -122,7 +122,7 @@
 html { scroll-behavior: smooth; }
 
 body {
-  background-color: #07080a; /* Terminal base surface-black */
+  background-color: #090b0d;
   color: #e3e2e5; /* on-background */
   font-family: var(--font-body-sans);
   overflow-x: hidden;
@@ -183,6 +183,100 @@ body {
 }
 .radar-pulse {
     animation: pulse-lime 1.5s infinite;
+}
+
+/* ─── Institutional product primitives ─── */
+.pact-panel {
+  background: #0f1216;
+  border: 1px solid var(--color-outline-hairline);
+}
+
+.pact-panel-raised {
+  background: #14181d;
+  border: 1px solid var(--color-outline-border);
+}
+
+.pact-eyebrow {
+  color: var(--color-text-muted);
+  font-family: var(--font-label-caps);
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+}
+
+.pact-button-primary,
+.btn-primary {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  min-height: 42px;
+  background: var(--color-primary-fixed);
+  border: 1px solid var(--color-primary-fixed);
+  color: var(--color-on-primary-fixed);
+  font-family: var(--font-label-caps);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  transition: background-color 150ms ease, color 150ms ease, border-color 150ms ease;
+}
+
+.pact-button-primary:hover,
+.btn-primary:hover {
+  background: #e4ff8f;
+  border-color: #e4ff8f;
+}
+
+.pact-button-secondary,
+.btn-ghost {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  min-height: 42px;
+  background: #101317;
+  border: 1px solid var(--color-outline-border);
+  color: var(--color-on-surface);
+  font-family: var(--font-label-caps);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  transition: border-color 150ms ease, background-color 150ms ease;
+}
+
+.pact-button-secondary:hover,
+.btn-ghost:hover {
+  background: #171b20;
+  border-color: #58616d;
+}
+
+.surface-1 { background: #0f1216; }
+.separator { height: 1px; background: var(--color-outline-hairline); }
+
+@keyframes enter {
+  from { opacity: 0; transform: translateY(6px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+.animate-enter { animation: enter 280ms ease-out both; }
+.animate-enter-delay { animation: enter 360ms 70ms ease-out both; }
+
+.mobile-safe-nav {
+  height: calc(4rem + env(safe-area-inset-bottom));
+  padding-bottom: env(safe-area-inset-bottom);
+}
+
+@media (max-width: 479px) {
+  .pact-button-primary,
+  .pact-button-secondary,
+  .btn-primary,
+  .btn-ghost { min-height: 44px; }
+
+  input,
+  textarea,
+  select { font-size: 16px !important; }
 }
 
 @keyframes viewport-enter {

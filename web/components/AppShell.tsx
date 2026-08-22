@@ -1,55 +1,42 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import { useUIStore, ViewMode } from '../lib/store/useUIStore'
-
-export function useViewMode() {
-  const { viewMode, toggleViewMode } = useUIStore()
-  return { view: viewMode, toggleView: toggleViewMode }
-}
+import { useUIStore } from '../lib/store/useUIStore'
 
 export default function AppShell({ children }: { children: React.ReactNode }) {
-  const { viewMode, toggleViewMode } = useUIStore()
+  const { viewMode, setViewMode } = useUIStore()
   const [mounted, setMounted] = useState(false)
 
-  useEffect(() => {
-    setMounted(true)
-  }, [])
+  useEffect(() => setMounted(true), [])
 
-  if (!mounted) {
-    return (
-      <div className="@container w-full min-h-screen flex flex-col bg-surface-black text-on-background">
-        {children}
-      </div>
-    )
-  }
+  const activeView = mounted ? viewMode : 'desktop'
 
   return (
     <>
-      <aside aria-label="Display mode"><button
-        onClick={toggleViewMode}
-        aria-label={viewMode === 'desktop' ? 'Switch to phone view' : 'Switch to desktop view'}
-        aria-pressed={viewMode === 'mobile'}
-        className="fixed bottom-20 right-4 lg:bottom-6 lg:right-6 z-[60] flex items-center gap-2 bg-[#121316]/95 backdrop-blur-md border border-outline-hairline hover:border-primary-fixed px-3 @md:px-4 py-2.5 rounded-full text-text-muted hover:text-primary-fixed transition-all duration-200 shadow-[0_4px_24px_rgba(0,0,0,0.8)] font-label-caps uppercase text-label-caps hover:scale-105 active:scale-95 focus-visible:ring-2 focus-visible:ring-primary-fixed focus-visible:outline-none"
-        title={viewMode === 'desktop' ? 'Preview the phone layout' : 'Return to the desktop layout'}
-      >
-        <span className="material-symbols-outlined text-[18px]">
-          {viewMode === 'desktop' ? 'smartphone' : 'desktop_windows'}
-        </span>
-        <span className="font-bold tracking-wider">
-          {viewMode === 'desktop' ? 'PHONE' : 'DESKTOP'}
-        </span>
-      </button></aside>
+      <div className="fixed bottom-20 right-3 z-[70] flex items-center border border-outline-border bg-[#0c0f12] p-1 md:bottom-5 md:right-5" role="group" aria-label="Preview layout">
+        {(['desktop', 'mobile'] as const).map(mode => {
+          const active = activeView === mode
+          return (
+            <button
+              key={mode}
+              type="button"
+              onClick={() => setViewMode(mode)}
+              aria-pressed={active}
+              className={`flex min-h-10 items-center gap-1.5 px-2.5 font-label-caps text-[10px] uppercase tracking-wider transition-colors sm:px-3 ${active ? 'bg-primary-fixed text-on-primary-fixed' : 'text-text-muted hover:text-on-surface'}`}
+            >
+              <span className="material-symbols-outlined text-[16px]" aria-hidden="true">{mode === 'desktop' ? 'desktop_windows' : 'smartphone'}</span>
+              <span className="hidden sm:inline">{mode === 'desktop' ? 'Desktop' : 'Phone'}</span>
+            </button>
+          )
+        })}
+      </div>
 
-      {/* Main Container */}
-      <div className={`transition-all duration-500 ease-out mx-auto flex flex-col @container ${
-        viewMode === 'mobile' 
-          ? 'viewport-mobile-motion max-w-[420px] w-full my-4 md:my-8 border border-outline-border rounded-[36px] shadow-[0_20px_60px_rgba(0,0,0,0.9)] relative bg-[#07080a] min-h-[820px] max-h-[92vh] overflow-hidden transform-gpu ring-1 ring-white/5'
-          : 'viewport-desktop-motion w-full min-h-screen'
+      <div className={`@container mx-auto flex w-full flex-col bg-background text-on-background transition-[max-width,border-color] duration-300 ${
+        activeView === 'mobile'
+          ? 'my-4 min-h-[760px] max-h-[calc(100vh-2rem)] max-w-[420px] overflow-y-auto border border-outline-border transform-gpu'
+          : 'min-h-screen'
       }`}>
-        <div className="flex-1 w-full relative flex flex-col overflow-y-auto hide-scroll">
-          {children}
-        </div>
+        {children}
       </div>
     </>
   )

@@ -114,12 +114,12 @@ function TapeDashboard() {
   return (
     <div className="w-full px-2 @md:px-0">
       {/* Header & Subhead */}
-      <header className="mb-4 @md:mb-xl @lg:max-w-terminal @lg:mx-auto">
-        <h1 className="font-display-mono text-[24px] @md:text-[32px] leading-tight text-on-surface tracking-tighter uppercase mb-1 @md:mb-2 cmd-prompt animate-enter">
-          The Tape
+      <header className="mb-5 @md:mb-xl @lg:max-w-terminal @lg:mx-auto">
+        <h1 className="font-display-mono text-[26px] @md:text-[32px] leading-tight text-on-surface tracking-tighter mb-1 @md:mb-2 animate-enter">
+          Pact overview
         </h1>
         <p className="font-code-hash text-[11px] @md:text-code-hash text-text-muted animate-enter-delay">
-          economic contracts with collateral. not a dex.
+          Track collateral agreements and the actions that need your attention.
         </p>
       </header>
 
@@ -144,10 +144,10 @@ function TapeDashboard() {
             ['Active', activity.inProgress, 'In progress'],
             ['Cleared', activity.settled, 'Settled'],
           ].map(([label, value, hint]) => (
-            <div key={label as string} className="flex min-h-28 flex-col justify-between bg-[#0c0d10] p-3 @md:p-4">
+            <div key={label as string} className="flex min-h-24 flex-col justify-between bg-[#0c0d10] p-2.5 @md:min-h-28 @md:p-4">
               <span className="font-label-caps text-[10px] uppercase tracking-wider text-text-muted">{label}</span>
-              <strong className="font-display-mono text-[26px] text-on-surface">{value as number}</strong>
-              <span className="font-body-sans text-[11px] leading-4 text-text-dim">{hint as string}</span>
+              <strong className="font-display-mono text-[22px] text-on-surface @md:text-[26px]">{value as number}</strong>
+              <span className="hidden font-body-sans text-[11px] leading-4 text-text-dim @sm:block">{hint as string}</span>
             </div>
           ))}
         </div>
@@ -294,7 +294,12 @@ function TapeDashboard() {
         </div>
       </div>
 
-      <section id="how-it-works" className="@lg:max-w-terminal @lg:mx-auto mt-5 grid gap-3 @md:grid-cols-3 scroll-mt-24">
+      <section id="how-it-works" className="@lg:max-w-terminal @lg:mx-auto mt-8 scroll-mt-24">
+        <div className="mb-4">
+          <p className="pact-eyebrow mb-2">Settlement lifecycle</p>
+          <h2 className="font-display-mono text-[18px] text-on-surface">How PACT works</h2>
+        </div>
+        <div className="grid gap-3 @md:grid-cols-3">
         {[
           ['01', 'Set the agreement', 'Choose a pact type, counterpart, deadline, and terms. The terms hash anchors what both parties agreed to.'],
           ['02', 'Lock only what is needed', 'Each party approves and funds the exact collateral required for this pact—never an unlimited allowance.'],
@@ -306,6 +311,7 @@ function TapeDashboard() {
             <p className="mt-2 font-body-sans text-[12px] leading-5 text-text-muted">{body}</p>
           </article>
         ))}
+        </div>
       </section>
     </div>
   )

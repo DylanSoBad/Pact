@@ -56,10 +56,10 @@ export default function ConnectButton() {
             <button
               disabled
               aria-label="Connecting to wallet"
-              className="px-3.5 py-[7px] text-[12px] uppercase tracking-widest font-mono border border-primary-fixed/40 text-primary-fixed/80 bg-black flex items-center gap-2 rounded-DEFAULT"
+              className="flex min-h-10 items-center gap-2 border border-primary-fixed/40 bg-black px-2.5 text-[11px] font-mono uppercase tracking-wider text-primary-fixed/80 @sm:px-3.5 @sm:text-[12px]"
             >
               <div className="w-2 h-2 rounded-full bg-primary-fixed radar-pulse shrink-0" />
-              <span>CONNECTING...</span>
+              <span className="hidden @sm:inline">CONNECTING...</span><span className="@sm:hidden">WAIT</span>
             </button>
           )
         }
@@ -69,7 +69,7 @@ export default function ConnectButton() {
             onClick={show}
             aria-label={isConnected ? `Connected account: ${ensName ?? truncatedAddress}` : 'Connect Web3 Wallet'}
             aria-haspopup="dialog"
-            className={`px-3.5 py-[7px] text-[12px] uppercase tracking-widest font-mono flex items-center gap-2.5 rounded-DEFAULT transition-all focus-visible:ring-2 focus-visible:ring-primary-fixed focus-visible:outline-none ${
+            className={`flex min-h-10 min-w-0 items-center gap-2 border px-2.5 text-[11px] font-mono uppercase tracking-wider transition-colors focus-visible:ring-2 focus-visible:ring-primary-fixed focus-visible:outline-none @sm:px-3.5 @sm:text-[12px] ${
               isConnected
                 ? 'text-primary-fixed border border-primary-fixed/60 bg-surface-container-lowest hover:border-primary-fixed shadow-[0_0_10px_rgba(198,243,64,0.15)]'
                 : 'text-text-muted border border-outline-border hover:border-primary-fixed hover:text-primary-fixed bg-surface-container-lowest'
@@ -79,16 +79,16 @@ export default function ConnectButton() {
               <>
                 {/* Identicon dot indicator */}
                 <span className="w-2 h-2 rounded-full bg-primary-fixed shadow-[0_0_6px_#c8f542] shrink-0" />
-                <span className="text-primary-fixed font-mono text-[12px] font-medium">
+                <span className="hidden text-primary-fixed font-mono text-[12px] font-medium @sm:inline">
                   {Number(formattedUsdc).toFixed(1)} USDC
                 </span>
-                <span className="text-zinc-600">·</span>
-                <span className="text-on-surface font-mono font-medium">{ensName ?? truncatedAddress}</span>
+                <span className="hidden text-zinc-600 @sm:inline">·</span>
+                <span className="max-w-[92px] truncate text-on-surface font-mono font-medium @sm:max-w-none">{ensName ?? truncatedAddress}</span>
               </>
             ) : (
               <>
                 <span className="w-1.5 h-1.5 rounded-full bg-zinc-600" />
-                <span>CONNECT</span>
+                <span className="hidden @sm:inline">CONNECT WALLET</span><span className="@sm:hidden">WALLET</span>
               </>
             )}
           </button>

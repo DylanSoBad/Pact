@@ -89,16 +89,17 @@ export default function MePage() {
 
   if (!isConnected) {
     return (
-      <div className="w-full max-w-terminal mx-auto font-mono">
-        <div className="text-center py-20 space-y-4 animate-enter border border-zinc-800 bg-[#0c0d10] px-4">
-          <h1 className="text-[20px] font-bold text-white uppercase tracking-widest">Connect Wallet</h1>
-          <p className="text-[12px] text-zinc-500 max-w-[24rem] mx-auto uppercase tracking-wider">
+      <div className="mx-auto w-full max-w-[760px] font-mono">
+        <div className="pact-panel px-6 py-16 text-center animate-enter @md:px-12">
+          <p className="pact-eyebrow mb-3">Private portfolio</p>
+          <h1 className="text-[26px] font-semibold text-white tracking-[-0.03em]">Connect your wallet</h1>
+          <p className="text-[13px] leading-6 text-text-muted max-w-[28rem] mx-auto mt-3 mb-6">
             Connect your Arc wallet to view your on-chain settlement reputation, active pact commitments, and transaction history.
           </p>
           <button onClick={() => openModal(true)} className="btn-primary px-6 py-2.5 text-[12px] uppercase tracking-widest">
             Connect Wallet
           </button>
-          <a href="#reputation-system" className="block text-[11px] text-primary-fixed underline">What is this?</a>
+          <a href="#reputation-system" className="mt-4 block text-[11px] text-text-muted underline">How reputation works</a>
           <div className="mt-8 max-w-2xl mx-auto text-left opacity-45 blur-[1px] pointer-events-none select-none border border-zinc-800 bg-black p-4 space-y-3" aria-hidden="true">
             <div className="flex justify-between text-[11px] text-zinc-500 uppercase"><span>Reputation score</span><span className="text-[#c8f542]">92%</span></div>
             <div className="grid grid-cols-3 gap-2"><div className="h-14 border border-zinc-800 bg-zinc-950 p-2 text-[10px] text-zinc-500">Cleared<br /><b className="text-[#c8f542] text-lg">12</b></div><div className="h-14 border border-zinc-800 bg-zinc-950 p-2 text-[10px] text-zinc-500">Active<br /><b className="text-white text-lg">3</b></div><div className="h-14 border border-zinc-800 bg-zinc-950 p-2 text-[10px] text-zinc-500">History<br /><b className="text-white text-lg">18</b></div></div>
@@ -112,8 +113,13 @@ export default function MePage() {
 
   return (
     <div className="w-full max-w-terminal mx-auto font-mono">
+      <header className="mb-6">
+        <p className="pact-eyebrow mb-2">Account overview</p>
+        <h1 className="text-[26px] @md:text-[32px] font-semibold tracking-[-0.03em] text-on-surface">Portfolio</h1>
+        <p className="mt-2 text-[13px] text-text-muted">Your live commitments, settlement history and on-chain track record.</p>
+      </header>
       {/* Profile Header */}
-      <div className="surface-1 rounded-none p-4 @md:p-6 mb-6 @md:mb-8 border border-zinc-800 space-y-4 animate-enter">
+      <div className="pact-panel p-4 @md:p-6 mb-6 space-y-4 animate-enter">
         <div className="flex flex-col @sm:flex-row @sm:items-center justify-between gap-4">
           <div>
             <span className="text-[11px] uppercase tracking-widest text-zinc-500 block mb-1">Connected Account</span>
@@ -144,29 +150,29 @@ export default function MePage() {
         </div>
 
         {/* Reputation Scorecards */}
-        <div className="grid grid-cols-2 @md:grid-cols-4 gap-2.5 @md:gap-3 pt-4 border-t border-zinc-800 mt-4">
-          <div className="p-3 rounded-none bg-black border border-zinc-800">
+        <div className="grid grid-cols-2 @md:grid-cols-4 gap-px pt-4 border-t border-outline-hairline mt-4 bg-outline-hairline">
+          <div className="p-4 bg-[#0c0f12]">
             <span className="text-[10px] uppercase tracking-widest text-zinc-500 block">Cleared Deals</span>
             <span className="text-[18px] font-bold text-[#c8f542] mt-0.5 tabular-nums block">
               {reputation ? reputation.cleared : 0}
             </span>
           </div>
 
-          <div className="p-3 rounded-none bg-black border border-zinc-800">
+          <div className="p-4 bg-[#0c0f12]">
             <span className="text-[10px] uppercase tracking-widest text-zinc-500 block">Slashed / Disputes</span>
             <span className="text-[18px] font-bold text-rose-400 mt-0.5 tabular-nums block">
               {reputation ? reputation.slashed : 0}
             </span>
           </div>
 
-          <div className="p-3 rounded-none bg-black border border-zinc-800">
+          <div className="p-4 bg-[#0c0f12]">
             <span className="text-[10px] uppercase tracking-widest text-zinc-500 block">Settled Notional</span>
             <span className="text-[18px] font-bold text-zinc-400 mt-0.5 tabular-nums block">
               ${reputation ? formatAmount(reputation.notional) : '0.00'}
             </span>
           </div>
 
-          <div className="p-3 rounded-none bg-black border border-zinc-800">
+          <div className="p-4 bg-[#0c0f12]">
             <span className="text-[10px] uppercase tracking-widest text-zinc-500 block">Reliability Score</span>
             <span className="text-[18px] font-bold text-[#c8f542] mt-0.5 tabular-nums block">
               {successRate}%

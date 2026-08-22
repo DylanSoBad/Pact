@@ -319,9 +319,9 @@ export default function NewPactPage() {
       <main className="min-h-screen max-w-[580px] mx-auto px-5 @md:px-8 pb-20 overflow-x-hidden font-mono">
                 <div className="text-center py-16 animate-enter border border-zinc-800 bg-[#0c0d10] mt-8 p-8">
           <div className="w-14 h-14 bg-[#c8f542] text-black flex items-center justify-center mx-auto mb-5 text-xl font-bold rounded-none">✓</div>
-          <h2 className="text-xl font-semibold text-white mb-1">
+          <h1 className="text-xl font-semibold text-white mb-1">
             Pact {createdPactId ? `#${createdPactId.toString().padStart(4, '0')}` : ''} created
-          </h2>
+          </h1>
           <p className="text-[14px] text-zinc-500 mb-8">${amountMaker} {tokenLabel} locked on-chain via Arc Native Settlement.</p>
 
           {createdPactId && (
@@ -373,9 +373,9 @@ export default function NewPactPage() {
   }
 
   return (
-    <div className="w-full max-w-terminal mx-auto font-mono">
+    <div className="mx-auto w-full max-w-[920px] font-mono">
       
-      <button type="button" onClick={toggleBanners} className="mb-3 flex w-full items-center justify-between border border-outline-border px-3 py-2 text-[11px] text-text-muted hover:text-primary-fixed" aria-expanded={!bannersCollapsed}>
+      <button type="button" onClick={toggleBanners} className="mb-4 flex w-full items-center justify-between border-b border-outline-hairline px-1 py-2 text-[11px] text-text-muted hover:text-on-surface" aria-expanded={!bannersCollapsed}>
         <span>{bannersCollapsed ? 'Network and risk notices hidden' : 'Hide network and risk notices'}</span><span aria-hidden="true" className="material-symbols-outlined text-[16px]">{bannersCollapsed ? 'expand_more' : 'expand_less'}</span>
       </button>
       {!bannersCollapsed && <><div className="mb-3 p-3 bg-[#c8f542]/10 border border-[#c8f542]/30 flex items-center justify-between text-[12px] text-[#c8f542] animate-enter rounded-none">
@@ -403,19 +403,26 @@ export default function NewPactPage() {
       )}
 
       {/* Header */}
-      <div className="flex items-center justify-between mb-8 animate-enter">
+      <div className="flex flex-col items-start justify-between gap-4 mb-8 animate-enter @sm:flex-row">
         <div>
-          <Link href="/" className="text-[13px] text-zinc-600 hover:text-zinc-400 transition-colors">← Back</Link>
-          <h1 className="text-[20px] font-semibold text-white tracking-[-0.01em] mt-1">New pact</h1>
+          <p className="pact-eyebrow mb-2">Create agreement</p>
+          <h1 className="text-[26px] @md:text-[32px] font-semibold text-white tracking-[-0.03em]">New pact</h1>
+          <p className="mt-2 max-w-[36rem] text-[13px] leading-6 text-text-muted">Define the economics, counterparty and settlement terms before anything is signed on-chain.</p>
         </div>
-        <div className="flex gap-2"><button onClick={fillDemo} title="Auto-fill with sample values for testing" className="btn-ghost px-3 py-1 text-[12px] text-zinc-400">Fill Demo</button><button onClick={clearDemo} className="btn-ghost px-3 py-1 text-[12px] text-zinc-400">Clear</button></div>
+        <div className="grid w-full grid-cols-2 gap-2 @sm:flex @sm:w-auto"><button onClick={fillDemo} title="Auto-fill with sample values for testing" className="btn-ghost px-3 text-[11px] text-zinc-400">Use example</button><button onClick={clearDemo} className="btn-ghost px-3 text-[11px] text-zinc-400">Clear</button></div>
       </div>
 
-      <div className="space-y-8 animate-enter-delay">
+      <ol aria-label="Pact creation steps" className="mb-6 grid grid-cols-2 gap-px border border-outline-hairline bg-outline-hairline @md:grid-cols-4">
+        {[['01', 'Structure'], ['02', 'Collateral'], ['03', 'Terms'], ['04', 'Review']].map(([number, label]) => (
+          <li key={number} className="flex items-center gap-3 bg-[#0f1216] px-4 py-3"><span className="font-display-mono text-[11px] text-primary-fixed">{number}</span><span className="text-[11px] font-medium text-text-muted">{label}</span></li>
+        ))}
+      </ol>
+
+      <div className="space-y-5 animate-enter-delay">
         {/* Type */}
-        <div>
-          <label className="text-[13px] text-zinc-500 block mb-3">Pact Archetype</label>
-          <div className="grid grid-cols-3 gap-2">
+        <div className="pact-panel p-5 @md:p-6">
+          <label className="pact-eyebrow block mb-4">01 · Pact structure</label>
+          <div className="grid grid-cols-1 gap-2 @sm:grid-cols-3">
             {KINDS.map(k => (
               <label key={k.value} className={`pill-interactive p-3.5 cursor-pointer transition-none text-center border ${
                 kind === k.value
@@ -431,8 +438,8 @@ export default function NewPactPage() {
         </div>
 
         {/* Amounts */}
-        <div className="space-y-4">
-          <label className="text-[13px] text-zinc-500 block">Collateral & Tokens</label>
+        <div className="pact-panel space-y-5 p-5 @md:p-6">
+          <label className="pact-eyebrow block">02 · Collateral and counterparty</label>
           <div className="grid grid-cols-1 @md:grid-cols-2 gap-3">
             <TokenSelect label={mc.m} tokens={TOKENS} value={tokenMaker} onChange={setTokenMaker} />
             <div>
@@ -497,10 +504,10 @@ export default function NewPactPage() {
 
 
         {/* Terms */}
-        <div>
-          <div className="flex justify-between items-center mb-2">
-            <label className="text-[13px] text-zinc-500">Agreement terms & fulfillment condition</label>
-            <div className="flex items-center gap-2">
+        <div className="pact-panel p-5 @md:p-6">
+          <div className="flex flex-col items-start justify-between gap-3 mb-3 @md:flex-row @md:items-center">
+            <label className="pact-eyebrow">03 · Agreement terms</label>
+            <div className="flex w-full items-center gap-2 overflow-x-auto pb-1 hide-scroll @md:w-auto">
               <span className="text-[10px] text-zinc-600 hidden @md:inline">Templates:</span>
               {TEMPLATES.map(t => (
                 <button key={t.label} type="button" onClick={() => setTerms(t.text)} aria-pressed={terms === t.text} className={`min-h-11 px-3 text-[11px] border transition-colors ${terms === t.text ? 'bg-[#c8f542]/15 border-[#c8f542] text-[#c8f542]' : 'bg-zinc-900 border-zinc-800 hover:border-[#c8f542] text-zinc-400 hover:text-[#c8f542]'}`}>
@@ -518,13 +525,13 @@ export default function NewPactPage() {
         </div>
 
         {/* Deadline & Session Key Features */}
-        <div>
-          <label className="text-[13px] text-zinc-500 block mb-2">Settlement Deadline</label>
-          <div className="flex items-center gap-2">
-            <div className="flex flex-1"><input aria-invalid={deadlineError} type="number" value={deadlineMinutes} onChange={e => setDeadlineMinutes(e.target.value)} min="1" className={`${fieldClass(deadlineError)} min-w-0`} /><span className="border border-l-0 border-zinc-800 px-3 py-2.5 text-[12px] text-text-muted">minutes</span></div>
+        <div className="pact-panel p-5 @md:p-6">
+          <label className="pact-eyebrow block mb-3">Settlement deadline</label>
+          <div className="flex flex-wrap items-center gap-2">
+            <div className="flex w-full @md:flex-1"><input aria-invalid={deadlineError} type="number" value={deadlineMinutes} onChange={e => setDeadlineMinutes(e.target.value)} min="1" className={`${fieldClass(deadlineError)} min-w-0`} /><span className="border border-l-0 border-zinc-800 px-3 py-2.5 text-[12px] text-text-muted">minutes</span></div>
             {[{ m: 30, l: '30m' }, { m: 60, l: '1h' }, { m: 360, l: '6h' }, { m: 1440, l: '24h' }, { m: 10080, l: '7d' }].map(p => (
               <button key={p.m} type="button" onClick={() => setDeadlineMinutes(p.m.toString())}
-                aria-pressed={deadlineMinutes === p.m.toString()} className={`pill-interactive px-3 py-2.5 border text-[13px] transition-none rounded-none ${deadlineMinutes === p.m.toString() ? 'bg-[#c8f542]/15 border-[#c8f542] text-[#c8f542]' : 'bg-[#07080a] border-zinc-800 hover:border-[#c8f542] text-zinc-400 hover:text-[#c8f542]'}`}>
+                aria-pressed={deadlineMinutes === p.m.toString()} className={`pill-interactive min-h-11 flex-1 px-3 py-2.5 border text-[13px] transition-none rounded-none @md:flex-none ${deadlineMinutes === p.m.toString() ? 'bg-[#c8f542]/15 border-[#c8f542] text-[#c8f542]' : 'bg-[#07080a] border-zinc-800 hover:border-[#c8f542] text-zinc-400 hover:text-[#c8f542]'}`}>
                 {p.l}
               </button>
             ))}
@@ -541,8 +548,8 @@ export default function NewPactPage() {
         </div>
 
         {/* Summary */}
-        <div className="surface-1 p-4 text-[13px] space-y-2 border border-zinc-800 rounded-none">
-          <p className="text-zinc-500 text-[12px] mb-3 uppercase tracking-widest">Settlement Summary</p>
+        <div className="pact-panel-raised p-5 @md:p-6 text-[13px] space-y-3">
+          <p className="pact-eyebrow mb-4">04 · Final review</p>
           <div className="flex justify-between"><span className="text-zinc-500">Total locked principal</span><span className="text-[#c8f542]">{amountMaker || '0'} + {amountTaker || '0'} {tokenLabel}</span></div>
           <div className="flex justify-between"><span className="text-zinc-500">Counterparty</span><span className="text-zinc-200">{taker ? `${taker.slice(0,6)}…${taker.slice(-4)}` : 'Open'}</span></div>
           <div className="flex justify-between"><span className="text-zinc-500">Arbitrator mode</span><span className="text-zinc-300 font-mono text-[11px]">Direct Bilateral</span></div>

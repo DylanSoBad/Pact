@@ -197,7 +197,7 @@ export default function PactDetailPage({ params }: { params: Promise<{ id: strin
   }
 
   if (loading) return (
-    <div className="w-full max-w-terminal mx-auto font-mono">
+    <div className="w-full max-w-[940px] mx-auto font-mono">
       <div className="flex items-center justify-center py-24 text-[13px] text-zinc-500 gap-3">
         <div className="w-3 h-3 bg-[#c8f542] animate-pulse-soft" />
         LOADING PACT DATA...
@@ -219,12 +219,12 @@ export default function PactDetailPage({ params }: { params: Promise<{ id: strin
   return (
     <div className="w-full max-w-terminal mx-auto font-mono">
       {/* Header & Quick Action Share */}
-      <div className="flex items-center justify-between mb-6 animate-enter border-b border-zinc-800 pb-4">
+      <div className="flex flex-col @md:flex-row @md:items-end justify-between gap-4 mb-7 animate-enter border-b border-outline-hairline pb-5">
         <div>
-          <Link href="/" className="text-[12px] text-zinc-500 hover:text-[#c8f542] transition-colors underline mb-2 inline-block">← RETURN TO FEED</Link>
+          <p className="pact-eyebrow mb-2">Agreement record</p>
           <div className="flex items-center gap-3">
-            <h1 className="text-[20px] font-bold text-white uppercase tracking-widest">
-              &gt; PACT #{id.toString().padStart(4, '0')}
+            <h1 className="text-[26px] @md:text-[32px] font-semibold text-white tracking-[-0.03em]">
+              Pact #{id.toString().padStart(4, '0')}
             </h1>
             <span className="text-[11px] font-mono uppercase px-2 py-0.5 bg-[#18181b] text-[#c8f542] border border-[#c8f542]">
               {kindLabel(pact.kind)}
@@ -263,7 +263,7 @@ export default function PactDetailPage({ params }: { params: Promise<{ id: strin
       )}
 
       {/* Core Financial Ledger Card */}
-      <div className="surface-1 rounded-none p-5 mb-6 border border-zinc-800 space-y-4">
+      <div className="pact-panel-raised p-5 @md:p-6 mb-6 space-y-5">
         <div className="flex justify-between items-start">
           <div>
             <span className="text-[12px] text-zinc-500 block mb-1 uppercase tracking-widest">Maker Collateral Locked</span>
@@ -299,9 +299,9 @@ export default function PactDetailPage({ params }: { params: Promise<{ id: strin
       </div>
 
       {/* Agreement Terms with SHA-256 Integrity Seal */}
-      <div className="surface-1 rounded-none p-5 mb-6 border border-zinc-800 space-y-3">
+      <div className="pact-panel p-5 @md:p-6 mb-6 space-y-3">
         <div className="flex items-center justify-between">
-          <h3 className="text-[13px] font-bold text-white uppercase tracking-widest">Agreement Terms</h3>
+          <h2 className="text-[13px] font-bold text-white uppercase tracking-widest">Agreement Terms</h2>
           {termsVerified !== null && (
             <span className={`text-[10px] font-mono px-2 py-0.5 border ${
               termsVerified ? 'bg-[#c8f542]/10 text-[#c8f542] border-[#c8f542]/30' : 'bg-rose-500/10 text-rose-400 border-rose-500/30'
@@ -317,7 +317,7 @@ export default function PactDetailPage({ params }: { params: Promise<{ id: strin
 
         <div className="pt-2">
           <label className="text-[11px] uppercase tracking-widest text-zinc-500 block mb-1.5">Verify Plaintext against On-Chain Hash</label>
-          <div className="flex gap-2">
+          <div className="flex flex-col gap-2 @sm:flex-row">
             <input
               value={verifyInput}
               onChange={e => setVerifyInput(e.target.value)}
@@ -337,7 +337,7 @@ export default function PactDetailPage({ params }: { params: Promise<{ id: strin
       {/* On-Chain Cryptographic Hashes */}
       <div className="mb-6">
         <span className="text-[11px] uppercase tracking-widest text-zinc-500 block mb-2">On-chain Cryptographic Hashes</span>
-        <div className="font-mono text-[10px] text-zinc-500 break-all space-y-2 surface-1 rounded-none p-3.5 border border-zinc-800">
+        <div className="font-mono text-[10px] text-zinc-500 break-all space-y-2 pact-panel p-4">
           <div><span className="text-zinc-600">termsHash: </span>{pact.termsHash}</div>
           {pact.proofHash !== '0x0000000000000000000000000000000000000000000000000000000000000000' && (
             <div>
@@ -389,7 +389,7 @@ export default function PactDetailPage({ params }: { params: Promise<{ id: strin
 
       {/* Primary & Secondary Role Actions */}
       {isConnected && !isTerminal(pact.status) && (
-        <div className="space-y-3 pt-2">
+        <div className="pact-panel p-4 @md:p-5 space-y-3">
           {canFund && (
             <button
               onClick={doFund}
@@ -476,9 +476,9 @@ export default function PactDetailPage({ params }: { params: Promise<{ id: strin
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-enter font-mono">
           <div className="bg-[#0c0d10] border border-rose-500/30 rounded-none p-6 max-w-[28rem] w-full shadow-2xl space-y-4">
             <div className="flex items-center gap-2.5 text-rose-400">
-              <h3 className="text-[15px] font-bold uppercase tracking-widest">
+              <h2 className="text-[15px] font-bold uppercase tracking-widest">
                 Initiate Dispute & Bond Slash
-              </h3>
+              </h2>
             </div>
 
             <p className="text-[13px] text-zinc-400 leading-relaxed">

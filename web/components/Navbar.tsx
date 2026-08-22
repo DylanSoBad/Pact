@@ -2,14 +2,21 @@
 
 import Link from 'next/link'
 import Image from 'next/image'
+import { usePathname } from 'next/navigation'
 import ConnectButton from './ConnectButton'
 
 export default function Navbar() {
+  const pathname = usePathname()
+  const navItems = [
+    { href: '/', label: 'Overview' },
+    { href: '/me', label: 'Portfolio' },
+  ]
+
   return (
-    <nav aria-label="Primary navigation" className="flex justify-between items-center h-14 @md:h-16 px-4 @md:px-gutter w-full max-w-terminal mx-auto bg-background text-primary-fixed docked full-width top-0 border-b border-outline-hairline sticky z-40">
-      <div className="flex items-center gap-3">
-        {/* Brand Logo */}
-        <Link href="/" className="font-display-mono text-[18px] @md:text-display-mono text-primary-fixed tracking-tighter flex items-center gap-2">
+    <nav aria-label="Primary navigation" className="sticky top-0 z-40 border-b border-outline-hairline bg-background/95 backdrop-blur-md">
+      <div className="mx-auto flex h-15 w-full max-w-terminal items-center justify-between gap-2 px-3 @md:h-16 @md:px-6">
+      <div className="flex items-center gap-8">
+        <Link href="/" className="font-display-mono text-[17px] @md:text-display-mono text-primary-fixed tracking-tighter flex shrink-0 items-center gap-2">
           <Image
             src="/icon.png"
             alt="PACT Logo"
@@ -19,16 +26,18 @@ export default function Navbar() {
           />
           PACT
         </Link>
+        <div className="hidden @md:flex items-center gap-1">
+          {navItems.map(item => {
+            const active = pathname === item.href
+            return <Link key={item.href} href={item.href} className={`px-3 py-2 text-[12px] font-medium transition-colors ${active ? 'text-on-surface' : 'text-text-muted hover:text-on-surface'}`}>{item.label}</Link>
+          })}
+        </div>
       </div>
 
-      <div className="flex items-center gap-3">
-        <Link href="/new" className="border border-primary-fixed bg-primary-fixed px-3 py-1.5 font-label-caps text-[10px] uppercase tracking-wider text-on-primary-fixed transition hover:bg-transparent hover:text-primary-fixed">
-          New Pact
-        </Link>
+      <div className="flex min-w-0 items-center gap-2 @md:gap-3">
         <ConnectButton />
-        <button aria-label="Network status: live" className="text-primary-fixed hover:text-primary-fixed transition-colors duration-150 p-1" title="Network Live">
-          <span className="material-symbols-outlined text-[20px]" style={{ fontVariationSettings: "'FILL' 0" }}>sensors</span>
-        </button>
+        <Link href="/new" className="pact-button-primary hidden px-4 @md:inline-flex">New pact</Link>
+      </div>
       </div>
     </nav>
   )

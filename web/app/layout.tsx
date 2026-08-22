@@ -4,7 +4,6 @@ import "./globals.css";
 import Web3Provider from "../components/Web3Provider";
 import { Toaster } from "sonner";
 import Navbar from "../components/Navbar";
-import SideNav from "../components/SideNav";
 import BottomNav from "../components/BottomNav";
 import AppShell from "../components/AppShell";
 import A11yAuditor from "../components/A11yAuditor";
@@ -94,12 +93,11 @@ export default function RootLayout({
         <Web3Provider>
           <AppShell>
             <Navbar />
-            <SideNav />
-            <main className="flex-1 w-full max-w-terminal mx-auto px-3 @md:px-gutter py-4 @md:py-xl @lg:pl-64 @lg:max-w-none pb-28 @md:pb-32">
+            <main className="mx-auto w-full max-w-terminal flex-1 px-4 py-6 @md:px-6 @md:py-10 pb-24 @md:pb-12">
               {children}
             </main>
             <BottomNav />
-            <footer className="@lg:pl-64 px-4 pb-20 @lg:pb-5 text-center text-[11px] text-text-muted font-code-hash">
+            <footer className="px-4 pb-20 @md:pb-6 text-center text-[11px] text-text-muted font-code-hash">
               <a className="hover:text-primary-fixed" href="https://github.com/DylanSoBad/Pact" target="_blank" rel="noreferrer" title="Read PACT documentation and source code">Docs</a><span aria-hidden="true"> · </span><a className="hover:text-primary-fixed" href="https://github.com/DylanSoBad/Pact" target="_blank" rel="noreferrer" title="View PACT source code on GitHub">Source Code</a><span aria-hidden="true"> · </span><span title="Independent audit report is coming soon">Audit Report (Coming Soon)</span>
             </footer>
             
