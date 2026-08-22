@@ -39,3 +39,6 @@ cache/
 out/
 broadcast/
 .solhint.json
+
+.vercel
+.env*
