@@ -26,8 +26,8 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
 
   return (
     <>
-      {/* Floating Toggle Button (Always visible to switch responsive modes) */}
-      <button 
+      {/* Viewport simulator is deliberately unavailable in production. */}
+      {process.env.NODE_ENV === 'development' && <button
         onClick={toggleViewMode}
         aria-label={viewMode === 'desktop' ? 'Switch to mobile viewport simulation' : 'Switch to desktop viewport'}
         className="fixed bottom-6 right-6 z-50 flex items-center gap-2 bg-[#121316]/95 backdrop-blur-md border border-outline-hairline hover:border-primary-fixed px-4 py-2.5 rounded-full text-text-muted hover:text-primary-fixed transition-all duration-200 shadow-[0_4px_24px_rgba(0,0,0,0.8)] font-label-caps uppercase text-label-caps hover:scale-105 active:scale-95 focus-visible:ring-2 focus-visible:ring-primary-fixed focus-visible:outline-none"
@@ -39,7 +39,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
         <span className="font-bold tracking-wider">
           {viewMode === 'desktop' ? 'MOBILE VIEW' : 'DESKTOP VIEW'}
         </span>
-      </button>
+      </button>}
 
       {/* Main Container */}
       <div className={`transition-all duration-300 ease-in-out mx-auto flex flex-col @container ${

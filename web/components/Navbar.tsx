@@ -23,7 +23,7 @@ export default function Navbar() {
 
       <div className="flex items-center gap-3">
         <ConnectButton />
-        <button className="text-primary-fixed hover:text-primary-fixed transition-colors duration-150 p-1" title="Network Live">
+        <button aria-label="Network status: live" className="text-primary-fixed hover:text-primary-fixed transition-colors duration-150 p-1" title="Network Live">
           <span className="material-symbols-outlined text-[20px]" style={{ fontVariationSettings: "'FILL' 0" }}>sensors</span>
         </button>
       </div>

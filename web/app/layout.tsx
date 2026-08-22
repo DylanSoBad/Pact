@@ -100,6 +100,9 @@ export default function RootLayout({
               {children}
             </main>
             <BottomNav />
+            <footer className="@lg:pl-64 px-4 pb-20 @lg:pb-5 text-center text-[11px] text-text-muted font-code-hash">
+              <a className="hover:text-primary-fixed" href="#">Docs</a><span aria-hidden="true"> · </span><a className="hover:text-primary-fixed" href="#">Source Code</a><span aria-hidden="true"> · </span><a className="hover:text-primary-fixed" href="#">Audit Report</a>
+            </footer>
             
             {/* Floating Action Button (FAB) */}
             <Link 
@@ -122,7 +125,7 @@ export default function RootLayout({
                   borderRadius: '2px',
                 },
                 className: 'font-mono'
-              }}
+              }} position="bottom-center" duration={5000}
             />
           </AppShell>
         </Web3Provider>

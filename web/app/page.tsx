@@ -79,6 +79,13 @@ function TapeDashboard() {
     })
   }, [pacts, filter])
 
+  const counts = useMemo(() => ({
+    ALL: pacts.length,
+    DELIVERY: pacts.filter((p: PactData) => p.kind === 0).length,
+    FX: pacts.filter((p: PactData) => p.kind === 1).length,
+    JOB: pacts.filter((p: PactData) => p.kind === 2).length,
+  }), [pacts])
+
   const getFilterClass = (f: FilterCategory) => {
     if (filter === f) {
       return 'px-2.5 @md:px-3 py-1 border border-primary-fixed text-primary-fixed bg-primary-fixed/10 rounded-DEFAULT text-[11px] font-label-caps uppercase transition-all focus-visible:ring-2 focus-visible:ring-primary-fixed'
@@ -121,28 +128,28 @@ function TapeDashboard() {
             aria-pressed={filter === 'ALL'}
             className={getFilterClass('ALL')}
           >
-            ALL
+            ALL ({counts.ALL})
           </button>
           <button 
             onClick={() => setFilter('DELIVERY')} 
             aria-pressed={filter === 'DELIVERY'}
             className={getFilterClass('DELIVERY')}
           >
-            DELIVERY
+            DELIVERY ({counts.DELIVERY})
           </button>
           <button 
             onClick={() => setFilter('FX')} 
             aria-pressed={filter === 'FX'}
             className={getFilterClass('FX')}
           >
-            FX
+            FX ({counts.FX})
           </button>
           <button 
             onClick={() => setFilter('JOB')} 
             aria-pressed={filter === 'JOB'}
             className={getFilterClass('JOB')}
           >
-            JOB
+            JOB ({counts.JOB})
           </button>
           <button 
             onClick={() => setFilter('LIVE')} 
@@ -152,9 +159,11 @@ function TapeDashboard() {
                 ? 'px-2.5 @md:px-3 py-1 border border-status-error text-status-error bg-status-error/10 rounded-DEFAULT text-[11px] font-label-caps uppercase' 
                 : 'px-2.5 @md:px-3 py-1 border border-outline-hairline text-text-muted hover:border-status-error hover:text-status-error transition-colors rounded-DEFAULT text-[11px] font-label-caps uppercase'
             }`}
+            title="Real-time data feed"
           >
-            <span className="w-1.5 h-1.5 rounded-full bg-status-error" /> LIVE
+            <span className="w-1.5 h-1.5 rounded-full bg-status-error" /> STREAMING
           </button>
+          {filter !== 'ALL' && <button onClick={() => setFilter('ALL')} className="px-2 py-1 text-[11px] text-text-muted hover:text-primary-fixed underline focus-visible:ring-2 focus-visible:ring-primary-fixed">Clear filters</button>}
         </div>
 
         {/* Real-time block & stream counter */}
@@ -176,6 +185,7 @@ function TapeDashboard() {
       <div 
         role="table" 
         aria-label="PACT economic contracts feed"
+        aria-live="polite"
         className="@lg:max-w-terminal @lg:mx-auto bg-[#0c0d10] border border-outline-hairline rounded-DEFAULT overflow-hidden animate-enter" 
         style={{ animationDelay: '150ms' }}
       >
@@ -214,15 +224,31 @@ function TapeDashboard() {
               aria-live="polite" 
               className="flex flex-col items-center justify-center py-20 text-center"
             >
-              <p className="font-code-hash text-text-muted text-[12px] mb-1">
+              <p className="font-code-hash text-text-muted text-[12px] mb-5">
                 DATA STREAM EMPTY
               </p>
+              <div className="w-full max-w-xl px-4 grid gap-3 text-left">
+                <div className="border border-primary-fixed/40 bg-primary-fixed/5 p-4">
+                  <p className="text-primary-fixed text-[11px] uppercase mb-3">How a pact settles</p>
+                  <ol className="grid @md:grid-cols-3 gap-3 text-[11px] text-text-muted">
+                    <li><span className="text-primary-fixed">01</span> Create a pact — choose Delivery, FX, or Job.</li>
+                    <li><span className="text-primary-fixed">02</span> Lock collateral — both parties deposit USDC.</li>
+                    <li><span className="text-primary-fixed">03</span> Settle — fulfill conditions or claim timeout.</li>
+                  </ol>
+                </div>
+                {[
+                  ['#0001', 'DELIVERY', '250.00 USDC', 'OPEN'],
+                  ['#0002', 'FX SWAP', '500.00 USDC', 'ACTIVE'],
+                  ['#0003', 'JOB', '120.00 USDC', 'OPEN'],
+                ].map(([id, kind, amount, status]) => <div key={id} className="grid grid-cols-4 gap-2 border border-dashed border-outline-border px-3 py-2 text-[11px] text-text-dim opacity-80"><span>{id}</span><span>{kind}</span><span className="text-right">{amount}</span><span className="text-right">{status}</span></div>)}
+              </div>
               <Link
                 href="/new"
                 className="font-code-hash text-primary-fixed underline text-[12px] mt-3 focus-visible:ring-2 focus-visible:ring-primary-fixed focus-visible:outline-none"
               >
                 &gt; create new pact
               </Link>
+              <a href="#" className="font-code-hash text-text-muted hover:text-primary-fixed underline text-[11px] mt-2 focus-visible:ring-2 focus-visible:ring-primary-fixed">Learn More</a>
             </div>
           ) : (
             filtered.map((p, index) => {

@@ -10,7 +10,7 @@
   --color-surface-container-low: #1b1c1e;
   --color-background: #121316;
   --color-on-tertiary: #1a3344;
-  --color-text-muted: #a1a1aa;
+  --color-text-muted: #9e9e9e;
   --color-surface-bright: #38393c;
   --color-outline: #8e937b;
   --color-surface: #121316;
@@ -51,8 +51,8 @@
   --color-on-surface-variant: #c4c9af;
   --color-primary: #ffffff;
   --color-on-surface: #e3e2e5;
-  --color-text-muted: #a1a1aa;
-  --color-text-dim: #9ca3af;
+  --color-text-muted: #9e9e9e;
+  --color-text-dim: #757575;
   --color-outline-border: #3f3f46;
   --color-on-error: #690005;
   --color-on-tertiary-fixed: #031e2e;
@@ -135,9 +135,13 @@ body {
 /* ─── Focus & A11y ─── */
 *:focus-visible {
   outline: none;
-  box-shadow: 0 0 0 2px var(--color-primary-fixed);
+  box-shadow: 0 0 0 2px var(--color-primary-fixed), 0 0 0 4px #07080a;
   border-radius: 2px;
 }
+
+[data-sonner-toast][data-type="success"] { border-color: var(--color-primary-fixed) !important; }
+[data-sonner-toast][data-type="error"] { border-color: var(--color-status-error) !important; }
+[data-sonner-toast][data-type="warning"] { border-color: var(--color-status-warning) !important; }
 
 /* Terminal input prompt */
 .cmd-prompt::before {

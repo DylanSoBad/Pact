@@ -54,6 +54,7 @@ export default function NewPactPage() {
   const [terms, setTerms] = useState('')
   const [deadlineMinutes, setDeadlineMinutes] = useState('1440')
   const [blurSize, setBlurSize] = useState(false)
+  const [confirmation, setConfirmation] = useState<'approve' | 'create' | null>(null)
 
 
   const [step, setStep] = useState<'form' | 'approving' | 'creating' | 'done'>('form')
@@ -84,6 +85,12 @@ export default function NewPactPage() {
 
   // 1-Click Batched Flow Ref
   const isBatchedRef = useRef(false)
+  const wasConnectedRef = useRef(false)
+
+  useEffect(() => {
+    if (wasConnectedRef.current && !isConnected) toast.warning('Wallet disconnected')
+    wasConnectedRef.current = isConnected
+  }, [isConnected])
 
   const { writeContract: writeApprove, data: approveTxHash, isPending: approvePending, error: approveError } = useWriteContract()
   const { writeContract: writeCreate, data: createTxHash, isPending: createPending, error: createError } = useWriteContract()
@@ -120,12 +127,18 @@ export default function NewPactPage() {
   const hasBalance = address ? makerBn <= makerBalance : true
   const needsApproval = isConnected && makerBn > currentAllowance
   const tokenLabel = TOKENS.find(t => t.value === tokenMaker)?.label || 'tokens'
+  const amountError = !amountMaker || makerBn <= 0n
+  const sellerBondError = !!amountTaker && parseTaker() < 0n
+  const termsError = !terms.trim()
+  const deadlineError = !deadlineMinutes || !Number.isFinite(Number(deadlineMinutes)) || deadline.getTime() <= Date.now()
+  const fieldClass = (invalid: boolean) => `w-full bg-[#07080a] border ${invalid ? 'border-status-error' : 'border-zinc-800 hover:border-zinc-600'} text-[#c8f542] px-3.5 py-2.5 rounded-none text-[14px] placeholder:text-zinc-700 focus:border-[#c8f542] transition-none outline-none focus:ring-0`
 
   let disabled = false, reason = ''
-  if (!amountMaker || makerBn === 0n) { disabled = true; reason = 'Enter an amount' }
+  if (amountError) { disabled = true; reason = 'Amount must be greater than zero' }
   else if (isConnected && !hasBalance) { disabled = true; reason = `Not enough ${tokenLabel}` }
-  else if (terms.length < 20) { disabled = true; reason = `${20 - terms.length} more characters needed` }
-  else if (!deadlineMinutes || Number(deadlineMinutes) < 2) { disabled = true; reason = 'Set a deadline' }
+  else if (sellerBondError) { disabled = true; reason = 'Seller bond must be zero or greater' }
+  else if (termsError) { disabled = true; reason = 'Agreement terms are required' }
+  else if (deadlineError) { disabled = true; reason = 'Settlement deadline must be in the future' }
   else if (kind === 1 && (!amountTaker || parseTaker() === 0n)) { disabled = true; reason = 'Enter counterparty amount' }
   else if (taker && !isAddress(taker)) { disabled = true; reason = 'Invalid counterparty address' }
 
@@ -189,19 +202,19 @@ export default function NewPactPage() {
     if (approveError) {
       setStep('form')
       isBatchedRef.current = false
-      toast.error('Approval failed or rejected')
+      toast.error(`Transaction failed: ${approveError.message || 'approval was rejected'}`)
     }
     if (createError) {
       setStep('form')
       isBatchedRef.current = false
-      toast.error('Pact creation failed or rejected')
+      toast.error(`Transaction failed: ${createError.message || 'pact creation was rejected'}`)
     }
   }, [approveError, createError])
 
   useEffect(() => {
     if (createConfirmed && createReceipt) {
       setStep('done')
-      toast.success('Pact successfully created!')
+      toast.success('Pact created successfully')
       try {
         for (const log of createReceipt.logs) {
           try {
@@ -248,6 +261,13 @@ export default function NewPactPage() {
         blurSize
       ]
     })
+  }
+
+  const confirmTransaction = () => {
+    const action = confirmation
+    setConfirmation(null)
+    if (action === 'approve') doBatched1ClickDeploy()
+    if (action === 'create') doCreate()
   }
 
   const fillDemo = () => {
@@ -342,6 +362,10 @@ export default function NewPactPage() {
         </span>
       </div>
 
+      <div role="note" className="mb-6 p-3 border border-status-warning/60 bg-status-warning/10 text-[12px] text-[#f7d36b]">
+        <strong>⚠ Testnet deployment.</strong> Smart contracts involve risk. Always verify terms before locking collateral.
+      </div>
+
       {isWrongChain && (
         <div className="bg-rose-500/[0.08] border border-rose-500/20 p-3.5 mb-6 text-[13px] flex items-center justify-between text-rose-300 rounded-none">
           <span>Wrong network</span>
@@ -408,8 +432,8 @@ export default function NewPactPage() {
                   </span>
                 )}
               </div>
-              <input type="number" value={amountMaker} onChange={e => setAmountMaker(e.target.value)} placeholder="0.00"
-                className="w-full bg-[#07080a] border border-zinc-800 hover:border-zinc-600 text-[#c8f542] px-3.5 py-2.5 rounded-none text-[14px] placeholder:text-zinc-700 focus:border-[#c8f542] transition-none outline-none focus:ring-0" />
+              <input aria-invalid={amountError} type="number" min="0" value={amountMaker} onChange={e => setAmountMaker(e.target.value)} placeholder="0.00" className={fieldClass(amountError)} />
+              {amountError && <p className="mt-1 text-[11px] text-status-error">Amount must be greater than zero</p>}
             </div>
           </div>
 
@@ -419,9 +443,10 @@ export default function NewPactPage() {
             <TokenSelect label={mc.t} tokens={TOKENS} value={tokenTaker} onChange={setTokenTaker} />
             <div>
               <label className="text-[12px] text-zinc-500 block mb-1.5">{mc.ta}</label>
-              <input type="number" value={amountTaker} onChange={e => setAmountTaker(e.target.value)}
+              <input aria-invalid={sellerBondError} type="number" min="0" value={amountTaker} onChange={e => setAmountTaker(e.target.value)}
                 placeholder={kind === 1 ? '0.00' : '0.00 (optional)'}
-                className="w-full bg-[#07080a] border border-zinc-800 hover:border-zinc-600 text-[#c8f542] px-3.5 py-2.5 rounded-none text-[14px] placeholder:text-zinc-700 focus:border-[#c8f542] transition-none outline-none focus:ring-0" />
+                className={fieldClass(sellerBondError)} />
+              {sellerBondError && <p className="mt-1 text-[11px] text-status-error">Seller bond must be zero or greater</p>}
             </div>
           </div>
 
@@ -454,16 +479,17 @@ export default function NewPactPage() {
             <div className="flex items-center gap-2">
               <span className="text-[10px] text-zinc-600 hidden @md:inline">Templates:</span>
               {TEMPLATES.map(t => (
-                <button key={t.label} onClick={() => setTerms(t.text)} className="text-[10px] bg-zinc-900 border border-zinc-800 hover:border-[#c8f542] text-zinc-400 hover:text-[#c8f542] px-2 py-0.5 transition-colors">
+                <button key={t.label} type="button" onClick={() => setTerms(t.text)} aria-pressed={terms === t.text} className={`min-h-11 px-3 text-[11px] border transition-colors ${terms === t.text ? 'bg-[#c8f542]/15 border-[#c8f542] text-[#c8f542]' : 'bg-zinc-900 border-zinc-800 hover:border-[#c8f542] text-zinc-400 hover:text-[#c8f542]'}`}>
                   {t.label}
                 </button>
               ))}
-              <span className={`text-[11px] ml-2 ${terms.length < 20 ? 'text-amber-500' : 'text-zinc-600'}`}>{terms.length}/20</span>
+              <span className={`text-[11px] ml-2 ${termsError ? 'text-status-error' : 'text-zinc-500'}`}>{terms.length}/500</span>
             </div>
           </div>
-          <textarea value={terms} onChange={e => setTerms(e.target.value)} rows={3}
+          <textarea aria-invalid={termsError} maxLength={500} value={terms} onChange={e => setTerms(e.target.value)} rows={3}
             placeholder="Describe delivery condition, tracking number, or milestone specification…"
-            className="w-full bg-[#07080a] border border-zinc-800 hover:border-zinc-600 text-white px-3.5 py-2.5 rounded-none text-[13px] leading-relaxed placeholder:text-zinc-700 focus:border-[#c8f542] resize-none transition-none outline-none focus:ring-0" />
+            className={`w-full bg-[#07080a] border ${termsError ? 'border-status-error' : 'border-zinc-800 hover:border-zinc-600'} text-white px-3.5 py-2.5 rounded-none text-[13px] leading-relaxed placeholder:text-zinc-700 focus:border-[#c8f542] resize-none transition-none outline-none focus:ring-0`} />
+          {termsError && <p className="mt-1 text-[11px] text-status-error">Agreement terms cannot be empty</p>}
           {terms && <p className="text-[11px] text-zinc-600 mt-1.5 font-mono">SHA-256 Digest: {termsH.slice(0, 24)}…</p>}
         </div>
 
@@ -471,16 +497,15 @@ export default function NewPactPage() {
         <div>
           <label className="text-[13px] text-zinc-500 block mb-2">Settlement Deadline</label>
           <div className="flex items-center gap-2">
-            <input type="number" value={deadlineMinutes} onChange={e => setDeadlineMinutes(e.target.value)} min="2"
-              className="flex-1 bg-[#07080a] border border-zinc-800 hover:border-zinc-600 text-[#c8f542] px-3.5 py-2.5 rounded-none text-[14px] focus:border-[#c8f542] transition-none outline-none focus:ring-0" />
+            <div className="flex flex-1"><input aria-invalid={deadlineError} type="number" value={deadlineMinutes} onChange={e => setDeadlineMinutes(e.target.value)} min="1" className={`${fieldClass(deadlineError)} min-w-0`} /><span className="border border-l-0 border-zinc-800 px-3 py-2.5 text-[12px] text-text-muted">minutes</span></div>
             {[{ m: 30, l: '30m' }, { m: 60, l: '1h' }, { m: 360, l: '6h' }, { m: 1440, l: '24h' }, { m: 10080, l: '7d' }].map(p => (
               <button key={p.m} type="button" onClick={() => setDeadlineMinutes(p.m.toString())}
-                className="pill-interactive px-3 py-2.5 bg-[#07080a] border border-zinc-800 hover:border-[#c8f542] text-[13px] text-zinc-400 hover:text-[#c8f542] transition-none rounded-none">
+                aria-pressed={deadlineMinutes === p.m.toString()} className={`pill-interactive px-3 py-2.5 border text-[13px] transition-none rounded-none ${deadlineMinutes === p.m.toString() ? 'bg-[#c8f542]/15 border-[#c8f542] text-[#c8f542]' : 'bg-[#07080a] border-zinc-800 hover:border-[#c8f542] text-zinc-400 hover:text-[#c8f542]'}`}>
                 {p.l}
               </button>
             ))}
           </div>
-          <p className="text-[11px] text-zinc-600 mt-1.5">{deadline.toLocaleString()}</p>
+          {deadlineError ? <p className="text-[11px] text-status-error mt-1.5">Settlement deadline must be in the future</p> : <p className="text-[11px] text-zinc-500 mt-1.5">in {deadlineMinutes} minutes ({deadline.toLocaleString()})</p>}
 
           <div className="mt-4 space-y-2">
             <label className="flex items-center gap-2.5 cursor-pointer select-none">
@@ -494,10 +519,10 @@ export default function NewPactPage() {
         {/* Summary */}
         <div className="surface-1 p-4 text-[13px] space-y-2 border border-zinc-800 rounded-none">
           <p className="text-zinc-500 text-[12px] mb-3 uppercase tracking-widest">Settlement Summary</p>
-          <div className="flex justify-between"><span className="text-zinc-500">Locked Principal</span><span className="text-[#c8f542]">${amountMaker || '0'} {tokenLabel}</span></div>
+          <div className="flex justify-between"><span className="text-zinc-500">Total locked principal</span><span className="text-[#c8f542]">{amountMaker || '0'} + {amountTaker || '0'} {tokenLabel}</span></div>
           <div className="flex justify-between"><span className="text-zinc-500">Counterparty</span><span className="text-zinc-200">{taker ? `${taker.slice(0,6)}…${taker.slice(-4)}` : 'Open'}</span></div>
-          <div className="flex justify-between"><span className="text-zinc-500">Arbitrator</span><span className="text-zinc-600 font-mono text-[11px]">Direct Bilateral</span></div>
-          <div className="flex justify-between"><span className="text-zinc-500">Timeout Expiry</span><span className="text-zinc-200">{deadline.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span></div>
+          <div className="flex justify-between"><span className="text-zinc-500">Arbitrator mode</span><span className="text-zinc-300 font-mono text-[11px]">Direct Bilateral</span></div>
+          <div className="flex justify-between"><span className="text-zinc-500">Settlement deadline</span><span className="text-zinc-200 text-right">in {deadlineMinutes || '0'}m<br />{deadline.toLocaleString()}</span></div>
         </div>
 
         {/* Errors */}
@@ -511,10 +536,10 @@ export default function NewPactPage() {
         <div>
           {!isConnected ? (
             <button
-              onClick={() => openModal(true)}
-              className="btn-primary w-full py-3 text-[14px]"
+              onClick={() => openModal(true)} disabled={disabled}
+              className="btn-primary w-full py-3 text-[14px] disabled:opacity-50 disabled:cursor-not-allowed"
             >
-              Connect Wallet to Continue
+              {disabled ? reason : 'Connect Wallet to Continue'}
             </button>
           ) : disabled ? (
             <button disabled className="w-full bg-[#18181b] border border-zinc-800 text-zinc-600 py-3 text-[13px] uppercase tracking-widest rounded-none cursor-not-allowed">{reason}</button>
@@ -525,7 +550,7 @@ export default function NewPactPage() {
             </div>
           ) : !isContractConfigured ? (
             <button
-              onClick={handleDeployProtocolContract}
+              onClick={() => setConfirmation('approve')}
               className="btn-primary w-full py-3.5 text-[14px] flex items-center justify-center gap-2 rounded-none"
             >
               <span>Initialize Protocol Contract</span>
@@ -543,7 +568,7 @@ export default function NewPactPage() {
           ) : needsApproval ? (
             <div className="space-y-2">
               <button
-                onClick={doBatched1ClickDeploy}
+                onClick={() => setConfirmation('approve')}
                 className="btn-primary w-full py-3.5 text-[14px] flex items-center justify-center gap-2 rounded-none"
               >
                 <span>Authorize & Deploy Pact</span>
@@ -553,12 +578,24 @@ export default function NewPactPage() {
               </p>
             </div>
           ) : (
-            <button onClick={doCreate} className="btn-primary w-full py-3.5 text-[14px]">
+            <button onClick={() => setConfirmation('create')} className="btn-primary w-full py-3.5 text-[14px]">
               Deploy Pact
             </button>
           )}
         </div>
       </div>
+      {confirmation && (
+        <div role="dialog" aria-modal="true" aria-labelledby="confirm-lock-title" className="fixed inset-0 z-[60] flex items-center justify-center bg-black/75 p-4">
+          <div className="w-full max-w-md border border-primary-fixed bg-[#0c0d10] p-5 shadow-2xl">
+            <h2 id="confirm-lock-title" className="text-primary-fixed font-display-mono text-lg">Confirm collateral lock</h2>
+            <p className="mt-3 text-sm text-text-muted">You are about to lock {amountMaker || '0'} {tokenLabel}. Continue?</p>
+            <div className="mt-5 flex justify-end gap-3">
+              <button type="button" onClick={() => setConfirmation(null)} className="min-h-11 px-4 border border-outline-border text-text-muted hover:text-on-surface">Cancel</button>
+              <button type="button" autoFocus onClick={confirmTransaction} className="min-h-11 px-4 border border-primary-fixed bg-primary-fixed text-on-primary-fixed">Continue</button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

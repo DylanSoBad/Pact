@@ -27,6 +27,15 @@ export default function SideNav() {
               TAPE
             </Link>
           </li>
+          <li className="pt-4 px-md text-label-caps font-label-caps text-text-muted uppercase">My pacts</li>
+          {['Active', 'Completed', 'Disputed'].map((tab) => (
+            <li key={tab}>
+              <Link href={`/me?status=${tab.toLowerCase()}`} className="flex items-center gap-md px-md py-sm ml-3 font-body-mono text-body-mono uppercase text-text-dim hover:text-on-surface-variant hover:bg-surface-container-low border-l-2 border-transparent">
+                <span className="material-symbols-outlined text-[16px]">{tab === 'Active' ? 'play_circle' : tab === 'Completed' ? 'task_alt' : 'gavel'}</span>
+                {tab}
+              </Link>
+            </li>
+          ))}
           <li>
             <Link 
               href="/new"
@@ -43,13 +52,14 @@ export default function SideNav() {
           <li>
             <Link 
               href="/me"
+              title="Your profile and pact history"
               className={`flex items-center gap-md px-md py-sm font-body-mono text-body-mono uppercase transition-all duration-200 ${
                 pathname === '/me'
                   ? 'bg-secondary-container text-primary-fixed border-l-2 border-primary-fixed'
                   : 'text-text-dim hover:text-on-surface-variant hover:bg-surface-container-low border-l-2 border-transparent'
               }`}
             >
-              <span className="material-symbols-outlined text-[18px]">person</span>
+              <span className="material-symbols-outlined text-[18px]" aria-hidden="true">person</span>
               ME
             </Link>
           </li>
@@ -57,11 +67,12 @@ export default function SideNav() {
       </nav>
       <div className="p-lg border-t border-outline-hairline mt-auto">
         <Link 
-          href="/new"
+          href={pathname === '/new' ? '/' : '/new'}
           className="w-full flex items-center justify-center gap-2 px-4 py-2 border border-primary-fixed bg-transparent text-primary-fixed font-label-caps text-label-caps uppercase rounded-DEFAULT hover:bg-primary-fixed hover:text-on-primary-fixed transition-colors duration-200"
         >
-          NEW PACT
+          {pathname === '/new' ? '← Back to Tape' : 'NEW PACT'}
         </Link>
+        <a href={`https://testnet.arcscan.app/address/${process.env.NEXT_PUBLIC_PACT_ADDRESS || '0x0000000000000000000000000000000000000000'}`} target="_blank" rel="noreferrer" className="block mt-3 text-[10px] text-text-dim hover:text-primary-fixed" title="View protocol contract on ArcScan">Contract ↗</a>
       </div>
     </aside>
   )
