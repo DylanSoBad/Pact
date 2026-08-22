@@ -26,26 +26,26 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
 
   return (
     <>
-      {/* Viewport simulator is deliberately unavailable in production. */}
-      {process.env.NODE_ENV === 'development' && <aside aria-label="Development controls"><button
+      <aside aria-label="Display mode"><button
         onClick={toggleViewMode}
-        aria-label={viewMode === 'desktop' ? 'Switch to mobile viewport simulation' : 'Switch to desktop viewport'}
-        className="fixed bottom-6 right-6 z-50 flex items-center gap-2 bg-[#121316]/95 backdrop-blur-md border border-outline-hairline hover:border-primary-fixed px-4 py-2.5 rounded-full text-text-muted hover:text-primary-fixed transition-all duration-200 shadow-[0_4px_24px_rgba(0,0,0,0.8)] font-label-caps uppercase text-label-caps hover:scale-105 active:scale-95 focus-visible:ring-2 focus-visible:ring-primary-fixed focus-visible:outline-none"
-        title="Toggle Desktop / Mobile View"
+        aria-label={viewMode === 'desktop' ? 'Switch to phone view' : 'Switch to desktop view'}
+        aria-pressed={viewMode === 'mobile'}
+        className="fixed bottom-20 right-4 lg:bottom-6 lg:right-6 z-[60] flex items-center gap-2 bg-[#121316]/95 backdrop-blur-md border border-outline-hairline hover:border-primary-fixed px-3 @md:px-4 py-2.5 rounded-full text-text-muted hover:text-primary-fixed transition-all duration-200 shadow-[0_4px_24px_rgba(0,0,0,0.8)] font-label-caps uppercase text-label-caps hover:scale-105 active:scale-95 focus-visible:ring-2 focus-visible:ring-primary-fixed focus-visible:outline-none"
+        title={viewMode === 'desktop' ? 'Preview the phone layout' : 'Return to the desktop layout'}
       >
         <span className="material-symbols-outlined text-[18px]">
           {viewMode === 'desktop' ? 'smartphone' : 'desktop_windows'}
         </span>
         <span className="font-bold tracking-wider">
-          {viewMode === 'desktop' ? 'MOBILE VIEW' : 'DESKTOP VIEW'}
+          {viewMode === 'desktop' ? 'PHONE' : 'DESKTOP'}
         </span>
-      </button></aside>}
+      </button></aside>
 
       {/* Main Container */}
-      <div className={`transition-all duration-300 ease-in-out mx-auto flex flex-col @container ${
+      <div className={`transition-all duration-500 ease-out mx-auto flex flex-col @container ${
         viewMode === 'mobile' 
-          ? 'max-w-[420px] w-full my-4 md:my-8 border border-outline-border rounded-[36px] shadow-[0_20px_60px_rgba(0,0,0,0.9)] relative bg-[#07080a] min-h-[820px] max-h-[92vh] overflow-hidden transform-gpu ring-1 ring-white/5' 
-          : 'w-full min-h-screen'
+          ? 'viewport-mobile-motion max-w-[420px] w-full my-4 md:my-8 border border-outline-border rounded-[36px] shadow-[0_20px_60px_rgba(0,0,0,0.9)] relative bg-[#07080a] min-h-[820px] max-h-[92vh] overflow-hidden transform-gpu ring-1 ring-white/5'
+          : 'viewport-desktop-motion w-full min-h-screen'
       }`}>
         <div className="flex-1 w-full relative flex flex-col overflow-y-auto hide-scroll">
           {children}

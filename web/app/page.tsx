@@ -134,10 +134,8 @@ function TapeDashboard() {
       <OnboardingModal open={showOnboarding && !isLoading && pacts.length === 0} onClose={dismissOnboarding} />
       <section className="@lg:max-w-terminal @lg:mx-auto mb-5 grid gap-3 @md:grid-cols-[1.45fr_1fr] animate-enter" style={{ animationDelay: '70ms' }}>
         <div className="relative overflow-hidden border border-primary-fixed/35 bg-gradient-to-br from-primary-fixed/12 via-[#101409] to-[#0c0d10] p-4 @md:p-5">
-          <div className="absolute -right-10 -top-12 h-32 w-32 rounded-full border border-primary-fixed/20" />
-          <p className="font-label-caps text-[10px] uppercase tracking-[0.18em] text-primary-fixed">Collateral agreements</p>
-          <h2 className="mt-2 max-w-xl font-display-mono text-[19px] leading-tight text-on-surface @md:text-[23px]">Clear terms. Clear settlement.</h2>
-          <p className="mt-2 max-w-lg font-body-sans text-[12px] leading-5 text-text-muted">Delivery, FX, and job pacts with deadlines and verifiable on-chain states.</p>
+          <div className="ambient-orbit absolute -right-10 -top-12 h-32 w-32 rounded-full border border-primary-fixed/20" />
+          <p className="relative max-w-xl font-body-sans text-[13px] leading-6 text-text-muted"><strong className="mr-1.5 font-display-mono text-[17px] text-primary-fixed @md:text-[19px]">Collateral agreements.</strong> Clear terms and clear settlement for delivery, FX, and job pacts, with deadlines and verifiable on-chain states.</p>
         </div>
 
         <div className="grid grid-cols-3 gap-px border border-outline-hairline bg-outline-hairline">
