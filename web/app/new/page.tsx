@@ -610,12 +610,20 @@ export default function NewPactPage() {
       </div>
       {confirmation && (
         <div role="dialog" aria-modal="true" aria-labelledby="confirm-lock-title" className="fixed inset-0 z-[60] flex items-center justify-center bg-black/75 p-4">
-          <div className="w-full max-w-md border border-primary-fixed bg-[#0c0d10] p-5 shadow-2xl">
-            <h2 id="confirm-lock-title" className="text-primary-fixed font-display-mono text-lg">Confirm collateral lock</h2>
-            <p className="mt-3 text-sm text-text-muted">You are about to lock {amountMaker || '0'} {tokenLabel}. Continue?</p>
+          <div className="w-full max-w-md border border-primary-fixed/70 bg-[#0c0d10] p-5 shadow-2xl">
+            <p className="font-label-caps text-[10px] uppercase tracking-[0.16em] text-primary-fixed">Final review</p>
+            <h2 id="confirm-lock-title" className="mt-2 font-display-mono text-lg text-white">{confirmation === 'approve' ? 'Approve collateral' : 'Create and lock pact'}</h2>
+            <p className="mt-2 text-sm leading-6 text-text-muted">{confirmation === 'approve' ? `Approve exactly ${amountMaker || '0'} ${tokenLabel} for this single pact, then create it.` : 'Review the agreement summary before you sign the creation transaction.'}</p>
+            <dl className="mt-5 divide-y divide-outline-hairline border-y border-outline-hairline text-[12px]">
+              <div className="flex items-center justify-between gap-4 py-3"><dt className="text-text-muted">Maker locks</dt><dd className="font-headline-mono text-primary-fixed">{amountMaker || '0'} {tokenLabel}</dd></div>
+              {parseTaker() > 0n && <div className="flex items-center justify-between gap-4 py-3"><dt className="text-text-muted">Counterparty locks</dt><dd className="font-headline-mono text-on-surface">{amountTaker} {TOKENS.find(t => t.value === tokenTaker)?.label}</dd></div>}
+              <div className="flex items-center justify-between gap-4 py-3"><dt className="text-text-muted">Counterparty</dt><dd className="max-w-[190px] truncate font-code-hash text-on-surface">{taker || 'Open to the first eligible funder'}</dd></div>
+              <div className="flex items-center justify-between gap-4 py-3"><dt className="text-text-muted">Deadline</dt><dd className="font-code-hash text-on-surface">{deadline.toLocaleString()}</dd></div>
+            </dl>
+            <p className="mt-4 text-[11px] leading-5 text-text-dim">Funds remain in the pact contract until its on-chain settlement rules are satisfied.</p>
             <div className="mt-5 flex justify-end gap-3">
               <button type="button" onClick={() => setConfirmation(null)} className="min-h-11 px-4 border border-outline-border text-text-muted hover:text-on-surface">Cancel</button>
-              <button type="button" autoFocus onClick={confirmTransaction} className="min-h-11 px-4 border border-primary-fixed bg-primary-fixed text-on-primary-fixed">Continue</button>
+              <button type="button" autoFocus onClick={confirmTransaction} className="min-h-11 px-4 border border-primary-fixed bg-primary-fixed text-on-primary-fixed">{confirmation === 'approve' ? 'Approve & continue' : 'Create pact'}</button>
             </div>
           </div>
         </div>
