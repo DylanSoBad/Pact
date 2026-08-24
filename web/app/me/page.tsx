@@ -32,10 +32,9 @@ export default function MePage() {
       return
     }
     try {
-      const contractAddress = getPactAddress()
       const [allPacts, rep] = await Promise.all([
-        fetchPacts(100, contractAddress),
-        fetchReputation(address as `0x${string}`, contractAddress)
+        fetchPacts(100),
+        fetchReputation(address as `0x${string}`)
       ])
 
       const userPacts = allPacts.filter(
@@ -241,7 +240,7 @@ export default function MePage() {
                 id: p.id,
                 time: formatTimestamp(p.updatedAt),
                 kind: kindLabel(p.kind),
-                status: p.status === 2 ? 'ACTIVE' : p.status === 3 ? 'PROOF IN' : statusLabel(p.status),
+                status: statusLabel(p.status),
                 amount: amt,
                 address: truncateAddress(p.maker),
                 blurSize: false,

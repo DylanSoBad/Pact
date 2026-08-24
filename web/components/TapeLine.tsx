@@ -13,10 +13,10 @@ export interface TapeLinePactProps {
 }
 
 export default function TapeLine({ pact }: { pact: TapeLinePactProps }) {
-  const isTerminal = ['CLEARED', 'SLASHED', 'EXPIRED', 'CANCELLED'].includes(pact.status)
-  const isActive = ['ACTIVE', 'PROOF IN', 'OPEN', 'LIVE'].includes(pact.status)
-  const isSlashed = pact.status === 'SLASHED'
-  const isCleared = pact.status === 'CLEARED'
+  const isTerminal = ['SETTLED', 'EXPIRED', 'CANCELLED'].includes(pact.status)
+  const isActive = ['ACTIVE', 'PROOF IN', 'OFFERED', 'LIVE'].includes(pact.status)
+  const isSlashed = pact.status === 'DISPUTED'
+  const isCleared = pact.status === 'SETTLED'
   
   const statusColorClass = isCleared 
     ? 'text-status-cleared' 

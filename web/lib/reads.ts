@@ -1,241 +1,139 @@
-import { createPublicClient, http } from 'viem'
+import { createPublicClient, fallback, http } from 'viem'
 import { arcTestnet, getPactAddress } from './arc'
 import { PACT_ABI } from './abi'
 
+const rpcTransports = [
+  process.env.NEXT_PUBLIC_ARC_RPC_URL,
+  process.env.NEXT_PUBLIC_ARC_RPC_FALLBACK_URL,
+  'https://rpc.testnet.arc.network',
+].filter((url, index, urls): url is string => Boolean(url) && urls.indexOf(url) === index)
+
 export const arcPublicClient = createPublicClient({
   chain: arcTestnet,
-  transport: http('https://rpc.testnet.arc.network'),
+  transport: fallback(rpcTransports.map(url => http(url, { timeout: 8_000 })), { rank: true }),
 })
 
 export type PactData = {
   id: number
   maker: string
+  taker: string
+  arbiter: string
+  tokenMaker: string
+  tokenTaker: string
   amountMaker: bigint
+  amountTaker: bigint
+  collateralMaker: bigint
+  collateralTaker: bigint
+  notionalUSDC: bigint
+  bondAmount: bigint
+  arbiterFeeCap: bigint
+  offerExpiry: bigint
+  performanceDeadline: bigint
+  disputeDeadline: bigint
+  createdAt: bigint
+  updatedAt: bigint
   kind: number
   status: number
-  taker: string
-  amountTaker: bigint
   blurSize: boolean
-  tokenMaker: string
-  createdAt: bigint
-  tokenTaker: string
-  updatedAt: bigint
   termsHash: string
   proofHash: string
+  /** Compatibility alias used by countdown components. */
   deadline: bigint
 }
 
-// In-memory cache for immutable terminal pacts (CLEARED=4, SLASHED=5, EXPIRED=6, CANCELLED=7)
 const terminalPactCache = new Map<number, PactData>()
 
-export async function fetchNextId(customAddress?: `0x${string}`): Promise<number> {
-  const targetAddress = customAddress || getPactAddress()
-  if (!targetAddress || targetAddress === '0x0000000000000000000000000000000000000000') {
-    return 1
-  }
+function requireProtocolAddress(): `0x${string}` | null {
+  return getPactAddress(arcTestnet.id)
+}
 
-  try {
-    const result = await arcPublicClient.readContract({
-      address: targetAddress,
-      abi: PACT_ABI,
-      functionName: 'nextId',
-    })
-    return Number(result)
-  } catch (e) {
-    console.error('Error fetching nextId on Arc:', e)
-    return 1
+function normalizePact(id: number, value: Awaited<ReturnType<typeof readPactTuple>>): PactData {
+  return {
+    id,
+    maker: value.maker,
+    taker: value.taker,
+    arbiter: value.arbiter,
+    tokenMaker: value.tokenMaker,
+    tokenTaker: value.tokenTaker,
+    amountMaker: value.amountMaker,
+    amountTaker: value.amountTaker,
+    collateralMaker: value.collateralMaker,
+    collateralTaker: value.collateralTaker,
+    notionalUSDC: value.notionalUSDC,
+    bondAmount: value.bondAmount,
+    arbiterFeeCap: value.arbiterFeeCap,
+    offerExpiry: value.offerExpiry,
+    performanceDeadline: value.performanceDeadline,
+    disputeDeadline: value.disputeDeadline,
+    createdAt: value.createdAt,
+    updatedAt: value.updatedAt,
+    kind: Number(value.kind),
+    status: Number(value.status),
+    blurSize: value.blurSize,
+    termsHash: value.termsHash,
+    proofHash: value.proofHash,
+    deadline: value.disputeDeadline,
   }
+}
+
+async function readPactTuple(address: `0x${string}`, id: number) {
+  return arcPublicClient.readContract({ address, abi: PACT_ABI, functionName: 'getPact', args: [BigInt(id)] })
+}
+
+export async function fetchNextId(): Promise<number> {
+  const address = requireProtocolAddress()
+  if (!address) return 1
+  return Number(await arcPublicClient.readContract({ address, abi: PACT_ABI, functionName: 'nextId' }))
 }
 
 /**
- * Spec §9 Multicall3 Poller:
- * Queries up to 50 active pacts directly via Multicall3 on Arc RPC.
+ * V1 deliberately avoids Arc helper contracts and Multicall3 dependencies.
+ * Reads are independent RPC calls with a bounded concurrency of 50 records.
  */
-export async function fetchPacts(maxCount = 50, customAddress?: `0x${string}`): Promise<PactData[]> {
-  const targetAddress = customAddress || getPactAddress()
-  if (!targetAddress || targetAddress === '0x0000000000000000000000000000000000000000') {
-    return []
-  }
-
-  const nextId = await fetchNextId(targetAddress)
-  if (nextId <= 1) return []
-
-  const totalPacts = nextId - 1
-  const count = Math.min(totalPacts, maxCount)
-  const startId = Math.max(1, nextId - count)
-
-  const idsToFetch: number[] = []
-  const cachedPacts: PactData[] = []
-
-  for (let i = startId; i < nextId; i++) {
-    const cached = terminalPactCache.get(i)
-    if (cached) {
-      cachedPacts.push(cached)
-    } else {
-      idsToFetch.push(i)
+export async function fetchPacts(maxCount = 50): Promise<PactData[]> {
+  const address = requireProtocolAddress()
+  if (!address) return []
+  const nextId = await fetchNextId()
+  const startId = Math.max(1, nextId - Math.min(nextId - 1, maxCount))
+  const ids = Array.from({ length: nextId - startId }, (_, index) => startId + index)
+  const records = await Promise.all(ids.map(async id => {
+    const cached = terminalPactCache.get(id)
+    if (cached) return cached
+    try {
+      const item = normalizePact(id, await readPactTuple(address, id))
+      if (item.status >= 4) terminalPactCache.set(id, item)
+      return item
+    } catch {
+      return null
     }
-  }
-
-  if (idsToFetch.length === 0) {
-    return cachedPacts.sort((a, b) => Number(b.id - a.id))
-  }
-
-  // Multicall3 direct batching (up to 50 pacts)
-  const calls: { address: `0x${string}`; abi: typeof PACT_ABI; functionName: string; args: readonly [bigint] }[] = []
-
-  for (const id of idsToFetch) {
-    calls.push({
-      address: targetAddress,
-      abi: PACT_ABI,
-      functionName: 'getPact',
-      args: [BigInt(id)] as const,
-    })
-    calls.push({
-      address: targetAddress,
-      abi: PACT_ABI,
-      functionName: 'deadlines',
-      args: [BigInt(id)] as const,
-    })
-  }
-
-  const newlyFetched: PactData[] = []
-
-  try {
-    const results = await arcPublicClient.multicall({ contracts: calls as any })
-
-    for (let i = 0; i < idsToFetch.length; i++) {
-      const pactResult = results[i * 2]
-      const deadlineResult = results[i * 2 + 1]
-
-      if (pactResult.status !== 'success' || deadlineResult.status !== 'success') continue
-
-      const p = pactResult.result as any
-      const deadline = deadlineResult.result as bigint
-      const currentId = idsToFetch[i]
-
-      const item: PactData = {
-        id: currentId,
-        maker: p.maker,
-        amountMaker: p.amountMaker,
-        kind: Number(p.kind),
-        status: Number(p.status),
-        taker: p.taker,
-        amountTaker: p.amountTaker,
-        blurSize: p.blurSize,
-        tokenMaker: p.tokenMaker,
-        createdAt: p.createdAt,
-        tokenTaker: p.tokenTaker,
-        updatedAt: p.updatedAt,
-        termsHash: p.termsHash,
-        proofHash: p.proofHash,
-        deadline,
-      }
-
-      if (item.status >= 4) {
-        terminalPactCache.set(currentId, item)
-      }
-
-      newlyFetched.push(item)
-    }
-  } catch (err) {
-    console.warn('Multicall3 read error on Arc:', err)
-  }
-
-  const all = [...cachedPacts, ...newlyFetched]
-  all.sort((a, b) => Number(b.id - a.id))
-  return all
+  }))
+  return records.filter((item): item is PactData => item !== null).sort((a, b) => b.id - a.id)
 }
 
-export async function fetchSinglePact(id: number, customAddress?: `0x${string}`): Promise<PactData | null> {
+export async function fetchSinglePact(id: number): Promise<PactData | null> {
   const cached = terminalPactCache.get(id)
   if (cached) return cached
-
-  const targetAddress = customAddress || getPactAddress()
-  if (!targetAddress || targetAddress === '0x0000000000000000000000000000000000000000') {
-    return null
-  }
-
+  const address = requireProtocolAddress()
+  if (!address) return null
   try {
-    const [pactResult, deadlineResult] = await arcPublicClient.multicall({
-      contracts: [
-        {
-          address: targetAddress,
-          abi: PACT_ABI,
-          functionName: 'getPact',
-          args: [BigInt(id)],
-        },
-        {
-          address: targetAddress,
-          abi: PACT_ABI,
-          functionName: 'deadlines',
-          args: [BigInt(id)],
-        },
-      ] as any,
-    })
-
-    if (pactResult.status !== 'success' || deadlineResult.status !== 'success') return null
-
-    const p = pactResult.result as any
-    const deadline = deadlineResult.result as bigint
-
-    if (p.maker === '0x0000000000000000000000000000000000000000') return null
-
-    const item: PactData = {
-      id,
-      maker: p.maker,
-      amountMaker: p.amountMaker,
-      kind: Number(p.kind),
-      status: Number(p.status),
-      taker: p.taker,
-      amountTaker: p.amountTaker,
-      blurSize: p.blurSize,
-      tokenMaker: p.tokenMaker,
-      createdAt: p.createdAt,
-      tokenTaker: p.tokenTaker,
-      updatedAt: p.updatedAt,
-      termsHash: p.termsHash,
-      proofHash: p.proofHash,
-      deadline,
-    }
-
-    if (item.status >= 4) {
-      terminalPactCache.set(id, item)
-    }
-
+    const item = normalizePact(id, await readPactTuple(address, id))
+    if (item.status >= 4) terminalPactCache.set(id, item)
     return item
   } catch {
     return null
   }
 }
 
-export async function fetchReputation(address: `0x${string}`, customAddress?: `0x${string}`): Promise<{
-  cleared: number
-  slashed: number
-  notional: bigint
-}> {
-  const targetAddress = customAddress || getPactAddress()
-  if (!targetAddress || targetAddress === '0x0000000000000000000000000000000000000000') {
-    return { cleared: 0, slashed: 0, notional: 0n }
-  }
-
+export async function fetchReputation(address: `0x${string}`): Promise<{ cleared: number; slashed: number; notional: bigint }> {
+  const protocol = requireProtocolAddress()
+  if (!protocol) return { cleared: 0, slashed: 0, notional: 0n }
   try {
-    const results = await arcPublicClient.multicall({
-      contracts: [
-        { address: targetAddress, abi: PACT_ABI, functionName: 'clearedCount', args: [address] },
-        { address: targetAddress, abi: PACT_ABI, functionName: 'slashedCount', args: [address] },
-        { address: targetAddress, abi: PACT_ABI, functionName: 'clearedNotional', args: [address] },
-      ] as any,
-    })
-
-    const r0 = results?.[0]
-    const r1 = results?.[1]
-    const r2 = results?.[2]
-
-    return {
-      cleared: r0?.status === 'success' ? Number(r0.result) : 0,
-      slashed: r1?.status === 'success' ? Number(r1.result) : 0,
-      notional: r2?.status === 'success' ? (r2.result as bigint) : 0n,
-    }
+    const [settled, lost, notional] = await Promise.all([
+      arcPublicClient.readContract({ address: protocol, abi: PACT_ABI, functionName: 'settledCount', args: [address] }),
+      arcPublicClient.readContract({ address: protocol, abi: PACT_ABI, functionName: 'lostDisputeCount', args: [address] }),
+      arcPublicClient.readContract({ address: protocol, abi: PACT_ABI, functionName: 'settledNotionalUSDC', args: [address] }),
+    ])
+    return { cleared: Number(settled), slashed: Number(lost), notional }
   } catch {
     return { cleared: 0, slashed: 0, notional: 0n }
   }

@@ -46,8 +46,7 @@ function TapeDashboard() {
   } = useQuery({
     queryKey: ['pacts', getPactAddress()],
     queryFn: async () => {
-      const contractAddress = getPactAddress()
-      return await fetchPacts(50, contractAddress)
+      return await fetchPacts(50)
     },
     staleTime: 5000,
     gcTime: 60000,
@@ -83,10 +82,9 @@ function TapeDashboard() {
   const filtered = useMemo(() => {
     return (pacts as PactData[]).filter((p) => {
       if (filter === 'ALL') return true
-      if (filter === 'LIVE') return p.status === 2 || p.status === 3
+      if (filter === 'LIVE') return p.status >= 1 && p.status <= 3
       if (filter === 'DELIVERY') return p.kind === 0
-      if (filter === 'FX') return p.kind === 1
-      if (filter === 'JOB') return p.kind === 2
+      if (filter === 'JOB') return p.kind === 1
       return true
     })
   }, [pacts, filter])
@@ -94,13 +92,12 @@ function TapeDashboard() {
   const counts = useMemo(() => ({
     ALL: pacts.length,
     DELIVERY: pacts.filter((p: PactData) => p.kind === 0).length,
-    FX: pacts.filter((p: PactData) => p.kind === 1).length,
-    JOB: pacts.filter((p: PactData) => p.kind === 2).length,
+    JOB: pacts.filter((p: PactData) => p.kind === 1).length,
   }), [pacts])
 
   const activity = useMemo(() => ({
     open: pacts.filter((p: PactData) => p.status === 0).length,
-    inProgress: pacts.filter((p: PactData) => p.status === 2 || p.status === 3).length,
+    inProgress: pacts.filter((p: PactData) => p.status >= 1 && p.status <= 3).length,
     settled: pacts.filter((p: PactData) => p.status === 4).length,
   }), [pacts])
 
@@ -135,7 +132,7 @@ function TapeDashboard() {
       <section className="@lg:max-w-terminal @lg:mx-auto mb-5 grid gap-3 @md:grid-cols-[1.45fr_1fr] animate-enter" style={{ animationDelay: '70ms' }}>
         <div className="relative overflow-hidden border border-primary-fixed/35 bg-gradient-to-br from-primary-fixed/12 via-[#101409] to-[#0c0d10] p-4 @md:p-5">
           <div className="ambient-orbit absolute -right-10 -top-12 h-32 w-32 rounded-full border border-primary-fixed/20" />
-          <p className="relative max-w-[36rem] font-body-sans text-[13px] leading-6 text-text-muted"><strong className="mr-1.5 font-display-mono text-[17px] text-primary-fixed @md:text-[19px]">Collateral agreements.</strong> Clear terms and clear settlement for delivery, FX, and job pacts, with deadlines and verifiable on-chain states.</p>
+          <p className="relative max-w-[36rem] font-body-sans text-[13px] leading-6 text-text-muted"><strong className="mr-1.5 font-display-mono text-[17px] text-primary-fixed @md:text-[19px]">Collateral agreements.</strong> Clear terms and pull-based settlement for delivery and job pacts, with bounded arbitration.</p>
         </div>
 
         <div className="grid grid-cols-3 gap-px border border-outline-hairline bg-outline-hairline">
@@ -177,13 +174,6 @@ function TapeDashboard() {
             className={getFilterClass('DELIVERY')}
           >
             DELIVERY ({counts.DELIVERY})
-          </button>
-          <button 
-            onClick={() => setFilter('FX')} 
-            aria-pressed={filter === 'FX'}
-            className={getFilterClass('FX')}
-          >
-            FX ({counts.FX})
           </button>
           <button 
             onClick={() => setFilter('JOB')} 
@@ -278,7 +268,7 @@ function TapeDashboard() {
                     id: p.id,
                     time: formatTimestamp(p.updatedAt),
                     kind: kindLabel(p.kind),
-                    status: p.status === 2 ? 'ACTIVE' : p.status === 3 ? 'PROOF IN' : statusLabel(p.status),
+                    status: statusLabel(p.status),
                     amount: amt,
                     address: truncateAddress(p.maker),
                   }} />

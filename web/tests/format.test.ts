@@ -44,31 +44,28 @@ describe('Format Utilities', () => {
   describe('kindLabel & statusLabel', () => {
     it('maps kind enum correctly', () => {
       expect(kindLabel(0)).toBe('DELIVERY')
-      expect(kindLabel(1)).toBe('FX')
-      expect(kindLabel(2)).toBe('JOB')
+      expect(kindLabel(1)).toBe('JOB')
       expect(kindLabel(99)).toBe('KIND(99)')
     })
 
     it('maps status enum correctly', () => {
-      expect(statusLabel(0)).toBe('OPEN')
-      expect(statusLabel(1)).toBe('FUNDED')
-      expect(statusLabel(2)).toBe('ACTIVE')
-      expect(statusLabel(3)).toBe('PROOF IN')
-      expect(statusLabel(4)).toBe('CLEARED')
-      expect(statusLabel(5)).toBe('SLASHED')
+      expect(statusLabel(0)).toBe('OFFERED')
+      expect(statusLabel(1)).toBe('ACTIVE')
+      expect(statusLabel(2)).toBe('PROOF IN')
+      expect(statusLabel(3)).toBe('DISPUTED')
+      expect(statusLabel(4)).toBe('SETTLED')
+      expect(statusLabel(5)).toBe('CANCELLED')
       expect(statusLabel(6)).toBe('EXPIRED')
-      expect(statusLabel(7)).toBe('CANCELLED')
     })
   })
 
   describe('isTerminal & isZeroAddress', () => {
     it('identifies terminal contract states', () => {
       expect(isTerminal(0)).toBe(false)
-      expect(isTerminal(2)).toBe(false)
-      expect(isTerminal(4)).toBe(true) // Cleared
-      expect(isTerminal(5)).toBe(true) // Slashed
+      expect(isTerminal(3)).toBe(false)
+      expect(isTerminal(4)).toBe(true) // Settled
+      expect(isTerminal(5)).toBe(true) // Cancelled
       expect(isTerminal(6)).toBe(true) // Expired
-      expect(isTerminal(7)).toBe(true) // Cancelled
     })
 
     it('identifies zero addresses', () => {

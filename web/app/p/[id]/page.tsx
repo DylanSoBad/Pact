@@ -1,507 +1,282 @@
 'use client'
 
-import { useState, useEffect, use, useRef } from 'react'
 import Link from 'next/link'
-import { useAccount, useWriteContract, useWaitForTransactionReceipt } from 'wagmi'
-import { isAddress } from 'viem'
-import { fetchPacts, fetchReputation, PactData } from '../../../lib/reads'
-import { getPactAddress } from '../../../lib/arc'
-import {
-  kindLabel, statusLabel, formatAmount, tokenSymbol,
-  formatDate, truncateAddress, isZeroAddress, isTerminal
-} from '../../../lib/format'
-import { PACT_ABI, ERC20_ABI } from '../../../lib/abi'
-import { verifyTerms } from '../../../lib/terms'
+import { use, useCallback, useEffect, useState } from 'react'
+import { formatUnits, isAddress } from 'viem'
+import { useAccount, useChainId, usePublicClient, useWalletClient } from 'wagmi'
+import { toast } from 'sonner'
+import { ERC20_ABI, PACT_ABI } from '../../../lib/abi'
+import { USDC_ERC20, arcTestnet, getPactAddress } from '../../../lib/arc'
+import { PactData, fetchSinglePact } from '../../../lib/reads'
+import { formatAmount, formatDate, isTerminal, kindLabel, statusLabel, tokenSymbol, truncateAddress } from '../../../lib/format'
+import { hashPactTerms, hashTerms, verifyPactTerms } from '../../../lib/terms'
+import { signPermit, type PermitAuthorization } from '../../../lib/permit'
 import PactStateMachine from '../../../components/PactStateMachine'
 import Countdown from '../../../components/Countdown'
 
+type DisputeData = {
+  opener: `0x${string}`
+  claim: number
+  makerBond: bigint
+  takerBond: bigint
+  openedAt: bigint
+  responseDeadline: bigint
+  arbiterDeadline: bigint
+}
+
+function errorMessage(error: unknown): string {
+  if (typeof error === 'object' && error && 'shortMessage' in error) return String(error.shortMessage)
+  return error instanceof Error ? error.message : 'Transaction failed'
+}
+
 export default function PactDetailPage({ params }: { params: Promise<{ id: string }> }) {
-  const resolvedParams = use(params)
-  const id = resolvedParams.id
+  const { id: idParam } = use(params)
+  const id = Number(idParam)
   const { address, isConnected } = useAccount()
+  const chainId = useChainId()
+  const publicClient = usePublicClient()
+  const { data: walletClient } = useWalletClient()
+  const protocolAddress = getPactAddress(chainId)
+
   const [pact, setPact] = useState<PactData | null>(null)
+  const [dispute, setDispute] = useState<DisputeData | null>(null)
   const [loading, setLoading] = useState(true)
-  const [rpcError, setRpcError] = useState(false)
-  const [lastFetch, setLastFetch] = useState<number>(Date.now())
+  const [busyLabel, setBusyLabel] = useState('')
+  const [txHash, setTxHash] = useState<`0x${string}` | null>(null)
+  const [termsInput, setTermsInput] = useState('')
   const [proofInput, setProofInput] = useState('')
-  const [termsVerified, setTermsVerified] = useState<boolean | null>(null)
-  const [verifyInput, setVerifyInput] = useState('')
-  const [showDisputeModal, setShowDisputeModal] = useState(false)
-  const [termsParam, setTermsParam] = useState<string | null>(null)
-  const [copiedLink, setCopiedLink] = useState(false)
-  const [copiedSummary, setCopiedSummary] = useState(false)
-  const pendingFundId = useRef<bigint | null>(null)
-  const processedApprovalHash = useRef<string | null>(null)
+  const [feeInput, setFeeInput] = useState('0')
+  const [credits, setCredits] = useState<Record<string, bigint>>({})
 
-  const [makerRep, setMakerRep] = useState<{ cleared: number; slashed: number; notional: bigint } | null>(null)
-  const [takerRep, setTakerRep] = useState<{ cleared: number; slashed: number; notional: bigint } | null>(null)
-
-  useEffect(() => {
-    if (typeof window !== 'undefined') {
-      const sp = new URLSearchParams(window.location.search)
-      setTermsParam(sp.get('terms'))
+  const refresh = useCallback(async () => {
+    setLoading(true)
+    const current = await fetchSinglePact(id)
+    setPact(current)
+    if (current && protocolAddress && publicClient && current.status === 3) {
+      try {
+        const value = await publicClient.readContract({ address: protocolAddress, abi: PACT_ABI, functionName: 'getDispute', args: [BigInt(id)] })
+        setDispute({ ...value, claim: Number(value.claim) })
+      } catch { setDispute(null) }
+    } else {
+      setDispute(null)
     }
-  }, [])
 
-  const getActivePactAddress = (): `0x${string}` => {
-    if (typeof window !== 'undefined') {
-      const sharedAddress = new URLSearchParams(window.location.search).get('contract')
-      if (sharedAddress && isAddress(sharedAddress)) return sharedAddress
+    if (current && address && protocolAddress && publicClient) {
+      const tokens = [...new Set([current.tokenMaker, current.tokenTaker, USDC_ERC20].filter(token => isAddress(token)))] as `0x${string}`[]
+      const balances = await Promise.all(tokens.map(async token => [token, await publicClient.readContract({ address: protocolAddress, abi: PACT_ABI, functionName: 'credits', args: [address, token] })] as const))
+      setCredits(Object.fromEntries(balances))
     }
-    return getPactAddress()
-  }
+    setLoading(false)
+  }, [address, id, protocolAddress, publicClient])
 
-  async function load() {
-    try {
-      const contractAddress = getActivePactAddress()
-      const data = await fetchPacts(50, contractAddress)
-      const found = data.find(p => p.id.toString() === id)
-      if (found) {
-        setPact(found)
-        document.title = `PACT #${found.id} · ${kindLabel(found.kind)}`
+  useEffect(() => { refresh() }, [refresh])
+  useEffect(() => { document.title = `PACT · #${id}` }, [id])
 
-        // Fetch reputation for maker and taker asynchronously
-        fetchReputation(found.maker as `0x${string}`, contractAddress).then(setMakerRep)
-        if (!isZeroAddress(found.taker)) {
-          fetchReputation(found.taker as `0x${string}`, contractAddress).then(setTakerRep)
-        }
-
-        // Verify terms from URL param if available
-        if (typeof window !== 'undefined') {
-          const sp = new URLSearchParams(window.location.search)
-          const termsFromUrl = sp.get('terms')
-          if (termsFromUrl) {
-            const raw = decodeURIComponent(termsFromUrl)
-            const ok = verifyTerms(raw, found.termsHash as `0x${string}`)
-            setTermsVerified(ok)
-          }
-        }
+  async function ensureExactAllowance(token: `0x${string}`, amount: bigint): Promise<PermitAuthorization | null> {
+    if (amount === 0n || !address || !protocolAddress || !publicClient || !walletClient) return null
+    const current = await publicClient.readContract({ address: token, abi: ERC20_ABI, functionName: 'allowance', args: [address, protocolAddress] })
+    if (current === amount) return null
+    setBusyLabel(`Authorize exactly ${formatUnits(amount, 6)} ${tokenSymbol(token)}`)
+    if (token.toLowerCase() === USDC_ERC20.toLowerCase()) {
+      try {
+        return await signPermit({
+          publicClient,
+          walletClient,
+          chainId: arcTestnet.id,
+          token: USDC_ERC20,
+          owner: address,
+          spender: protocolAddress,
+          value: amount,
+        })
+      } catch {
+        toast.info('Permit signature unavailable; falling back to exact ERC-20 approval')
       }
-      setRpcError(false)
-      setLastFetch(Date.now())
-    } catch (err) {
-      console.error(err)
-      setRpcError(true)
+    }
+    const approve = async (value: bigint) => {
+      const simulation = await publicClient.simulateContract({ account: address, address: token, abi: ERC20_ABI, functionName: 'approve', args: [protocolAddress, value] })
+      const hash = await walletClient.writeContract(simulation.request)
+      setTxHash(hash)
+      await publicClient.waitForTransactionReceipt({ hash })
+    }
+    if (current !== 0n) await approve(0n)
+    await approve(amount)
+    return null
+  }
+
+  async function execute(functionName: string, args: readonly unknown[], label: string) {
+    if (!address || !protocolAddress || !publicClient || !walletClient) {
+      toast.error('Connect a wallet on Arc Testnet')
+      return
+    }
+    try {
+      setBusyLabel(label)
+      const simulation = await publicClient.simulateContract({
+        account: address,
+        address: protocolAddress,
+        abi: PACT_ABI,
+        functionName,
+        args,
+      } as never)
+      const hash = await walletClient.writeContract(simulation.request)
+      setTxHash(hash)
+      await publicClient.waitForTransactionReceipt({ hash })
+      toast.success(`${label} confirmed`)
+      await refresh()
+    } catch (error) {
+      toast.error(errorMessage(error))
     } finally {
-      setLoading(false)
+      setBusyLabel('')
     }
   }
 
-  useEffect(() => {
-    let ok = true
-    load()
-    const iv = setInterval(() => { if (ok && !document.hidden) load() }, 3000)
-    const vis = () => { if (!document.hidden) load() }
-    document.addEventListener('visibilitychange', vis)
-    return () => { ok = false; clearInterval(iv); document.removeEventListener('visibilitychange', vis) }
-  }, [id])
-
-  const { writeContract, data: txHash, isPending: txPending } = useWriteContract()
-  const { isLoading: txWaiting, isSuccess: txSuccess } = useWaitForTransactionReceipt({ hash: txHash })
-
-  useEffect(() => {
-    if (txSuccess && txHash && pendingFundId.current !== null && processedApprovalHash.current !== txHash) {
-      const idToFund = pendingFundId.current
-      pendingFundId.current = null
-      processedApprovalHash.current = txHash
-      writeContract({
-        address: getActivePactAddress(),
-        abi: PACT_ABI,
-        functionName: 'fund',
-        args: [idToFund],
-      })
+  async function acceptPact() {
+    if (!pact) return
+    const expectedTermsHash = canonicalTermsHash(pact, protocolAddress, termsInput)
+    if (!expectedTermsHash || expectedTermsHash !== pact.termsHash) {
+      toast.error('Paste the exact written terms. The hash must match before acceptance.')
       return
     }
-    if (txSuccess) {
-      setTimeout(() => load(), 1500)
+    try {
+      const permit = pact.amountTaker > 0n
+        ? await ensureExactAllowance(pact.tokenTaker as `0x${string}`, pact.amountTaker)
+        : null
+      await execute(
+        permit ? 'acceptPactWithPermit' : 'acceptPact',
+        permit
+          ? [BigInt(id), expectedTermsHash, permit.deadline, permit.v, permit.r, permit.s]
+          : [BigInt(id), expectedTermsHash],
+        'Accept pact and escrow collateral',
+      )
+    } catch (error) {
+      setBusyLabel('')
+      toast.error(errorMessage(error))
     }
-  }, [txSuccess, txHash])
-
-  const isMaker = !!address && !!pact && pact.maker.toLowerCase() === address.toLowerCase()
-  const isTaker = !!address && !!pact && !isZeroAddress(pact.taker) && pact.taker.toLowerCase() === address.toLowerCase()
-  const isOpenCandidate = !!address && !!pact && isZeroAddress(pact.taker) && !isMaker
-
-  const canFund = isConnected && !!pact && pact.status === 0 && (isTaker || isOpenCandidate)
-  const canProof = isConnected && !!pact && pact.kind !== 1 && pact.status === 2 && isTaker
-  const canRelease = isConnected && !!pact && (pact.status === 2 || pact.status === 3) && (isMaker || (pact.kind === 1 && isTaker))
-  const canCancel = isConnected && !!pact && pact.status === 0 && isMaker
-  const canReject = isConnected && !!pact && pact.status === 3 && isMaker
-  const canExpire = isConnected && !!pact && [0, 2, 3].includes(pact.status) && Math.floor(Date.now() / 1000) > pact.deadline
-
-  // Optimistic effective status for real-time progress transitions
-  const currentEffectiveStatus = txPending || txWaiting
-    ? (canFund ? 2 : canProof ? 3 : canRelease ? 4 : canCancel ? 1 : pact?.status ?? 0)
-    : pact?.status ?? 0
-
-  const doProof = () => {
-    if (!proofInput) return
-    const encoder = new TextEncoder()
-    const data = encoder.encode(proofInput)
-    crypto.subtle.digest('SHA-256', data).then(hashBuffer => {
-      const hashArray = Array.from(new Uint8Array(hashBuffer))
-      const hashHex = '0x' + hashArray.map(b => b.toString(16).padStart(2, '0')).join('') as `0x${string}`
-      writeContract({
-        address: getActivePactAddress(),
-        abi: PACT_ABI,
-        functionName: 'submitProof',
-        args: [BigInt(id), hashHex]
-      })
-    })
   }
 
-  const doFund = () => {
+  async function openOrRespondDispute(action: 'openDispute' | 'respondDispute') {
     if (!pact) return
-    const pactAddress = getActivePactAddress()
-
-    // If taker bond is required, execute approve -> fund flow
-    if (pact.amountTaker > 0n) {
-      pendingFundId.current = BigInt(id)
-      writeContract({
-        address: pact.tokenTaker as `0x${string}`,
-        abi: ERC20_ABI,
-        functionName: 'approve',
-        args: [pactAddress, pact.amountTaker]
-      })
-      return
+    try {
+      const permit = await ensureExactAllowance(USDC_ERC20, pact.bondAmount)
+      await execute(
+        permit ? `${action}WithPermit` : action,
+        permit ? [BigInt(id), permit.deadline, permit.v, permit.r, permit.s] : [BigInt(id)],
+        action === 'openDispute' ? 'Open dispute' : 'Respond to dispute',
+      )
+    } catch (error) {
+      setBusyLabel('')
+      toast.error(errorMessage(error))
     }
-
-    writeContract({
-      address: pactAddress,
-      abi: PACT_ABI,
-      functionName: 'fund',
-      args: [BigInt(id)]
-    })
   }
 
-  const doCancel = () => writeContract({ address: getActivePactAddress(), abi: PACT_ABI, functionName: 'cancel', args: [BigInt(id)] })
-  const doReject = () => {
-    writeContract({ address: getActivePactAddress(), abi: PACT_ABI, functionName: 'reject', args: [BigInt(id)] })
-    setShowDisputeModal(false)
-  }
-  const doRelease = () => writeContract({ address: getActivePactAddress(), abi: PACT_ABI, functionName: 'release', args: [BigInt(id)] })
-  const doExpire = () => writeContract({ address: getActivePactAddress(), abi: PACT_ABI, functionName: 'expire', args: [BigInt(id)] })
+  if (loading) return <div className="pact-panel p-8 text-center text-sm text-text-muted">Reading verified pact state…</div>
+  if (!protocolAddress) return <div className="pact-panel p-8"><h1 className="text-xl text-white">Protocol unavailable</h1><p className="mt-2 text-sm text-text-muted">This build has no official PACT address for Arc Testnet.</p></div>
+  if (!pact) return <div className="pact-panel p-8"><h1 className="text-xl text-white">Pact not found</h1><Link href="/" className="mt-4 inline-block text-primary-fixed">← Return to overview</Link></div>
 
-  const currentUrl = typeof window !== 'undefined' ? `${window.location.origin}/p/${id}?contract=${encodeURIComponent(getActivePactAddress())}` : ''
-  const copyShareLink = () => {
-    navigator.clipboard.writeText(currentUrl)
-    setCopiedLink(true)
-    setTimeout(() => setCopiedLink(false), 2000)
-  }
-
-  const copyPlaintextSummary = () => {
-    if (!pact) return
-    const text = `PACT #${id}\nType: ${kindLabel(pact.kind)}\nMaker Locked: ${formatAmount(pact.amountMaker)} ${tokenSymbol(pact.tokenMaker)}\n${pact.amountTaker > 0n ? `Taker Bond: ${formatAmount(pact.amountTaker)} ${tokenSymbol(pact.tokenTaker)}\n` : ''}Deadline: ${formatDate(pact.deadline)}\nLink: ${currentUrl}\nTerms: "${termsParam ? decodeURIComponent(termsParam) : 'On-chain SHA-256'}"`
-    navigator.clipboard.writeText(text)
-    setCopiedSummary(true)
-    setTimeout(() => setCopiedSummary(false), 2000)
-  }
-
-  if (loading) return (
-    <div className="w-full max-w-[940px] mx-auto font-mono">
-      <div className="flex items-center justify-center py-24 text-[13px] text-zinc-500 gap-3">
-        <div className="w-3 h-3 bg-[#c8f542] animate-pulse-soft" />
-        LOADING PACT DATA...
-      </div>
-    </div>
-  )
-
-  if (!pact) return (
-    <div className="w-full max-w-terminal mx-auto font-mono">
-      <div className="text-center py-24 space-y-4 border border-zinc-800 bg-[#0c0d10] mt-8 px-4">
-        <p className="text-[13px] text-zinc-500">Pact #{id.toString().padStart(4, '0')} does not exist or is uninitialized.</p>
-        <Link href="/" className="text-[12px] text-[#c8f542] underline inline-block">← RETURN TO FEED</Link>
-      </div>
-    </div>
-  )
-
-  const busy = txPending || txWaiting
+  const now = BigInt(Math.floor(Date.now() / 1000))
+  const normalizedAddress = address?.toLowerCase()
+  const isMaker = normalizedAddress === pact.maker.toLowerCase()
+  const isTaker = normalizedAddress === pact.taker.toLowerCase()
+  const isArbiter = normalizedAddress === pact.arbiter.toLowerCase()
+  const isRespondent = dispute && normalizedAddress === (dispute.opener.toLowerCase() === pact.maker.toLowerCase() ? pact.taker.toLowerCase() : pact.maker.toLowerCase())
+  const canAccept = isTaker && pact.status === 0 && now <= pact.offerExpiry
+  const canSubmitProof = isTaker && pact.status === 1 && now <= pact.performanceDeadline
+  const canRelease = isMaker && (pact.status === 1 || pact.status === 2)
+  const canOpenDispute = (isMaker || isTaker) && (pact.status === 1 || pact.status === 2) && now <= pact.disputeDeadline
+  const canRespond = Boolean(isRespondent && dispute && dispute.arbiterDeadline === 0n && now <= dispute.responseDeadline)
+  const canRule = Boolean(isArbiter && dispute && dispute.arbiterDeadline > 0n && now <= dispute.arbiterDeadline)
+  const canDefault = Boolean(dispute && dispute.arbiterDeadline === 0n && now > dispute.responseDeadline)
+  const canArbiterTimeout = Boolean(dispute && dispute.arbiterDeadline > 0n && now > dispute.arbiterDeadline)
+  const canDeadlineSettle = (pact.status === 0 && now > pact.offerExpiry) || ((pact.status === 1 || pact.status === 2) && now > pact.disputeDeadline)
+  const canCancel = isMaker && pact.status === 0
+  const busy = Boolean(busyLabel)
+  const uniqueTokens = [...new Set([pact.tokenMaker, pact.tokenTaker, USDC_ERC20].filter(token => isAddress(token)))]
+  const pactTerms = toCanonicalTerms(pact, protocolAddress)
+  const termsMatch = Boolean(termsInput && pactTerms && verifyPactTerms(pactTerms, termsInput, pact.termsHash as `0x${string}`))
 
   return (
-    <div className="w-full max-w-terminal mx-auto font-mono">
-      {/* Header & Quick Action Share */}
-      <div className="flex flex-col @md:flex-row @md:items-end justify-between gap-4 mb-7 animate-enter border-b border-outline-hairline pb-5">
-        <div>
-          <p className="pact-eyebrow mb-2">Agreement record</p>
-          <div className="flex items-center gap-3">
-            <h1 className="text-[26px] @md:text-[32px] font-semibold text-white tracking-[-0.03em]">
-              Pact #{id.toString().padStart(4, '0')}
-            </h1>
-            <span className="text-[11px] font-mono uppercase px-2 py-0.5 bg-[#18181b] text-[#c8f542] border border-[#c8f542]">
-              {kindLabel(pact.kind)}
-            </span>
-          </div>
-        </div>
+    <div className="mx-auto w-full max-w-terminal font-mono">
+      <header className="mb-7 flex flex-col justify-between gap-4 border-b border-outline-hairline pb-5 @md:flex-row @md:items-end">
+        <div><p className="pact-eyebrow mb-2">Agreement record</p><h1 className="text-[28px] font-semibold text-white">Pact #{String(id).padStart(4, '0')}</h1><p className="mt-2 text-[12px] text-text-muted">{kindLabel(pact.kind)} · {statusLabel(pact.status)}</p></div>
+        <a href={`https://testnet.arcscan.app/address/${protocolAddress}`} target="_blank" rel="noreferrer" className="text-[11px] text-primary-fixed">Verified contract ↗</a>
+      </header>
 
-        <div className="flex items-center gap-2">
-          <button
-            onClick={copyShareLink}
-            className="btn-ghost px-3 py-1.5 text-[12px] text-zinc-400 hover:text-white flex items-center gap-1.5"
-          >
-            {copiedLink ? 'Copied' : 'Share Link'}
-          </button>
-          <button
-            onClick={copyPlaintextSummary}
-            className="btn-ghost px-3 py-1.5 text-[12px] text-zinc-400 hover:text-white hidden @md:flex items-center gap-1.5"
-          >
-            {copiedSummary ? 'Copied' : 'Copy Summary'}
-          </button>
-        </div>
+      <PactStateMachine status={pact.status} />
+
+      <div className="mb-6 grid gap-px border border-outline-hairline bg-outline-hairline @md:grid-cols-3">
+        <div className="bg-[#0c0d10] p-4"><span className="text-[10px] uppercase text-text-muted">Maker</span><p className="mt-2 text-[12px] text-white">{truncateAddress(pact.maker)}</p><p className="mt-1 text-primary-fixed">{formatAmount(pact.amountMaker)} {tokenSymbol(pact.tokenMaker)}</p></div>
+        <div className="bg-[#0c0d10] p-4"><span className="text-[10px] uppercase text-text-muted">Counterparty</span><p className="mt-2 text-[12px] text-white">{truncateAddress(pact.taker)}</p><p className="mt-1 text-primary-fixed">{formatAmount(pact.amountTaker)} {pact.amountTaker > 0n ? tokenSymbol(pact.tokenTaker) : ''}</p></div>
+        <div className="bg-[#0c0d10] p-4"><span className="text-[10px] uppercase text-text-muted">Arbiter</span><p className="mt-2 text-[12px] text-white">{truncateAddress(pact.arbiter)}</p><p className="mt-1 text-text-muted">Fee cap {formatAmount(pact.arbiterFeeCap)} USDC</p></div>
       </div>
 
-      {/* Multi-step Visual Progress State Machine */}
-      <PactStateMachine status={currentEffectiveStatus} />
-
-      {/* Countdown Timer for Active Deals */}
-      {pact.status === 2 && (
-        <div className="mb-6 surface-1 rounded-none p-4 border border-zinc-800 flex items-center justify-between text-zinc-400">
-          <div>
-            <span className="text-[12px] block uppercase tracking-widest text-zinc-500">Settlement Timeout</span>
-            <span className="text-[13px]">{formatDate(pact.deadline)}</span>
-          </div>
-          <Countdown deadlineTs={pact.deadline} />
+      <section className="pact-panel mb-6 p-5">
+        <h2 className="text-[12px] font-semibold uppercase tracking-widest text-white">Committed deadlines</h2>
+        <div className="mt-4 grid gap-4 text-[11px] @md:grid-cols-3">
+          <p className="text-text-muted">Offer expiry<span className="mt-1 block text-white">{formatDate(pact.offerExpiry)}</span></p>
+          <p className="text-text-muted">Performance deadline<span className="mt-1 block text-white">{formatDate(pact.performanceDeadline)}</span></p>
+          <p className="text-text-muted">Dispute deadline<span className="mt-1 block text-white">{formatDate(pact.disputeDeadline)}</span></p>
         </div>
-      )}
+        {!isTerminal(pact.status) && <div className="mt-4 border-t border-zinc-800 pt-4"><Countdown deadlineTs={pact.status === 0 ? pact.offerExpiry : pact.disputeDeadline} /></div>}
+      </section>
 
-      {/* Core Financial Ledger Card */}
-      <div className="pact-panel-raised p-5 @md:p-6 mb-6 space-y-5">
-        <div className="flex justify-between items-start">
-          <div>
-            <span className="text-[12px] text-zinc-500 block mb-1 uppercase tracking-widest">Maker Collateral Locked</span>
-            <div className="text-[20px] font-bold text-[#c8f542] tracking-wider">
-              ${formatAmount(pact.amountMaker)}{' '}
-              <span className="text-[13px] font-normal text-zinc-500">{tokenSymbol(pact.tokenMaker)}</span>
-            </div>
-          </div>
-          <div className="text-right">
-            <span className="text-[12px] text-zinc-500 block mb-1 uppercase tracking-widest">Maker Address</span>
-            <span className="font-mono text-[13px] text-zinc-400">{truncateAddress(pact.maker)}</span>
-          </div>
-        </div>
+      <section className="pact-panel mb-6 p-5">
+        <h2 className="text-[12px] font-semibold uppercase tracking-widest text-white">Written terms commitment</h2>
+        <p className="mt-3 break-all text-[10px] text-primary-fixed">{pact.termsHash}</p>
+        <textarea value={termsInput} onChange={event => setTermsInput(event.target.value)} rows={4} placeholder="Paste the exact written terms to verify locally…" className="mt-4 w-full resize-y border border-zinc-800 bg-black p-3 text-[12px] text-white outline-none focus:border-primary-fixed" />
+        <p className={`mt-2 text-[11px] ${termsMatch ? 'text-primary-fixed' : 'text-text-muted'}`}>{termsMatch ? '✓ Text and every economic field match' : 'Acceptance is disabled until text and all on-chain economic fields match.'}</p>
+      </section>
 
-        <div className="separator" />
+      {dispute && <section className="mb-6 border border-status-warning/50 bg-status-warning/10 p-5"><h2 className="text-[12px] font-semibold uppercase text-[#f7d36b]">Dispute active</h2><div className="mt-3 grid gap-3 text-[11px] text-text-muted @sm:grid-cols-2"><p>Opener <span className="block text-white">{truncateAddress(dispute.opener)}</span></p><p>Claim <span className="block text-white">{dispute.claim === 1 ? 'Maker wins all' : 'Taker wins all'}</span></p><p>Response deadline <span className="block text-white">{formatDate(dispute.responseDeadline)}</span></p><p>Arbiter deadline <span className="block text-white">{dispute.arbiterDeadline ? formatDate(dispute.arbiterDeadline) : 'Awaiting counter-bond'}</span></p></div></section>}
 
-        <div className="flex justify-between items-start">
-          <div>
-            <span className="text-[12px] text-zinc-500 block mb-1 uppercase tracking-widest">Counterparty Bond</span>
-            <div className="text-[14px] font-bold text-zinc-400">
-              {pact.amountTaker > 0n
-                ? `$${formatAmount(pact.amountTaker)} ${tokenSymbol(pact.tokenTaker)}`
-                : 'NO INITIAL COLLATERAL'}
-            </div>
-          </div>
-          <div className="text-right">
-            <span className="text-[12px] text-zinc-500 block mb-1 uppercase tracking-widest">Counterparty Address</span>
-            <span className="font-mono text-[13px] text-zinc-400">
-              {isZeroAddress(pact.taker) ? 'OPEN CANDIDATE POOL' : truncateAddress(pact.taker)}
-            </span>
-          </div>
-        </div>
-      </div>
-
-      {/* Agreement Terms with SHA-256 Integrity Seal */}
-      <div className="pact-panel p-5 @md:p-6 mb-6 space-y-3">
-        <div className="flex items-center justify-between">
-          <h2 className="text-[13px] font-bold text-white uppercase tracking-widest">Agreement Terms</h2>
-          {termsVerified !== null && (
-            <span className={`text-[10px] font-mono px-2 py-0.5 border ${
-              termsVerified ? 'bg-[#c8f542]/10 text-[#c8f542] border-[#c8f542]/30' : 'bg-rose-500/10 text-rose-400 border-rose-500/30'
-            }`}>
-              {termsVerified ? 'SHA-256 VERIFIED' : 'INTEGRITY MISMATCH'}
-            </span>
-          )}
-        </div>
-
-        <div className="bg-black p-3.5 border border-zinc-800 text-[12px] text-zinc-400 font-mono select-text leading-loose whitespace-pre-wrap">
-          {termsParam ? decodeURIComponent(termsParam) : 'Terms are shared off-chain. Paste them below to verify their on-chain hash.'}
-        </div>
-
-        <div className="pt-2">
-          <label className="text-[11px] uppercase tracking-widest text-zinc-500 block mb-1.5">Verify Plaintext against On-Chain Hash</label>
-          <div className="flex flex-col gap-2 @sm:flex-row">
-            <input
-              value={verifyInput}
-              onChange={e => setVerifyInput(e.target.value)}
-              placeholder="Paste exact agreement plaintext…"
-              className="flex-1 bg-black border border-zinc-800 text-white px-3 py-1.5 rounded-none text-[12px] font-mono focus:border-[#c8f542] focus:ring-0 outline-none"
-            />
-            <button
-              onClick={() => setTermsVerified(verifyTerms(verifyInput, pact.termsHash as `0x${string}`))}
-              className="btn-ghost px-4 py-1.5 text-[12px] border-zinc-700"
-            >
-              Verify
-            </button>
-          </div>
-        </div>
-      </div>
-
-      {/* On-Chain Cryptographic Hashes */}
-      <div className="mb-6">
-        <span className="text-[11px] uppercase tracking-widest text-zinc-500 block mb-2">On-chain Cryptographic Hashes</span>
-        <div className="font-mono text-[10px] text-zinc-500 break-all space-y-2 pact-panel p-4">
-          <div><span className="text-zinc-600">termsHash: </span>{pact.termsHash}</div>
-          {pact.proofHash !== '0x0000000000000000000000000000000000000000000000000000000000000000' && (
-            <div>
-              <span className="text-zinc-600">proofHash: </span>
-              <span className="text-[#c8f542]">{pact.proofHash}</span>
-            </div>
-          )}
-        </div>
-      </div>
-
-      {/* Maker Reputation Track Record */}
-      {(makerRep || takerRep) && (
-        <div className="grid grid-cols-1 @md:grid-cols-2 gap-4 mb-8">
-          {makerRep && (
-            <div className="surface-0 border border-zinc-800 p-4">
-              <span className="text-[11px] uppercase tracking-widest text-zinc-500 block mb-3">Maker Trust Score</span>
-              <div className="flex items-center gap-6 text-[12px]">
-                <div><span className="text-zinc-500 uppercase tracking-widest">Cleared</span><span className="ml-2 text-[#c8f542] font-bold">{makerRep.cleared}</span></div>
-                <div><span className="text-zinc-500 uppercase tracking-widest">Slashed</span><span className="ml-2 text-rose-400 font-bold">{makerRep.slashed}</span></div>
-                <div><span className="text-zinc-500 uppercase tracking-widest">Vol</span><span className="ml-2 text-zinc-400 font-bold">${formatAmount(makerRep.notional)}</span></div>
-              </div>
-            </div>
-          )}
-          {takerRep && (
-            <div className="surface-0 border border-zinc-800 p-4">
-              <span className="text-[11px] uppercase tracking-widest text-zinc-500 block mb-3">Counterparty Trust Score</span>
-              <div className="flex items-center gap-6 text-[12px]">
-                <div><span className="text-zinc-500 uppercase tracking-widest">Cleared</span><span className="ml-2 text-[#c8f542] font-bold">{takerRep.cleared}</span></div>
-                <div><span className="text-zinc-500 uppercase tracking-widest">Slashed</span><span className="ml-2 text-rose-400 font-bold">{takerRep.slashed}</span></div>
-                <div><span className="text-zinc-500 uppercase tracking-widest">Vol</span><span className="ml-2 text-zinc-400 font-bold">${formatAmount(takerRep.notional)}</span></div>
-              </div>
-            </div>
-          )}
-        </div>
-      )}
-
-      {/* TX Status */}
-      {busy && (
-        <div className="mb-6 text-[12px] text-[#c8f542] flex items-center gap-2 p-3 rounded-none bg-[#c8f542]/10 border border-[#c8f542]/30">
-          <div className="w-3 h-3 bg-[#c8f542] animate-pulse-soft" />
-          <span>Confirming transaction on Circle Arc Testnet…</span>
-          {txHash && (
-            <a href={`https://testnet.arcscan.app/tx/${txHash}`} target="_blank" rel="noreferrer" className="text-zinc-500 hover:text-[#c8f542] ml-auto underline text-[11px]">
-              ArcScan ↗
-            </a>
-          )}
-        </div>
-      )}
-
-      {/* Primary & Secondary Role Actions */}
       {isConnected && !isTerminal(pact.status) && (
-        <div className="pact-panel p-4 @md:p-5 space-y-3">
-          {canFund && (
-            <button
-              onClick={doFund}
-              disabled={busy}
-              className="btn-primary w-full py-3 text-[14px]"
-            >
-              {pact.amountTaker > 0n
-                ? `Deposit Bond & Fund ($${formatAmount(pact.amountTaker)} ${tokenSymbol(pact.tokenTaker)})`
-                : 'Accept & Fund Pact'}
-            </button>
-          )}
-
-          {isMaker && pact.status === 0 && (
-            <div className="text-center py-2 text-zinc-500 text-[13px]">
-              Waiting for counterparty to deposit collateral and accept this pact.
-            </div>
-          )}
-
-          {canProof && (
-            <div className="space-y-2">
-              <label className="text-[11px] uppercase tracking-widest text-zinc-500 block">
-                Fulfillment Proof Reference (Tracking URL / GitHub PR / Delivery ID):
-              </label>
-              <input
-                value={proofInput}
-                onChange={e => setProofInput(e.target.value)}
-                placeholder="e.g. https://github.com/org/repo/pull/1 or Tracking #9400100"
-                className="w-full bg-black border border-zinc-800 text-white px-3.5 py-2.5 rounded-none text-[13px] placeholder:text-zinc-700 focus:border-[#c8f542] outline-none focus:ring-0"
-              />
-              <button
-                onClick={doProof}
-                disabled={!proofInput || busy}
-                className="btn-primary w-full py-3 text-[14px]"
-              >
-                Submit Cryptographic Proof
-              </button>
-            </div>
-          )}
-
-          {canRelease && (
-            <button
-              onClick={doRelease}
-              disabled={busy}
-              className="btn-primary w-full py-3 text-[14px]"
-            >
-              Release & Settle Funds
-            </button>
-          )}
-
-          {canExpire && (
-            <button
-              onClick={doExpire}
-              disabled={busy}
-              className="btn-ghost w-full text-rose-400 border-rose-500/20 py-2.5 text-[13px] hover:bg-rose-500/[0.08]"
-            >
-              Trigger Timeout Expiry Settlement
-            </button>
-          )}
-
-          {canCancel && (
-            <button
-              onClick={doCancel}
-              disabled={busy}
-              className="btn-ghost w-full text-zinc-400 py-2.5 text-[13px]"
-            >
-              Cancel Pact (Reclaim Funds)
-            </button>
-          )}
-
-          {canReject && (
-            <button
-              onClick={() => setShowDisputeModal(true)}
-              disabled={busy}
-              className="btn-ghost w-full text-rose-400 border-rose-500/20 py-2.5 text-[13px] hover:bg-rose-500/[0.08]"
-            >
-              Reject Proof & Slash
-            </button>
-          )}
-        </div>
+        <section className="pact-panel mb-6 space-y-3 p-5">
+          {canAccept && <button disabled={busy || !termsMatch} onClick={acceptPact} className="btn-primary w-full py-3 disabled:opacity-40">Verify terms, approve exact collateral & accept</button>}
+          {canSubmitProof && <div className="space-y-2"><input value={proofInput} onChange={event => setProofInput(event.target.value)} placeholder="Proof reference or content hash source" className="w-full border border-zinc-800 bg-black p-3 text-[12px] text-white outline-none" /><button disabled={busy || !proofInput} onClick={() => execute('submitProof', [BigInt(id), hashTerms(proofInput)], 'Submit proof')} className="btn-primary w-full py-3 disabled:opacity-40">Submit proof commitment</button></div>}
+          {canRelease && <button disabled={busy} onClick={() => execute('release', [BigInt(id)], 'Release all collateral to counterparty')} className="btn-primary w-full py-3">Release & settle to counterparty</button>}
+          {canOpenDispute && <button disabled={busy} onClick={() => openOrRespondDispute('openDispute')} className="btn-ghost w-full border-status-warning/40 py-3 text-[#f7d36b]">Open dispute · bond {formatAmount(pact.bondAmount)} USDC</button>}
+          {canRespond && <button disabled={busy} onClick={() => openOrRespondDispute('respondDispute')} className="btn-primary w-full py-3">Counter-bond & contest claim</button>}
+          {canRule && <div className="space-y-2 border border-zinc-800 p-4"><label className="text-[11px] text-text-muted">Arbiter fee claimed (USDC)<input value={feeInput} onChange={event => setFeeInput(event.target.value)} className="mt-2 w-full border border-zinc-800 bg-black p-2 text-white" /></label><div className="grid grid-cols-2 gap-2"><button onClick={() => execute('ruleDispute', [BigInt(id), 1, parseUnitsSafe(feeInput)], 'Rule for maker')} className="btn-primary py-3">Maker wins</button><button onClick={() => execute('ruleDispute', [BigInt(id), 2, parseUnitsSafe(feeInput)], 'Rule for taker')} className="btn-primary py-3">Taker wins</button></div></div>}
+          {canDefault && <button disabled={busy} onClick={() => execute('resolveUnansweredDispute', [BigInt(id)], 'Resolve unanswered dispute')} className="btn-primary w-full py-3">Execute default judgment</button>}
+          {canArbiterTimeout && <button disabled={busy} onClick={() => execute('arbiterTimeout', [BigInt(id)], 'Execute arbiter timeout')} className="btn-primary w-full py-3">Refund bonds & split collateral 50/50</button>}
+          {canDeadlineSettle && <button disabled={busy} onClick={() => execute('refundAfterDeadline', [BigInt(id)], 'Settle after deadline')} className="btn-ghost w-full py-3">Settle after deadline</button>}
+          {canCancel && <button disabled={busy} onClick={() => execute('cancelPact', [BigInt(id)], 'Cancel offered pact')} className="btn-ghost w-full py-3">Cancel offer & credit refund</button>}
+        </section>
       )}
 
-      {/* ─── Safety Dispute Modal ─── */}
-      {showDisputeModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-enter font-mono">
-          <div className="bg-[#0c0d10] border border-rose-500/30 rounded-none p-6 max-w-[28rem] w-full shadow-2xl space-y-4">
-            <div className="flex items-center gap-2.5 text-rose-400">
-              <h2 className="text-[15px] font-bold uppercase tracking-widest">
-                Initiate Dispute & Bond Slash
-              </h2>
-            </div>
+      {Object.values(credits).some(value => value > 0n) && <section className="pact-panel mb-6 p-5"><h2 className="text-[12px] font-semibold uppercase tracking-widest text-white">Claimable credits</h2><div className="mt-4 space-y-2">{uniqueTokens.map(token => credits[token] > 0n && <button key={token} disabled={busy} onClick={() => execute('withdraw', [token], `Withdraw ${tokenSymbol(token)}`)} className="btn-primary flex w-full justify-between px-4 py-3"><span>{tokenSymbol(token)}</span><span>{formatAmount(credits[token])}</span></button>)}</div></section>}
 
-            <p className="text-[13px] text-zinc-400 leading-relaxed">
-              Rejecting fulfillment marks this pact as <strong className="text-rose-400">SLASHED</strong>. The counterparty&apos;s bond will be forfeited to the maker according to deterministic smart contract logic.
-            </p>
-
-            <div className="flex gap-3 pt-4 border-t border-zinc-800">
-              <button
-                onClick={() => setShowDisputeModal(false)}
-                className="btn-ghost flex-1 py-2.5 text-[12px] uppercase tracking-widest border-zinc-800"
-              >
-                Go Back
-              </button>
-              <button
-                onClick={doReject}
-                className="btn-primary flex-1 py-2.5 text-[12px] uppercase tracking-widest bg-rose-500 border-rose-500 text-black hover:bg-rose-400"
-              >
-                Confirm Escalation
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
+      {busyLabel && <div className="border border-primary-fixed/30 bg-primary-fixed/10 p-3 text-[12px] text-primary-fixed">{busyLabel}…</div>}
+      {txHash && <a href={`https://testnet.arcscan.app/tx/${txHash}`} target="_blank" rel="noreferrer" className="mt-3 block text-center text-[11px] text-text-muted hover:text-primary-fixed">View latest transaction on ArcScan ↗</a>}
     </div>
   )
+}
+
+function parseUnitsSafe(value: string): bigint {
+  try { return BigInt(Math.round(Number(value || 0) * 1_000_000)) } catch { return 0n }
+}
+
+function toCanonicalTerms(pact: PactData, pactAddress: `0x${string}` | null) {
+  if (!pactAddress) return null
+  return {
+    pactAddress,
+    chainId: BigInt(arcTestnet.id),
+    maker: pact.maker as `0x${string}`,
+    taker: pact.taker as `0x${string}`,
+    arbiter: pact.arbiter as `0x${string}`,
+    tokenMaker: pact.tokenMaker as `0x${string}`,
+    tokenTaker: pact.tokenTaker as `0x${string}`,
+    amountMaker: pact.amountMaker,
+    amountTaker: pact.amountTaker,
+    notionalUSDC: pact.notionalUSDC,
+    arbiterFeeCap: pact.arbiterFeeCap,
+    offerExpiry: pact.offerExpiry,
+    performanceDeadline: pact.performanceDeadline,
+    disputeDeadline: pact.disputeDeadline,
+    kind: pact.kind,
+    blurSize: pact.blurSize,
+  }
+}
+
+function canonicalTermsHash(pact: PactData, pactAddress: `0x${string}` | null, plaintext: string) {
+  const canonical = toCanonicalTerms(pact, pactAddress)
+  return canonical && plaintext ? hashPactTerms(canonical, plaintext) : null
 }

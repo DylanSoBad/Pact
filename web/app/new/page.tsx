@@ -1,643 +1,341 @@
 'use client'
 
-import { useState, useEffect, useRef } from 'react'
 import Link from 'next/link'
-import { useAccount, useWalletClient, usePublicClient, useWriteContract, useWaitForTransactionReceipt, useReadContract, useChainId, useSwitchChain } from 'wagmi'
+import { useEffect, useMemo, useState } from 'react'
+import { decodeEventLog, formatUnits, isAddress, parseUnits } from 'viem'
+import { useAccount, useChainId, usePublicClient, useReadContract, useSwitchChain, useWalletClient } from 'wagmi'
 import { useModal } from 'connectkit'
-import { parseUnits, formatUnits, decodeEventLog, isAddress } from 'viem'
 import { toast } from 'sonner'
-import { PACT_ABI, ERC20_ABI } from '../../lib/abi'
-import { CIRCLE_FAUCET_URL, USDC_ERC20, EURC, getPactAddress } from '../../lib/arc'
-import { PACT_BYTECODE } from '../../lib/bytecode'
-import { hashTerms } from '../../lib/terms'
+import { ERC20_ABI, PACT_ABI } from '../../lib/abi'
+import { CIRCLE_FAUCET_URL, EURC, USDC_ERC20, arcTestnet, getPactAddress } from '../../lib/arc'
+import { hashPactTerms, hashTerms } from '../../lib/terms'
+import { signPermit, type PermitAuthorization } from '../../lib/permit'
 import { fetchReputation } from '../../lib/reads'
 import TokenSelect from '../../components/TokenSelect'
 
-const TARGET_CHAIN_ID = Number(process.env.NEXT_PUBLIC_CHAIN_ID || 5042002)
-
+const ZERO_ADDRESS = '0x0000000000000000000000000000000000000000' as const
 const KINDS = [
-  { value: 0, label: 'Delivery', desc: 'Buyer pays, seller delivers.' },
-  { value: 1, label: 'FX Swap', desc: 'Atomic currency exchange.' },
-  { value: 2, label: 'Job', desc: 'Bounty for proof of work.' },
-]
+  { value: 0, label: 'Delivery', desc: 'Buyer escrows payment; seller proves delivery.' },
+  { value: 1, label: 'Job', desc: 'Client escrows a bounty for verifiable work.' },
+] as const
 const TOKENS = [
   { value: USDC_ERC20, label: 'USDC' },
   { value: EURC, label: 'EURC' },
 ]
 
-const TEMPLATES = [
-  { label: 'Delivery', text: 'Delivery of physical goods. Must provide valid tracking URL upon fulfillment.' },
-  { label: 'Freelance', text: 'Completion of coding task. Must provide GitHub PR and passing tests.' },
-  { label: 'OTC Swap', text: 'Atomic exchange of digital assets. No extra conditions.' },
-]
+type TransactionPhase = 'idle' | 'approving' | 'creating' | 'done'
 
-
+function parseTokenAmount(value: string, decimals = 6): bigint {
+  try {
+    return parseUnits(value || '0', decimals)
+  } catch {
+    return 0n
+  }
+}
 
 export default function NewPactPage() {
   const { address, isConnected } = useAccount()
-  const { data: walletClient } = useWalletClient()
-  const publicClient = usePublicClient()
-  const { setOpen: openModal } = useModal()
   const chainId = useChainId()
+  const publicClient = usePublicClient()
+  const { data: walletClient } = useWalletClient()
   const { switchChain } = useSwitchChain()
+  const { setOpen: openWalletModal } = useModal()
 
-  const [pactAddress, setPactAddress] = useState<`0x${string}`>('0x0000000000000000000000000000000000000000')
-  const [deployingContract, setDeployingContract] = useState(false)
-  const [deployTxHash, setDeployTxHash] = useState<string | null>(null)
-
+  const protocolAddress = getPactAddress(chainId)
   const [kind, setKind] = useState(0)
-  const [tokenMaker, setTokenMaker] = useState(USDC_ERC20)
-  const [tokenTaker, setTokenTaker] = useState(USDC_ERC20)
+  const [tokenMaker, setTokenMaker] = useState<`0x${string}`>(USDC_ERC20)
+  const [tokenTaker, setTokenTaker] = useState<`0x${string}`>(EURC)
   const [amountMaker, setAmountMaker] = useState('')
   const [amountTaker, setAmountTaker] = useState('')
+  const [notionalUSDC, setNotionalUSDC] = useState('')
+  const [arbiterFeeCap, setArbiterFeeCap] = useState('1')
   const [taker, setTaker] = useState('')
+  const [arbiter, setArbiter] = useState('')
   const [terms, setTerms] = useState('')
-  const [deadlineMinutes, setDeadlineMinutes] = useState('1440')
+  const [offerHours, setOfferHours] = useState('24')
+  const [performanceDays, setPerformanceDays] = useState('7')
+  const [disputeDays, setDisputeDays] = useState('3')
   const [blurSize, setBlurSize] = useState(false)
-  const [confirmation, setConfirmation] = useState<'approve' | 'create' | null>(null)
-  const [bannersCollapsed, setBannersCollapsed] = useState(false)
-
-
-  const [step, setStep] = useState<'form' | 'approving' | 'creating' | 'done'>('form')
+  const [phase, setPhase] = useState<TransactionPhase>('idle')
+  const [txHash, setTxHash] = useState<`0x${string}` | null>(null)
   const [createdPactId, setCreatedPactId] = useState<number | null>(null)
-  const [copiedLink, setCopiedLink] = useState(false)
-  
   const [reputation, setReputation] = useState<{ cleared: number; slashed: number; notional: bigint } | null>(null)
-  const [repLoading, setRepLoading] = useState(false)
 
   useEffect(() => {
     document.title = 'PACT · New Pact'
-    const addr = getPactAddress()
-    setPactAddress(addr)
   }, [])
 
-  useEffect(() => setBannersCollapsed(localStorage.getItem('pact-hide-network-banners') === 'true'), [])
-
-  // Auto-fetch reputation when counterparty address is valid
   useEffect(() => {
-    if (taker && isAddress(taker)) {
-      setRepLoading(true)
-      fetchReputation(taker as `0x${string}`).then(r => {
-        setReputation(r)
-        setRepLoading(false)
-      })
-    } else {
+    if (!isAddress(taker)) {
       setReputation(null)
+      return
     }
+    let cancelled = false
+    fetchReputation(taker).then(value => !cancelled && setReputation(value))
+    return () => { cancelled = true }
   }, [taker])
 
-  // 1-Click Batched Flow Ref
-  const isBatchedRef = useRef(false)
-  const wasConnectedRef = useRef(false)
-
-  useEffect(() => {
-    if (wasConnectedRef.current && !isConnected) toast.warning('Wallet disconnected')
-    wasConnectedRef.current = isConnected
-  }, [isConnected])
-
-  const { writeContract: writeApprove, data: approveTxHash, isPending: approvePending, error: approveError } = useWriteContract()
-  const { writeContract: writeCreate, data: createTxHash, isPending: createPending, error: createError } = useWriteContract()
-  const { isSuccess: approveConfirmed, isLoading: approveReceiptLoading } = useWaitForTransactionReceipt({ hash: approveTxHash })
-  const { isSuccess: createConfirmed, data: createReceipt, isLoading: createReceiptLoading } = useWaitForTransactionReceipt({ hash: createTxHash })
-
-  const { data: makerBalData } = useReadContract({ address: tokenMaker as `0x${string}`, abi: ERC20_ABI, functionName: 'balanceOf', args: address ? [address] : undefined, query: { enabled: !!address } })
-  const { data: makerDecimalsData } = useReadContract({ address: tokenMaker as `0x${string}`, abi: ERC20_ABI, functionName: 'decimals' })
+  const { data: makerDecimalsData } = useReadContract({
+    address: tokenMaker,
+    abi: ERC20_ABI,
+    functionName: 'decimals',
+  })
   const makerDecimals = Number(makerDecimalsData ?? 6)
-  const makerBalance = (makerBalData as bigint) ?? 0n
+  const makerAmount = parseTokenAmount(amountMaker, makerDecimals)
+  const takerAmount = parseTokenAmount(amountTaker)
+  const notionalAmount = parseTokenAmount(notionalUSDC)
+  const feeCapAmount = parseTokenAmount(arbiterFeeCap)
 
-  const isContractConfigured = pactAddress && pactAddress !== '0x0000000000000000000000000000000000000000'
+  const { data: makerBalanceData } = useReadContract({
+    address: tokenMaker,
+    abi: ERC20_ABI,
+    functionName: 'balanceOf',
+    args: address ? [address] : undefined,
+    query: { enabled: Boolean(address) },
+  })
+  const makerBalance = makerBalanceData ?? 0n
 
-  const { data: allowanceData } = useReadContract({
-    address: tokenMaker as `0x${string}`,
+  const { data: allowanceData, refetch: refetchAllowance } = useReadContract({
+    address: tokenMaker,
     abi: ERC20_ABI,
     functionName: 'allowance',
-    args: address && isContractConfigured ? [address, pactAddress] : undefined,
-    query: { enabled: !!address && isContractConfigured }
+    args: address && protocolAddress ? [address, protocolAddress] : undefined,
+    query: { enabled: Boolean(address && protocolAddress) },
   })
-  const currentAllowance = (allowanceData as bigint) || 0n
+  const allowance = allowanceData ?? 0n
 
-  const parseMaker = () => { try { return parseUnits(amountMaker || '0', makerDecimals) } catch { return 0n } }
-  const parseTaker = () => { try { return parseUnits(amountTaker || '0', 6) } catch { return 0n } }
+  const timestamps = useMemo(() => {
+    const now = Math.floor(Date.now() / 1000)
+    const offerExpiry = now + Math.max(0, Number(offerHours)) * 60 * 60
+    const performanceDeadline = offerExpiry + Math.max(0, Number(performanceDays)) * 24 * 60 * 60
+    const disputeDeadline = performanceDeadline + Math.max(0, Number(disputeDays)) * 24 * 60 * 60
+    return { offerExpiry: BigInt(Math.floor(offerExpiry)), performanceDeadline: BigInt(Math.floor(performanceDeadline)), disputeDeadline: BigInt(Math.floor(disputeDeadline)) }
+  }, [offerHours, performanceDays, disputeDays])
 
-  const termsH = hashTerms(terms)
-  const needsTakerToken = kind === 1 || parseTaker() > 0n
-  const effectiveTokenTaker = needsTakerToken ? tokenTaker : '0x0000000000000000000000000000000000000000'
-  const deadline = new Date(Date.now() + Number(deadlineMinutes || 0) * 60000)
-  const deadlineHours = Number(deadlineMinutes || 0) / 60
-  const deadlineRelative = deadlineHours >= 24 && deadlineHours % 24 === 0 ? `in ${deadlineHours / 24}d` : deadlineHours >= 1 && Number.isInteger(deadlineHours) ? `in ${deadlineHours}h` : `in ${deadlineMinutes || '0'}m`
-  const deadlineShort = deadline.toLocaleString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' })
-  const deadlineTs = BigInt(Math.floor(deadline.getTime() / 1000))
+  const calculatedBond = notionalAmount > 0n
+    ? ((notionalAmount * 500n + 9_999n) / 10_000n < 1_000_000n ? 1_000_000n : (notionalAmount * 500n + 9_999n) / 10_000n)
+    : 0n
 
-  const isWrongChain = isConnected && chainId !== TARGET_CHAIN_ID
-  const makerBn = parseMaker()
-  const hasBalance = address ? makerBn <= makerBalance : true
-  const needsApproval = isConnected && makerBn > currentAllowance
-  const tokenLabel = TOKENS.find(t => t.value === tokenMaker)?.label || 'tokens'
-  const amountError = !amountMaker || makerBn <= 0n
-  const sellerBondError = !!amountTaker && parseTaker() < 0n
-  const termsError = !terms.trim()
-  const deadlineError = !deadlineMinutes || !Number.isFinite(Number(deadlineMinutes)) || deadline.getTime() <= Date.now()
-  const fieldClass = (invalid: boolean) => `w-full bg-[#07080a] border ${invalid ? 'border-status-error' : 'border-zinc-800 hover:border-zinc-600'} text-[#c8f542] px-3.5 py-2.5 rounded-none text-[14px] placeholder:text-zinc-700 focus:border-[#c8f542] transition-none outline-none focus:ring-0`
+  const validationError = useMemo(() => {
+    if (!protocolAddress) return 'Official testnet contract is not configured in this build'
+    if (!isAddress(taker) || taker === ZERO_ADDRESS) return 'A designated counterparty is required'
+    if (!isAddress(arbiter) || arbiter === ZERO_ADDRESS) return 'A designated arbiter is required'
+    if (address && [taker.toLowerCase(), arbiter.toLowerCase()].includes(address.toLowerCase())) return 'Maker, counterparty and arbiter must be different addresses'
+    if (taker.toLowerCase() === arbiter.toLowerCase()) return 'Counterparty and arbiter must be different addresses'
+    if (makerAmount <= 0n) return 'Maker collateral must be greater than zero'
+    if (notionalAmount <= 0n) return 'USDC notional must be greater than zero'
+    if (feeCapAmount > calculatedBond) return 'Arbiter fee cap cannot exceed the dispute bond'
+    if (!terms.trim()) return 'Written agreement terms are required'
+    if (Number(offerHours) <= 0 || Number(performanceDays) <= 0 || Number(disputeDays) <= 0) return 'All deadline windows must be greater than zero'
+    if (isConnected && makerAmount > makerBalance) return 'Insufficient maker collateral balance'
+    return ''
+  }, [address, arbiter, calculatedBond, disputeDays, feeCapAmount, isConnected, makerAmount, makerBalance, notionalAmount, offerHours, performanceDays, protocolAddress, taker, terms])
 
-  let disabled = false, reason = ''
-  if (amountError) { disabled = true; reason = 'Amount must be greater than zero' }
-  else if (isConnected && !hasBalance) { disabled = true; reason = `Not enough ${tokenLabel}` }
-  else if (sellerBondError) { disabled = true; reason = 'Seller bond must be zero or greater' }
-  else if (termsError) { disabled = true; reason = 'Agreement terms are required' }
-  else if (deadlineError) { disabled = true; reason = 'Settlement deadline must be in the future' }
-  else if (kind === 1 && (!amountTaker || parseTaker() === 0n)) { disabled = true; reason = 'Enter counterparty amount' }
-  else if (taker && !isAddress(taker)) { disabled = true; reason = 'Invalid counterparty address' }
+  const createArgs = useMemo(() => [
+    kind,
+    taker as `0x${string}`,
+    arbiter as `0x${string}`,
+    tokenMaker,
+    takerAmount > 0n ? tokenTaker : ZERO_ADDRESS,
+    makerAmount,
+    takerAmount,
+    notionalAmount,
+    feeCapAmount,
+    timestamps.offerExpiry,
+    timestamps.performanceDeadline,
+    timestamps.disputeDeadline,
+    hashTerms(terms),
+    blurSize,
+  ] as const, [arbiter, blurSize, feeCapAmount, kind, makerAmount, notionalAmount, taker, takerAmount, terms, timestamps, tokenMaker, tokenTaker])
 
-  // 1-Click In-Place Contract Deployment Handler
-  const handleDeployProtocolContract = async () => {
-    if (!walletClient || isWrongChain) return
-    setDeployingContract(true)
-    try {
-      const hash = await walletClient.deployContract({
-        abi: PACT_ABI,
-        bytecode: PACT_BYTECODE,
-        args: [USDC_ERC20 as `0x${string}`, EURC as `0x${string}`],
-      })
-      setDeployTxHash(hash)
+  const canonicalTermsHash = useMemo(() => {
+    if (!protocolAddress || !address || !isAddress(taker) || !isAddress(arbiter) || !terms) return null
+    return hashPactTerms({
+      pactAddress: protocolAddress,
+      chainId: BigInt(arcTestnet.id),
+      maker: address,
+      taker,
+      arbiter,
+      tokenMaker,
+      tokenTaker: takerAmount > 0n ? tokenTaker : ZERO_ADDRESS,
+      amountMaker: makerAmount,
+      amountTaker: takerAmount,
+      notionalUSDC: notionalAmount,
+      arbiterFeeCap: feeCapAmount,
+      ...timestamps,
+      kind,
+      blurSize,
+    }, terms)
+  }, [address, arbiter, blurSize, feeCapAmount, kind, makerAmount, notionalAmount, protocolAddress, taker, takerAmount, terms, timestamps, tokenMaker, tokenTaker])
 
-      if (publicClient) {
-        const receipt = await publicClient.waitForTransactionReceipt({ hash })
-        if (receipt?.contractAddress) {
-          localStorage.setItem('pact_contract_address', receipt.contractAddress)
-          setPactAddress(receipt.contractAddress)
-          toast.success('Protocol contract initialized')
-        }
-      }
-    } catch (err: any) {
-      console.error('Deployment error:', err)
-      toast.error('Failed to initialize protocol contract')
-    } finally {
-      setDeployingContract(false)
+  async function submitPact() {
+    if (!isConnected) {
+      openWalletModal(true)
+      return
     }
-  }
-
-  // ─── Batched Pipeline Auto-Trigger ───
-  useEffect(() => {
-    if (approveConfirmed && step === 'approving') {
-      if (isBatchedRef.current) {
-        isBatchedRef.current = false
-        setStep('creating')
-        writeCreate({
-          address: pactAddress,
-          abi: PACT_ABI,
-          functionName: 'createPact',
-          args: [
-            kind,
-            (taker || '0x0000000000000000000000000000000000000000') as `0x${string}`,
-            tokenMaker as `0x${string}`,
-            effectiveTokenTaker as `0x${string}`,
-            makerBn,
-            kind === 1 ? parseTaker() : (amountTaker ? parseTaker() : 0n),
-            deadlineTs,
-            termsH,
-            blurSize
-          ]
-        })
-      } else {
-        setStep('form')
-      }
+    if (chainId !== arcTestnet.id) {
+      switchChain({ chainId: arcTestnet.id })
+      return
     }
-  }, [approveConfirmed, step, pactAddress])
-
-  useEffect(() => {
-    if (approveError) {
-      setStep('form')
-      isBatchedRef.current = false
-      toast.error(`Transaction failed: ${approveError.message || 'approval was rejected'}`)
-    }
-    if (createError) {
-      setStep('form')
-      isBatchedRef.current = false
-      toast.error(`Transaction failed: ${createError.message || 'pact creation was rejected'}`)
-    }
-  }, [approveError, createError])
-
-  useEffect(() => {
-    if (createConfirmed && createReceipt) {
-      setStep('done')
-      toast.success('Pact created successfully')
-      try {
-        for (const log of createReceipt.logs) {
-          try {
-            const d = decodeEventLog({ abi: PACT_ABI, data: log.data, topics: log.topics })
-            if (d.eventName === 'PactCreated') { setCreatedPactId(Number(d.args.id)); break }
-          } catch {}
-        }
-      } catch {}
-    }
-  }, [createConfirmed, createReceipt])
-
-  const doBatched1ClickDeploy = () => {
-    if (!isConnected || isWrongChain) return
-    if (!isContractConfigured) {
-      handleDeployProtocolContract()
+    if (validationError || !address || !protocolAddress || !publicClient || !walletClient) {
+      toast.error(validationError || 'Wallet client is not ready')
       return
     }
 
-    if (needsApproval) {
-      isBatchedRef.current = true
-      setStep('approving')
-      writeApprove({ address: tokenMaker as `0x${string}`, abi: ERC20_ABI, functionName: 'approve', args: [pactAddress, makerBn] })
-    } else {
-      doCreate()
+    try {
+      let permit: PermitAuthorization | null = null
+      if (allowance !== makerAmount) {
+        setPhase('approving')
+        const approve = async (value: bigint) => {
+          const approval = await publicClient.simulateContract({
+            account: address,
+            address: tokenMaker,
+            abi: ERC20_ABI,
+            functionName: 'approve',
+            args: [protocolAddress, value],
+          })
+          const approvalHash = await walletClient.writeContract(approval.request)
+          setTxHash(approvalHash)
+          await publicClient.waitForTransactionReceipt({ hash: approvalHash })
+        }
+        if (tokenMaker.toLowerCase() === USDC_ERC20.toLowerCase()) {
+          try {
+            permit = await signPermit({
+              publicClient,
+              walletClient,
+              chainId: arcTestnet.id,
+              token: USDC_ERC20,
+              owner: address,
+              spender: protocolAddress,
+              value: makerAmount,
+            })
+          } catch {
+            toast.info('Permit signature unavailable; falling back to exact ERC-20 approval')
+          }
+        }
+        if (!permit) {
+          // Reset stale/non-zero approval first to avoid ERC-20 allowance races.
+          if (allowance !== 0n) await approve(0n)
+          await approve(makerAmount)
+          await refetchAllowance()
+        }
+      }
+
+      setPhase('creating')
+      const simulation = await publicClient.simulateContract({
+        account: address,
+        address: protocolAddress,
+        abi: PACT_ABI,
+        functionName: permit ? 'createPactWithPermit' : 'createPact',
+        args: permit ? [...createArgs, permit.deadline, permit.v, permit.r, permit.s] : createArgs,
+      } as never)
+      const creationHash = await walletClient.writeContract(simulation.request)
+      setTxHash(creationHash)
+      const receipt = await publicClient.waitForTransactionReceipt({ hash: creationHash })
+      for (const log of receipt.logs) {
+        try {
+          const decoded = decodeEventLog({ abi: PACT_ABI, data: log.data, topics: log.topics })
+          if (decoded.eventName === 'PactCreated') setCreatedPactId(Number(decoded.args.id))
+        } catch { /* unrelated log */ }
+      }
+      setPhase('done')
+      toast.success('Pact offer created and maker collateral escrowed')
+    } catch (error) {
+      setPhase('idle')
+      toast.error(error instanceof Error ? error.message : 'Transaction failed')
     }
   }
 
-  const doCreate = () => {
-    if (!isConnected || isWrongChain || !isContractConfigured) return
-    setStep('creating')
-    writeCreate({
-      address: pactAddress,
-      abi: PACT_ABI,
-      functionName: 'createPact',
-      args: [
-        kind,
-        (taker || '0x0000000000000000000000000000000000000000') as `0x${string}`,
-        tokenMaker as `0x${string}`,
-        effectiveTokenTaker as `0x${string}`,
-        makerBn,
-        kind === 1 ? parseTaker() : (amountTaker ? parseTaker() : 0n),
-        deadlineTs,
-        termsH,
-        blurSize
-      ]
-    })
-  }
-
-  const confirmTransaction = () => {
-    const action = confirmation
-    setConfirmation(null)
-    if (action === 'approve') doBatched1ClickDeploy()
-    if (action === 'create') doCreate()
-  }
-
-  const fillDemo = () => {
-    setKind(0)
-    setTokenMaker(USDC_ERC20)
-    setTokenTaker(USDC_ERC20)
-    setAmountMaker('10')
-    setAmountTaker('2')
-    setTerms('Delivery of 1x Server Hardware unit to Singapore DC. Courier tracking reference required upon fulfillment.')
-    setDeadlineMinutes('1440')
-    toast.info('Demo data filled. Review before submitting.')
-  }
-
-  const clearDemo = () => {
-    setAmountMaker('')
-    setAmountTaker('')
-    setTaker('')
-    setTerms('')
-    setDeadlineMinutes('1440')
-    toast.info('Form cleared')
-  }
-
-  const toggleBanners = () => {
-    setBannersCollapsed(value => {
-      localStorage.setItem('pact-hide-network-banners', String(!value))
-      return !value
-    })
-  }
-
-  const shareUrl = createdPactId
-    ? `${typeof window !== 'undefined' ? window.location.origin : ''}/p/${createdPactId}?contract=${encodeURIComponent(pactAddress)}`
-    : ''
-
-  const copyLink = () => { if (shareUrl) { navigator.clipboard.writeText(shareUrl); setCopiedLink(true); toast.success('Link copied to clipboard!'); setTimeout(() => setCopiedLink(false), 2500) } }
-
-  const mc = kind === 0 ? { m: 'Your deposit', t: 'Seller bond', ma: 'Payment', ta: 'Collateral' }
-    : kind === 1 ? { m: 'You lock', t: 'They lock', ma: 'Amount', ta: 'Amount' }
-    : { m: 'Bounty', t: 'Worker bond', ma: 'Bounty', ta: 'Bond (optional)' }
-
-  // ── Success ──
-  if (step === 'done' && createConfirmed) {
+  if (phase === 'done') {
     return (
-      <main className="min-h-screen max-w-[580px] mx-auto px-5 @md:px-8 pb-20 overflow-x-hidden font-mono">
-                <div className="text-center py-16 animate-enter border border-zinc-800 bg-[#0c0d10] mt-8 p-8">
-          <div className="w-14 h-14 bg-[#c8f542] text-black flex items-center justify-center mx-auto mb-5 text-xl font-bold rounded-none">✓</div>
-          <h1 className="text-xl font-semibold text-white mb-1">
-            Pact {createdPactId ? `#${createdPactId.toString().padStart(4, '0')}` : ''} created
-          </h1>
-          <p className="text-[14px] text-zinc-500 mb-8">${amountMaker} {tokenLabel} locked on-chain via Arc Native Settlement.</p>
-
-          {createdPactId && (
-            <div className="surface-1 p-4 mb-8 text-left max-w-[24rem] mx-auto">
-              <p className="text-[12px] text-zinc-500 mb-2">Share with counterparty</p>
-              <div className="flex gap-2">
-                <input readOnly value={shareUrl} className="flex-1 bg-black border border-zinc-700 text-[#c8f542] px-3 py-2 rounded-none text-[12px] font-mono select-all focus:ring-0 outline-none" />
-                <button onClick={copyLink} className="btn-primary px-4 py-2 text-[12px]">
-                  {copiedLink ? 'Copied' : 'Copy'}
-                </button>
-              </div>
-            </div>
-          )}
-
-          <div className="flex flex-col @md:flex-row items-center justify-center gap-3">
-            {createdPactId ? (
-              <Link href={`/p/${createdPactId}?contract=${encodeURIComponent(pactAddress)}`}
-                className="btn-primary px-6 py-2.5 text-[13px]">
-                Open pact →
-              </Link>
-            ) : (
-              <Link href="/" className="btn-primary px-6 py-2.5 text-[13px]">
-                Dashboard →
-              </Link>
-            )}
-            <button
-              onClick={() => {
-                setStep('form')
-                setCreatedPactId(null)
-                setDeployTxHash(null)
-                setAmountMaker('')
-                setAmountTaker('')
-                setTerms('')
-              }}
-              className="btn-ghost px-4 py-2.5 text-[13px] text-zinc-400 border border-zinc-800"
-            >
-              Create another pact +
-            </button>
-            {createTxHash && (
-              <a href={`https://testnet.arcscan.app/tx/${createTxHash}`} target="_blank" rel="noreferrer"
-                className="btn-ghost px-4 py-2.5 text-[13px] text-zinc-400">
-                View on ArcScan ↗
-              </a>
-            )}
-          </div>
+      <div className="mx-auto max-w-[580px] border border-outline-hairline bg-surface-container-lowest p-8 text-center">
+        <div className="mx-auto mb-5 grid h-14 w-14 place-items-center bg-primary-fixed text-xl font-bold text-black">✓</div>
+        <h1 className="text-xl font-semibold text-white">Pact offer created</h1>
+        <p className="mt-2 text-sm text-text-muted">Maker collateral is escrowed. The designated counterparty must verify the exact terms hash before accepting.</p>
+        <div className="mt-7 flex flex-col justify-center gap-3 @sm:flex-row">
+          {createdPactId && <Link href={`/p/${createdPactId}`} className="btn-primary px-5 py-2.5">Open pact →</Link>}
+          {txHash && <a href={`https://testnet.arcscan.app/tx/${txHash}`} target="_blank" rel="noreferrer" className="btn-ghost px-5 py-2.5">ArcScan ↗</a>}
         </div>
-      </main>
+      </div>
     )
   }
 
+  const fieldClass = 'w-full border border-zinc-800 bg-[#07080a] px-3.5 py-2.5 text-[13px] text-white outline-none focus:border-primary-fixed'
+  const busy = phase !== 'idle'
+
   return (
     <div className="mx-auto w-full max-w-[920px] font-mono">
-      
-      <button type="button" onClick={toggleBanners} className="mb-4 flex w-full items-center justify-between border-b border-outline-hairline px-1 py-2 text-[11px] text-text-muted hover:text-on-surface" aria-expanded={!bannersCollapsed}>
-        <span>{bannersCollapsed ? 'Network and risk notices hidden' : 'Hide network and risk notices'}</span><span aria-hidden="true" className="material-symbols-outlined text-[16px]">{bannersCollapsed ? 'expand_more' : 'expand_less'}</span>
-      </button>
-      {!bannersCollapsed && <><div className="mb-3 flex flex-col items-start justify-between gap-3 border border-[#c8f542]/30 bg-[#c8f542]/10 p-3 text-[12px] text-[#c8f542] animate-enter rounded-none @sm:flex-row @sm:items-center">
-        <div className="flex items-center gap-2">
-          <span><strong>Arc Testnet:</strong> Native USDC Gas · Direct On-Chain Pact</span>
+      <div className="mb-6 flex flex-col gap-3 border border-primary-fixed/30 bg-primary-fixed/[0.06] p-4 @sm:flex-row @sm:items-center @sm:justify-between">
+        <div>
+          <p className="text-[12px] font-semibold text-primary-fixed">Arc Testnet · ERC-20 collateral only</p>
+          <p className="mt-1 text-[11px] text-text-muted">No native transfers, no client-side deployment, no user-supplied contract address.</p>
         </div>
-        <div className="flex w-full items-center gap-2 @sm:w-auto">
-          <span className="bg-[#c8f542]/20 px-2 py-1 text-[10px] font-mono border border-[#c8f542]/30 rounded-none">Chain ID 5042002</span>
-          <a href={CIRCLE_FAUCET_URL} target="_blank" rel="noopener noreferrer" className="ml-auto inline-flex min-h-8 items-center gap-1 border border-[#c8f542]/50 px-2.5 text-[10px] font-semibold uppercase tracking-wide hover:bg-[#c8f542] hover:text-black @sm:ml-0">
-            Get test USDC <span className="material-symbols-outlined text-[14px]" aria-hidden="true">open_in_new</span>
-          </a>
-        </div>
+        <a href={CIRCLE_FAUCET_URL} target="_blank" rel="noopener noreferrer" className="pact-button-secondary shrink-0 px-3">Get test USDC ↗</a>
       </div>
 
-      <div role="note" className="mb-6 p-3 border border-status-warning/60 bg-status-warning/10 text-[12px] text-[#f7d36b]">
-        <strong>⚠ Testnet deployment.</strong> Smart contracts involve risk. Always verify terms before locking collateral.
-      </div>
-      </>}
+      {!protocolAddress && (
+        <div role="alert" className="mb-6 border border-status-warning/60 bg-status-warning/10 p-4 text-[12px] text-[#f7d36b]">
+          <strong>Protocol unavailable.</strong> A maintainer must deploy PACT V1 and configure `NEXT_PUBLIC_PACT_ADDRESS_5042002` before transactions are enabled.
+        </div>
+      )}
 
-      {isWrongChain && (
-        <div className="bg-rose-500/[0.08] border border-rose-500/20 p-3.5 mb-6 text-[13px] flex items-center justify-between text-rose-300 rounded-none">
-          <span>Wrong network</span>
-          <button onClick={() => switchChain({ chainId: TARGET_CHAIN_ID })}
-            className="btn-primary bg-rose-500 border-rose-500 text-black px-3.5 py-1 text-[12px]">
-            Switch
+      <header className="mb-8 border-b border-outline-hairline pb-5">
+        <p className="pact-eyebrow mb-2">Create committed offer</p>
+        <h1 className="text-[28px] font-semibold text-white">New pact</h1>
+        <p className="mt-2 max-w-2xl text-[13px] leading-6 text-text-muted">Creating immediately escrows maker collateral. Acceptance atomically escrows counterparty collateral only after the terms hash matches.</p>
+      </header>
+
+      <div className="space-y-7">
+        <section className="pact-panel p-5">
+          <h2 className="mb-4 text-[12px] font-semibold uppercase tracking-widest text-white">01 · Structure and parties</h2>
+          <div className="mb-5 grid gap-2 @sm:grid-cols-2">
+            {KINDS.map(option => <button key={option.value} type="button" onClick={() => setKind(option.value)} className={`border p-4 text-left ${kind === option.value ? 'border-primary-fixed bg-primary-fixed/[0.06]' : 'border-zinc-800'}`}><span className="block text-sm text-white">{option.label}</span><span className="mt-1 block text-[11px] text-text-muted">{option.desc}</span></button>)}
+          </div>
+          <div className="grid gap-4 @sm:grid-cols-2">
+            <label className="text-[11px] text-text-muted">Designated counterparty<input value={taker} onChange={event => setTaker(event.target.value)} placeholder="0x…" className={`${fieldClass} mt-2`} /></label>
+            <label className="text-[11px] text-text-muted">Designated arbiter<input value={arbiter} onChange={event => setArbiter(event.target.value)} placeholder="0x…" className={`${fieldClass} mt-2`} /></label>
+          </div>
+          {reputation && <p className="mt-3 text-[11px] text-text-muted">Counterparty history: <span className="text-primary-fixed">{reputation.cleared} settled</span> · {reputation.slashed} disputes lost</p>}
+        </section>
+
+        <section className="pact-panel p-5">
+          <h2 className="mb-4 text-[12px] font-semibold uppercase tracking-widest text-white">02 · Collateral and dispute economics</h2>
+          <div className="grid gap-4 @sm:grid-cols-2">
+            <TokenSelect label="Maker token" value={tokenMaker} onChange={value => setTokenMaker(value as `0x${string}`)} tokens={TOKENS} />
+            <label className="text-[11px] text-text-muted">Maker collateral<input inputMode="decimal" value={amountMaker} onChange={event => setAmountMaker(event.target.value)} placeholder="0.00" className={`${fieldClass} mt-2`} /></label>
+            <TokenSelect label="Counterparty token" value={tokenTaker} onChange={value => setTokenTaker(value as `0x${string}`)} tokens={TOKENS} />
+            <label className="text-[11px] text-text-muted">Counterparty collateral<input inputMode="decimal" value={amountTaker} onChange={event => setAmountTaker(event.target.value)} placeholder="0.00 (optional)" className={`${fieldClass} mt-2`} /></label>
+            <label className="text-[11px] text-text-muted">Notional value in USDC<input inputMode="decimal" value={notionalUSDC} onChange={event => setNotionalUSDC(event.target.value)} placeholder="Used once to calculate the 5% bond" className={`${fieldClass} mt-2`} /></label>
+            <label className="text-[11px] text-text-muted">Arbiter fee cap (USDC)<input inputMode="decimal" value={arbiterFeeCap} onChange={event => setArbiterFeeCap(event.target.value)} className={`${fieldClass} mt-2`} /></label>
+          </div>
+          <p className="mt-4 border-l-2 border-primary-fixed pl-3 text-[11px] leading-5 text-text-muted">Dispute bond: <strong className="text-primary-fixed">{formatUnits(calculatedBond, 6)} USDC</strong>. Both parties post the same bond; arbiter fees can only come from the losing bond.</p>
+        </section>
+
+        <section className="pact-panel p-5">
+          <h2 className="mb-4 text-[12px] font-semibold uppercase tracking-widest text-white">03 · Deadlines and written terms</h2>
+          <div className="grid gap-4 @sm:grid-cols-3">
+            <label className="text-[11px] text-text-muted">Offer expires (hours)<input inputMode="numeric" value={offerHours} onChange={event => setOfferHours(event.target.value)} className={`${fieldClass} mt-2`} /></label>
+            <label className="text-[11px] text-text-muted">Performance window (days)<input inputMode="numeric" value={performanceDays} onChange={event => setPerformanceDays(event.target.value)} className={`${fieldClass} mt-2`} /></label>
+            <label className="text-[11px] text-text-muted">Dispute window (days)<input inputMode="numeric" value={disputeDays} onChange={event => setDisputeDays(event.target.value)} className={`${fieldClass} mt-2`} /></label>
+          </div>
+          <label className="mt-5 block text-[11px] text-text-muted">Agreement terms<textarea value={terms} onChange={event => setTerms(event.target.value)} maxLength={2000} rows={6} placeholder="Exact off-chain agreement anchored by termsHash…" className={`${fieldClass} mt-2 resize-y`} /></label>
+          <label className="mt-4 flex items-center gap-2 text-[11px] text-text-muted"><input type="checkbox" checked={blurSize} onChange={event => setBlurSize(event.target.checked)} /> Blur amount in UI (cosmetic only; on-chain data remains public)</label>
+        </section>
+
+        <section className="border border-zinc-800 bg-[#0c0d10] p-5">
+          <div className="grid gap-3 text-[11px] text-text-muted @sm:grid-cols-2">
+            <p>Canonical terms hash <span className="mt-1 block break-all text-white">{canonicalTermsHash || 'Connect wallet and complete all fields'}</span></p>
+            <p>Official contract <span className="mt-1 block break-all text-white">{protocolAddress ?? 'Not configured'}</span></p>
+            <p>Maker locks now <span className="mt-1 block text-primary-fixed">{amountMaker || '0'} {TOKENS.find(token => token.value === tokenMaker)?.label}</span></p>
+            <p>Offer / performance / dispute <span className="mt-1 block text-white">{offerHours}h / {performanceDays}d / +{disputeDays}d</span></p>
+          </div>
+          {validationError && <p role="alert" className="mt-4 text-[11px] text-status-error">{validationError}</p>}
+          <button type="button" onClick={submitPact} disabled={busy || Boolean(validationError)} className="btn-primary mt-5 min-h-12 w-full disabled:cursor-not-allowed disabled:opacity-40">
+            {phase === 'approving' ? 'Authorizing exact collateral…' : phase === 'creating' ? 'Creating committed offer…' : !isConnected ? 'Connect wallet' : 'Authorize & create pact'}
           </button>
-        </div>
-      )}
-
-      {/* Header */}
-      <div className="flex flex-col items-start justify-between gap-4 mb-8 animate-enter @sm:flex-row">
-        <div>
-          <p className="pact-eyebrow mb-2">Create agreement</p>
-          <h1 className="text-[26px] @md:text-[32px] font-semibold text-white tracking-[-0.03em]">New pact</h1>
-          <p className="mt-2 max-w-[36rem] text-[13px] leading-6 text-text-muted">Define the economics, counterparty and settlement terms before anything is signed on-chain.</p>
-        </div>
-        <div className="grid w-full grid-cols-2 gap-2 @sm:flex @sm:w-auto"><button onClick={fillDemo} title="Auto-fill with sample values for testing" className="btn-ghost px-3 text-[11px] text-zinc-400">Use example</button><button onClick={clearDemo} className="btn-ghost px-3 text-[11px] text-zinc-400">Clear</button></div>
+          {txHash && <a href={`https://testnet.arcscan.app/tx/${txHash}`} target="_blank" rel="noreferrer" className="mt-3 block text-center text-[11px] text-text-muted hover:text-primary-fixed">Track current transaction on ArcScan ↗</a>}
+        </section>
       </div>
-
-      <ol aria-label="Pact creation steps" className="mb-6 grid grid-cols-2 gap-px border border-outline-hairline bg-outline-hairline @md:grid-cols-4">
-        {[['01', 'Structure'], ['02', 'Collateral'], ['03', 'Terms'], ['04', 'Review']].map(([number, label]) => (
-          <li key={number} className="flex items-center gap-3 bg-[#0f1216] px-4 py-3"><span className="font-display-mono text-[11px] text-primary-fixed">{number}</span><span className="text-[11px] font-medium text-text-muted">{label}</span></li>
-        ))}
-      </ol>
-
-      <div className="space-y-5 animate-enter-delay">
-        {/* Type */}
-        <div className="pact-panel p-5 @md:p-6">
-          <label className="pact-eyebrow block mb-4">01 · Pact structure</label>
-          <div className="grid grid-cols-1 gap-2 @sm:grid-cols-3">
-            {KINDS.map(k => (
-              <label key={k.value} className={`pill-interactive p-3.5 cursor-pointer transition-none text-center border ${
-                kind === k.value
-                  ? 'bg-[#c8f542]/10 border-[#c8f542] text-[#c8f542]'
-                  : 'bg-black border-zinc-800 hover:border-zinc-600'
-              }`}>
-                <input type="radio" name="kind" value={k.value} checked={kind === k.value} onChange={() => setKind(k.value)} className="sr-only" />
-                <span className={`text-[13px] font-bold tracking-wider block mb-0.5 ${kind === k.value ? 'text-[#c8f542]' : 'text-zinc-400'}`}>{k.label}</span>
-                <span className="text-[10px] text-zinc-600 block uppercase tracking-widest">{k.desc}</span>
-              </label>
-            ))}
-          </div>
-        </div>
-
-        {/* Amounts */}
-        <div className="pact-panel space-y-5 p-5 @md:p-6">
-          <label className="pact-eyebrow block">02 · Collateral and counterparty</label>
-          <div className="grid grid-cols-1 @md:grid-cols-2 gap-3">
-            <TokenSelect label={mc.m} tokens={TOKENS} value={tokenMaker} onChange={setTokenMaker} />
-            <div>
-              <div className="flex justify-between items-center mb-1.5">
-                <label className="text-[12px] text-zinc-500">{mc.ma}</label>
-                {address && (
-                  <span className="text-[11px] text-zinc-600">
-                    {formatUnits(makerBalance, makerDecimals)}{' '}
-                    <button onClick={() => { 
-                      if (makerBalance > 0n) {
-                        let maxBal = makerBalance
-                        // Reserve 0.05 USDC for gas if using USDC
-                        if (tokenMaker === USDC_ERC20) {
-                          const gasReserve = 50000n 
-                          maxBal = makerBalance > gasReserve ? makerBalance - gasReserve : 0n
-                        }
-                        setAmountMaker(formatUnits(maxBal, makerDecimals))
-                      }
-                    }}
-                      className="text-[#c8f542] hover:text-[#d6fa61] cursor-pointer font-bold active:scale-90 transition-transform">MAX</button>
-                  </span>
-                )}
-              </div>
-              <input aria-invalid={amountError} type="number" min="0" value={amountMaker} onChange={e => setAmountMaker(e.target.value)} placeholder="0.00" className={fieldClass(amountError)} />
-              {amountError && <p className="mt-1 text-[11px] text-status-error">Amount must be greater than zero</p>}
-            </div>
-          </div>
-
-          <div className="separator" />
-
-          <div className="grid grid-cols-1 @md:grid-cols-2 gap-3">
-            <TokenSelect label={mc.t} tokens={TOKENS} value={tokenTaker} onChange={setTokenTaker} />
-            <div>
-              <label className="text-[12px] text-zinc-500 block mb-1.5">{mc.ta}</label>
-              <input aria-invalid={sellerBondError} type="number" min="0" value={amountTaker} onChange={e => setAmountTaker(e.target.value)}
-                placeholder={kind === 1 ? '0.00' : '0.00 (optional)'}
-                className={fieldClass(sellerBondError)} />
-              {sellerBondError && <p className="mt-1 text-[11px] text-status-error">Seller bond must be zero or greater</p>}
-            </div>
-          </div>
-
-          <div className="separator" />
-
-          <div>
-            <div className="flex items-center justify-between mb-1.5">
-              <label className="text-[12px] text-zinc-500 block">
-                Designated Counterparty <span className="text-zinc-700">· leave empty for open candidate pool</span>
-              </label>
-              {reputation && (
-                <div className="flex items-center gap-2 text-[10px] uppercase tracking-wider bg-[#18181b] px-2 py-0.5 border border-zinc-800">
-                  <span className="text-zinc-400">Trust Score:</span>
-                  <span className="text-[#c8f542]">{reputation.cleared} Cleared</span>
-                  {reputation.slashed > 0 && <span className="text-rose-400">/ {reputation.slashed} Slashed</span>}
-                </div>
-              )}
-              {repLoading && <div className="text-[10px] text-zinc-600 uppercase tracking-wider">Checking rep...</div>}
-            </div>
-            <input type="text" value={taker} onChange={e => setTaker(e.target.value)} placeholder="0x…"
-              className="w-full bg-[#07080a] border border-zinc-800 hover:border-zinc-600 text-white px-3.5 py-2.5 rounded-none text-[14px] font-mono placeholder:text-zinc-700 focus:border-[#c8f542] transition-none outline-none focus:ring-0" />
-          </div>
-        </div>
-
-
-        {/* Terms */}
-        <div className="pact-panel p-5 @md:p-6">
-          <div className="flex flex-col items-start justify-between gap-3 mb-3 @md:flex-row @md:items-center">
-            <label className="pact-eyebrow">03 · Agreement terms</label>
-            <div className="flex w-full items-center gap-2 overflow-x-auto pb-1 hide-scroll @md:w-auto">
-              <span className="text-[10px] text-zinc-600 hidden @md:inline">Templates:</span>
-              {TEMPLATES.map(t => (
-                <button key={t.label} type="button" onClick={() => setTerms(t.text)} aria-pressed={terms === t.text} className={`min-h-11 px-3 text-[11px] border transition-colors ${terms === t.text ? 'bg-[#c8f542]/15 border-[#c8f542] text-[#c8f542]' : 'bg-zinc-900 border-zinc-800 hover:border-[#c8f542] text-zinc-400 hover:text-[#c8f542]'}`}>
-                  {t.label}
-                </button>
-              ))}
-              <span className={`text-[11px] ml-2 ${termsError ? 'text-status-error' : 'text-zinc-500'}`}>{terms.length}/500</span>
-            </div>
-          </div>
-          <textarea aria-invalid={termsError} maxLength={500} value={terms} onChange={e => setTerms(e.target.value)} rows={3}
-            placeholder="Describe delivery condition, tracking number, or milestone specification…"
-            className={`w-full bg-[#07080a] border ${termsError ? 'border-status-error' : 'border-zinc-800 hover:border-zinc-600'} text-white px-3.5 py-2.5 rounded-none text-[13px] leading-relaxed placeholder:text-zinc-700 focus:border-[#c8f542] resize-none transition-none outline-none focus:ring-0`} />
-          {termsError && <p className="mt-1 text-[11px] text-status-error">Agreement terms cannot be empty</p>}
-          {terms && <p className="text-[11px] text-zinc-600 mt-1.5 font-mono">SHA-256 Digest: {termsH.slice(0, 24)}…</p>}
-        </div>
-
-        {/* Deadline & Session Key Features */}
-        <div className="pact-panel p-5 @md:p-6">
-          <label className="pact-eyebrow block mb-3">Settlement deadline</label>
-          <div className="flex flex-wrap items-center gap-2">
-            <div className="flex w-full @md:flex-1"><input aria-invalid={deadlineError} type="number" value={deadlineMinutes} onChange={e => setDeadlineMinutes(e.target.value)} min="1" className={`${fieldClass(deadlineError)} min-w-0`} /><span className="border border-l-0 border-zinc-800 px-3 py-2.5 text-[12px] text-text-muted">minutes</span></div>
-            {[{ m: 30, l: '30m' }, { m: 60, l: '1h' }, { m: 360, l: '6h' }, { m: 1440, l: '24h' }, { m: 10080, l: '7d' }].map(p => (
-              <button key={p.m} type="button" onClick={() => setDeadlineMinutes(p.m.toString())}
-                aria-pressed={deadlineMinutes === p.m.toString()} className={`pill-interactive min-h-11 flex-1 px-3 py-2.5 border text-[13px] transition-none rounded-none @md:flex-none ${deadlineMinutes === p.m.toString() ? 'bg-[#c8f542]/15 border-[#c8f542] text-[#c8f542]' : 'bg-[#07080a] border-zinc-800 hover:border-[#c8f542] text-zinc-400 hover:text-[#c8f542]'}`}>
-                {p.l}
-              </button>
-            ))}
-          </div>
-          {deadlineError ? <p className="text-[11px] text-status-error mt-1.5">Settlement deadline must be in the future</p> : <p className="text-[11px] text-zinc-500 mt-1.5" title={deadline.toLocaleString()}>{deadlineRelative} ({deadlineShort})</p>}
-
-          <div className="mt-4 space-y-2">
-            <label className="flex items-center gap-2.5 cursor-pointer select-none">
-              <input type="checkbox" checked={blurSize} onChange={e => setBlurSize(e.target.checked)}
-                className="w-4 h-4 rounded-none border-zinc-700 bg-[#07080a] text-[#c8f542] focus:ring-[#c8f542]/30 focus:ring-offset-0 outline-none" />
-              <span className="text-[13px] text-zinc-400" title="Amounts remain readable in on-chain calldata">blur amount in UI (still public onchain)</span>
-            </label>
-          </div>
-        </div>
-
-        {/* Summary */}
-        <div className="pact-panel-raised p-5 @md:p-6 text-[13px] space-y-3">
-          <p className="pact-eyebrow mb-4">04 · Final review</p>
-          <div className="flex justify-between"><span className="text-zinc-500">Total locked principal</span><span className="text-[#c8f542]">{amountMaker || '0'} + {amountTaker || '0'} {tokenLabel}</span></div>
-          <div className="flex justify-between"><span className="text-zinc-500">Counterparty</span><span className="text-zinc-200">{taker ? `${taker.slice(0,6)}…${taker.slice(-4)}` : 'Open'}</span></div>
-          <div className="flex justify-between"><span className="text-zinc-500">Arbitrator mode</span><span className="text-zinc-300 font-mono text-[11px]">Direct Bilateral</span></div>
-          <div className="flex justify-between"><span className="text-zinc-500">Settlement deadline</span><span className="text-zinc-200 text-right" title={deadline.toLocaleString()}>{deadlineRelative}<br />{deadlineShort}</span></div>
-        </div>
-
-        {/* Errors */}
-        {(approveError || createError) && (
-          <p className="text-[13px] text-rose-400 bg-rose-500/[0.08] p-3 rounded-none border border-rose-500/20">
-            {approveError?.message || createError?.message || 'Transaction failed on Arc.'}
-          </p>
-        )}
-
-        {/* Submit with Clean Professional Buttons */}
-        <div>
-          {!isConnected ? (
-            <button
-              onClick={() => openModal(true)} disabled={disabled}
-              className="btn-primary w-full py-3 text-[14px] disabled:opacity-50 disabled:cursor-not-allowed"
-            >
-              {disabled ? reason : 'Connect Wallet to Continue'}
-            </button>
-          ) : disabled ? (
-            <button disabled className="w-full bg-[#18181b] border border-zinc-800 text-zinc-600 py-3 text-[13px] uppercase tracking-widest rounded-none cursor-not-allowed">{reason}</button>
-          ) : deployingContract ? (
-            <div className="w-full py-3.5 text-[14px] text-center text-[#c8f542] flex items-center justify-center gap-2 bg-[#c8f542]/10 border border-[#c8f542]/30 rounded-none">
-              <div className="w-4 h-4 border-[1.5px] border-[#c8f542] border-t-transparent rounded-full animate-spin" />
-              <span>Deploying Protocol Contract on Circle Arc…</span>
-            </div>
-          ) : !isContractConfigured ? (
-            <button
-              onClick={() => setConfirmation('approve')}
-              className="btn-primary w-full py-3.5 text-[14px] flex items-center justify-center gap-2 rounded-none"
-            >
-              <span>Initialize Protocol Contract</span>
-            </button>
-          ) : step === 'creating' || createPending || createReceiptLoading ? (
-            <div className="w-full py-3.5 text-[14px] text-center text-[#c8f542] flex items-center justify-center gap-2 bg-[#c8f542]/10 border border-[#c8f542]/30 rounded-none">
-              <div className="w-4 h-4 border-[1.5px] border-[#c8f542] border-t-transparent rounded-full animate-spin" />
-              <span>[Step 2/2] Initializing Pact on Circle Arc…</span>
-            </div>
-          ) : step === 'approving' || approvePending || approveReceiptLoading ? (
-            <div className="w-full py-3.5 text-[14px] text-center text-[#c8f542] flex items-center justify-center gap-2 bg-[#c8f542]/10 border border-[#c8f542]/30 rounded-none">
-              <div className="w-4 h-4 border-[1.5px] border-[#c8f542] border-t-transparent rounded-full animate-spin" />
-              <span>[Step 1/2] Authorizing {tokenLabel} Collateral…</span>
-            </div>
-          ) : needsApproval ? (
-            <div className="space-y-2">
-              <button
-                onClick={() => setConfirmation('approve')}
-                className="btn-primary w-full py-3.5 text-[14px] flex items-center justify-center gap-2 rounded-none"
-              >
-                <span>Authorize & Deploy Pact</span>
-              </button>
-              <p className="text-[11px] text-zinc-500 text-center">
-                Batched pipeline automatically executes Approve and initializes the pact contract.
-              </p>
-            </div>
-          ) : (
-            <button onClick={() => setConfirmation('create')} className="btn-primary w-full py-3.5 text-[14px]">
-              Deploy Pact
-            </button>
-          )}
-        </div>
-      </div>
-      {confirmation && (
-        <div role="dialog" aria-modal="true" aria-labelledby="confirm-lock-title" className="fixed inset-0 z-[60] flex items-center justify-center bg-black/75 p-4">
-          <div className="w-full max-w-[28rem] border border-primary-fixed/70 bg-[#0c0d10] p-5 shadow-2xl">
-            <p className="font-label-caps text-[10px] uppercase tracking-[0.16em] text-primary-fixed">Final review</p>
-            <h2 id="confirm-lock-title" className="mt-2 font-display-mono text-lg text-white">{confirmation === 'approve' ? 'Approve collateral' : 'Create and lock pact'}</h2>
-            <p className="mt-2 text-sm leading-6 text-text-muted">{confirmation === 'approve' ? `Approve exactly ${amountMaker || '0'} ${tokenLabel} for this single pact, then create it.` : 'Review the agreement summary before you sign the creation transaction.'}</p>
-            <dl className="mt-5 divide-y divide-outline-hairline border-y border-outline-hairline text-[12px]">
-              <div className="flex items-center justify-between gap-4 py-3"><dt className="text-text-muted">Maker locks</dt><dd className="font-headline-mono text-primary-fixed">{amountMaker || '0'} {tokenLabel}</dd></div>
-              {parseTaker() > 0n && <div className="flex items-center justify-between gap-4 py-3"><dt className="text-text-muted">Counterparty locks</dt><dd className="font-headline-mono text-on-surface">{amountTaker} {TOKENS.find(t => t.value === tokenTaker)?.label}</dd></div>}
-              <div className="flex items-center justify-between gap-4 py-3"><dt className="text-text-muted">Counterparty</dt><dd className="max-w-[190px] truncate font-code-hash text-on-surface">{taker || 'Open to the first eligible funder'}</dd></div>
-              <div className="flex items-center justify-between gap-4 py-3"><dt className="text-text-muted">Deadline</dt><dd className="font-code-hash text-on-surface">{deadline.toLocaleString()}</dd></div>
-            </dl>
-            <p className="mt-4 text-[11px] leading-5 text-text-dim">Funds remain in the pact contract until its on-chain settlement rules are satisfied.</p>
-            <div className="mt-5 flex justify-end gap-3">
-              <button type="button" onClick={() => setConfirmation(null)} className="min-h-11 px-4 border border-outline-border text-text-muted hover:text-on-surface">Cancel</button>
-              <button type="button" autoFocus onClick={confirmTransaction} className="min-h-11 px-4 border border-primary-fixed bg-primary-fixed text-on-primary-fixed">{confirmation === 'approve' ? 'Approve & continue' : 'Create pact'}</button>
-            </div>
-          </div>
-        </div>
-      )}
     </div>
   )
 }

@@ -2,283 +2,634 @@
 pragma solidity ^0.8.26;
 
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
+import {IERC20Permit} from "@openzeppelin/contracts/token/ERC20/extensions/IERC20Permit.sol";
 import {SafeERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 import {ReentrancyGuard} from "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
 import {IPact} from "./interfaces/IPact.sol";
-import {Kind, Status, Pact} from "./types.sol";
+import {Dispute, Kind, Pact, Status, Winner} from "./types.sol";
 
+/// @title PACT V1
+/// @notice Bilateral escrow with explicit acceptance, pull payments and bounded arbitration.
+/// @dev V1 depends only on allowlisted ERC-20 tokens. It has no native-token path.
 contract PactContract is IPact, ReentrancyGuard {
     using SafeERC20 for IERC20;
 
+    uint256 public constant BPS = 10_000;
+    uint256 public constant DISPUTE_BOND_BPS = 500;
+    uint256 public constant MIN_DISPUTE_BOND = 1_000_000; // 1 USDC, 6 decimals
+    uint64 public constant RESPONSE_WINDOW = 3 days;
+    uint64 public constant ARBITER_TIMEOUT = 14 days;
+    uint64 public constant MAX_ALL_PAUSE = 7 days;
+
     address public immutable USDC;
     address public immutable EURC;
-    
+    address public immutable USYC;
+    address public immutable adminSafe;
+
+    address public pauseGuardian;
+    bool public intakePaused;
+    bool public guardianAllPauseArmed = true;
+    uint64 public allPausedUntil;
     uint256 public nextId = 1;
-    uint256 public constant MIN_DURATION = 60; // 60 seconds
 
-    mapping(uint256 => Pact) public pacts;
-    mapping(uint256 => uint64) public deadlines;
-    mapping(address => mapping(address => uint256)) public credits; // who => token => amount
+    mapping(address token => bool allowed) public allowedToken;
+    mapping(uint256 id => Pact pact) private _pacts;
+    mapping(uint256 id => Dispute dispute) private _disputes;
+    mapping(address recipient => mapping(address token => uint256 amount)) public credits;
+    mapping(address token => uint256 amount) public totalEscrow;
+    mapping(address token => uint256 amount) public totalCredits;
 
-    mapping(address => uint256) public clearedCount;
-    mapping(address => uint256) public slashedCount;
-    mapping(address => uint256) public clearedNotional;
+    mapping(address user => uint256 count) public settledCount;
+    mapping(address user => uint256 count) public lostDisputeCount;
+    mapping(address user => uint256 amount) public settledNotionalUSDC;
 
-    constructor(address _usdc, address _eurc) {
-        USDC = _usdc;
-        EURC = _eurc;
+    error ZeroAddress();
+    error AdminMustBeContract();
+    error DeployerCannotBeAdmin();
+    error Unauthorized();
+    error IntakeIsPaused();
+    error ProtocolIsPaused(uint64 until);
+    error PactNotFound();
+    error InvalidStatus(Status current);
+    error InvalidParty();
+    error InvalidArbiter();
+    error InvalidToken();
+    error InvalidAmount();
+    error InvalidDeadline();
+    error InvalidHash();
+    error TermsHashMismatch();
+    error TransferAmountMismatch();
+    error TooEarly();
+    error TooLate();
+    error InvalidWinner();
+    error FeeExceedsCap();
+    error NoCredit();
+    error GuardianPauseNotArmed();
+
+    modifier onlyAdmin() {
+        if (msg.sender != adminSafe) revert Unauthorized();
+        _;
     }
 
-    function _requirePactExists(Pact storage p) internal view {
-        require(p.maker != address(0), "pact not found");
+    modifier onlyPauseAuthority() {
+        if (msg.sender != pauseGuardian && msg.sender != adminSafe) revert Unauthorized();
+        _;
     }
 
-    function _payout(address token, address to, uint256 amount) internal {
-        if (amount == 0) return;
-        (bool ok, bytes memory ret) = token.call(
-            abi.encodeCall(IERC20.transfer, (to, amount))
-        );
-        bool success = ok && (ret.length == 0 || abi.decode(ret, (bool)));
-        if (!success) {
-            credits[to][token] += amount;
-            emit PayoutCredited(to, token, amount);
+    modifier whenIntakeOpen() {
+        if (intakePaused) revert IntakeIsPaused();
+        _requireNotAllPaused();
+        _;
+    }
+
+    modifier whenOperational() {
+        _requireNotAllPaused();
+        _;
+    }
+
+    constructor(address usdc, address eurc, address usyc, address safe, address guardian) {
+        if (
+            usdc == address(0) || eurc == address(0) || usyc == address(0) || safe == address(0)
+                || guardian == address(0)
+        ) {
+            revert ZeroAddress();
         }
-    }
+        if (safe == msg.sender) revert DeployerCannotBeAdmin();
+        if (safe.code.length == 0) revert AdminMustBeContract();
 
-    function withdraw(address token) external nonReentrant {
-        uint256 amount = credits[msg.sender][token];
-        require(amount > 0, "no credit");
-        credits[msg.sender][token] = 0;
-        IERC20(token).safeTransfer(msg.sender, amount);
-        emit Withdrawn(msg.sender, token, amount);
-    }
-
-    function getPact(uint256 id) external view returns (Pact memory) {
-        return pacts[id];
+        USDC = usdc;
+        EURC = eurc;
+        USYC = usyc;
+        adminSafe = safe;
+        pauseGuardian = guardian;
+        allowedToken[usdc] = true;
+        allowedToken[eurc] = true;
+        allowedToken[usyc] = true;
     }
 
     function createPact(
         Kind kind,
         address taker,
+        address arbiter,
         address tokenMaker,
         address tokenTaker,
-        uint64 amountMaker,
-        uint64 amountTaker,
-        uint64 deadline,
-        bytes32 termsHash,
+        uint128 amountMaker,
+        uint128 amountTaker,
+        uint128 notionalUSDC,
+        uint128 arbiterFeeCap,
+        uint64 offerExpiry,
+        uint64 performanceDeadline,
+        uint64 disputeDeadline,
+        bytes32 termsDocumentHash,
         bool blurSize
-    ) external nonReentrant returns (uint256 id) {
-        require(amountMaker > 0, "amountMaker == 0");
-        require(deadline >= block.timestamp + MIN_DURATION, "deadline too soon");
-        
-        require(tokenMaker == USDC || tokenMaker == EURC, "tokenMaker not whitelisted");
-        if (tokenTaker != address(0)) {
-            require(tokenTaker == USDC || tokenTaker == EURC, "tokenTaker not whitelisted");
-        }
+    ) external nonReentrant whenIntakeOpen returns (uint256 id) {
+        return _createPact(
+            kind,
+            taker,
+            arbiter,
+            tokenMaker,
+            tokenTaker,
+            amountMaker,
+            amountTaker,
+            notionalUSDC,
+            arbiterFeeCap,
+            offerExpiry,
+            performanceDeadline,
+            disputeDeadline,
+            termsDocumentHash,
+            blurSize
+        );
+    }
 
-        if (kind == Kind.Fx) {
-            require(amountTaker > 0, "Fx: amountTaker == 0");
-            require(tokenTaker != address(0), "Fx: tokenTaker == 0");
-        } else {
-            if (amountTaker == 0) {
-                require(tokenTaker == address(0), "tokenTaker must be 0 if amount 0");
-            }
+    function createPactWithPermit(
+        Kind kind,
+        address taker,
+        address arbiter,
+        address tokenMaker,
+        address tokenTaker,
+        uint128 amountMaker,
+        uint128 amountTaker,
+        uint128 notionalUSDC,
+        uint128 arbiterFeeCap,
+        uint64 offerExpiry,
+        uint64 performanceDeadline,
+        uint64 disputeDeadline,
+        bytes32 termsDocumentHash,
+        bool blurSize,
+        uint256 permitDeadline,
+        uint8 v,
+        bytes32 r,
+        bytes32 s
+    ) external nonReentrant whenIntakeOpen returns (uint256 id) {
+        if (tokenMaker != USDC) revert InvalidToken();
+        IERC20Permit(tokenMaker).permit(msg.sender, address(this), amountMaker, permitDeadline, v, r, s);
+        return _createPact(
+            kind,
+            taker,
+            arbiter,
+            tokenMaker,
+            tokenTaker,
+            amountMaker,
+            amountTaker,
+            notionalUSDC,
+            arbiterFeeCap,
+            offerExpiry,
+            performanceDeadline,
+            disputeDeadline,
+            termsDocumentHash,
+            blurSize
+        );
+    }
+
+    function _createPact(
+        Kind kind,
+        address taker,
+        address arbiter,
+        address tokenMaker,
+        address tokenTaker,
+        uint128 amountMaker,
+        uint128 amountTaker,
+        uint128 notionalUSDC,
+        uint128 arbiterFeeCap,
+        uint64 offerExpiry,
+        uint64 performanceDeadline,
+        uint64 disputeDeadline,
+        bytes32 termsDocumentHash,
+        bool blurSize
+    ) internal returns (uint256 id) {
+        if (taker == address(0) || taker == msg.sender) revert InvalidParty();
+        if (arbiter == address(0) || arbiter == msg.sender || arbiter == taker) revert InvalidArbiter();
+        if (!allowedToken[tokenMaker]) revert InvalidToken();
+        if (amountMaker == 0 || notionalUSDC == 0) revert InvalidAmount();
+        if (amountTaker == 0) {
+            if (tokenTaker != address(0)) revert InvalidToken();
+        } else if (!allowedToken[tokenTaker]) {
+            revert InvalidToken();
         }
+        if (
+            offerExpiry <= block.timestamp || performanceDeadline <= offerExpiry
+                || disputeDeadline <= performanceDeadline
+        ) {
+            revert InvalidDeadline();
+        }
+        if (termsDocumentHash == bytes32(0)) revert InvalidHash();
+
+        uint256 computedBond = _ceilDiv(uint256(notionalUSDC) * DISPUTE_BOND_BPS, BPS);
+        if (computedBond < MIN_DISPUTE_BOND) computedBond = MIN_DISPUTE_BOND;
+        if (computedBond > type(uint128).max || arbiterFeeCap > computedBond) revert FeeExceedsCap();
+
+        bytes32 canonicalTermsHash = keccak256(
+            abi.encode(
+                block.chainid,
+                address(this),
+                msg.sender,
+                taker,
+                arbiter,
+                tokenMaker,
+                tokenTaker,
+                amountMaker,
+                amountTaker,
+                notionalUSDC,
+                arbiterFeeCap,
+                offerExpiry,
+                performanceDeadline,
+                disputeDeadline,
+                kind,
+                blurSize,
+                termsDocumentHash
+            )
+        );
 
         id = nextId++;
-        Pact storage p = pacts[id];
-        p.maker = msg.sender;
-        p.amountMaker = amountMaker;
-        p.kind = kind;
-        p.status = Status.Open;
-        p.taker = taker;
-        p.amountTaker = amountTaker;
-        p.blurSize = blurSize;
-        p.tokenMaker = tokenMaker;
-        p.createdAt = uint64(block.timestamp);
-        p.tokenTaker = tokenTaker;
-        p.updatedAt = uint64(block.timestamp);
-        p.termsHash = termsHash;
-        
-        deadlines[id] = deadline;
+        Pact storage pact = _pacts[id];
+        pact.maker = msg.sender;
+        pact.taker = taker;
+        pact.arbiter = arbiter;
+        pact.tokenMaker = tokenMaker;
+        pact.tokenTaker = tokenTaker;
+        pact.amountMaker = amountMaker;
+        pact.amountTaker = amountTaker;
+        pact.collateralMaker = amountMaker;
+        pact.collateralTaker = 0;
+        pact.notionalUSDC = notionalUSDC;
+        pact.bondAmount = uint128(computedBond);
+        pact.arbiterFeeCap = arbiterFeeCap;
+        pact.offerExpiry = offerExpiry;
+        pact.performanceDeadline = performanceDeadline;
+        pact.disputeDeadline = disputeDeadline;
+        pact.createdAt = uint64(block.timestamp);
+        pact.updatedAt = uint64(block.timestamp);
+        pact.kind = kind;
+        pact.status = Status.Offered;
+        pact.blurSize = blurSize;
+        pact.termsHash = canonicalTermsHash;
 
-        IERC20(tokenMaker).safeTransferFrom(msg.sender, address(this), amountMaker);
-
-        emit PactCreated(id, kind, msg.sender, taker, tokenMaker, tokenTaker, amountMaker, amountTaker, deadline, termsHash, blurSize);
-        return id;
+        _pullExact(tokenMaker, msg.sender, amountMaker);
+        emit PactCreated(
+            id,
+            kind,
+            msg.sender,
+            taker,
+            arbiter,
+            tokenMaker,
+            tokenTaker,
+            amountMaker,
+            amountTaker,
+            notionalUSDC,
+            uint128(computedBond),
+            arbiterFeeCap,
+            offerExpiry,
+            performanceDeadline,
+            disputeDeadline,
+            canonicalTermsHash,
+            blurSize
+        );
     }
 
-    function fund(uint256 id) external nonReentrant {
-        Pact storage p = pacts[id];
-        _requirePactExists(p);
-        require(p.status == Status.Open, "not Open");
-        require(msg.sender != p.maker, "maker cannot fund");
-        
-        if (p.taker == address(0)) {
-            p.taker = msg.sender;
-        } else {
-            require(p.taker == msg.sender, "not the taker");
-        }
-
-        if (p.amountTaker > 0) {
-            IERC20(p.tokenTaker).safeTransferFrom(msg.sender, address(this), p.amountTaker);
-        }
-
-        p.status = Status.Active;
-        p.updatedAt = uint64(block.timestamp);
-
-        emit PactFunded(id, msg.sender, p.tokenTaker, p.amountTaker);
+    function acceptPact(uint256 id, bytes32 expectedTermsHash) external nonReentrant whenIntakeOpen {
+        _acceptPact(id, expectedTermsHash);
     }
 
-    function cancel(uint256 id) external nonReentrant {
-        Pact storage p = pacts[id];
-        _requirePactExists(p);
-        require(p.maker == msg.sender, "only maker");
-        require(p.status == Status.Open, "not Open");
+    function acceptPactWithPermit(
+        uint256 id,
+        bytes32 expectedTermsHash,
+        uint256 permitDeadline,
+        uint8 v,
+        bytes32 r,
+        bytes32 s
+    ) external nonReentrant whenIntakeOpen {
+        Pact storage pact = _requirePact(id);
+        if (pact.tokenTaker != USDC) revert InvalidToken();
+        IERC20Permit(pact.tokenTaker).permit(msg.sender, address(this), pact.amountTaker, permitDeadline, v, r, s);
+        _acceptPact(id, expectedTermsHash);
+    }
 
-        p.status = Status.Cancelled;
-        p.updatedAt = uint64(block.timestamp);
+    function _acceptPact(uint256 id, bytes32 expectedTermsHash) internal {
+        Pact storage pact = _requirePact(id);
+        _requireStatus(pact, Status.Offered);
+        if (msg.sender != pact.taker) revert InvalidParty();
+        if (block.timestamp > pact.offerExpiry) revert TooLate();
+        if (expectedTermsHash != pact.termsHash) revert TermsHashMismatch();
+        if (pact.amountTaker != 0) {
+            _pullExact(pact.tokenTaker, msg.sender, pact.amountTaker);
+            pact.collateralTaker = pact.amountTaker;
+        }
+        pact.status = Status.Active;
+        pact.updatedAt = uint64(block.timestamp);
+        emit PactAccepted(id, msg.sender);
+    }
 
-        _payout(p.tokenMaker, p.maker, p.amountMaker);
-
+    function cancelPact(uint256 id) external nonReentrant {
+        Pact storage pact = _requirePact(id);
+        _requireStatus(pact, Status.Offered);
+        if (msg.sender != pact.maker) revert InvalidParty();
+        _finishWithWinner(id, pact, Winner.Maker, Status.Cancelled);
         emit PactCancelled(id);
     }
 
-    function submitProof(uint256 id, bytes32 proofHash) external nonReentrant {
-        Pact storage p = pacts[id];
-        _requirePactExists(p);
-        require(p.kind != Kind.Fx, "Kind.Fx");
-        require(p.taker == msg.sender, "not taker");
-        require(p.status == Status.Active, "not Active");
+    function expireOffer(uint256 id) external nonReentrant {
+        Pact storage pact = _requirePact(id);
+        _requireStatus(pact, Status.Offered);
+        if (block.timestamp <= pact.offerExpiry) revert TooEarly();
+        _finishWithWinner(id, pact, Winner.Maker, Status.Expired);
+        emit PactExpired(id, Winner.Maker);
+    }
 
-        p.proofHash = proofHash;
-        p.status = Status.ProofSubmitted;
-        p.updatedAt = uint64(block.timestamp);
-
+    function submitProof(uint256 id, bytes32 proofHash) external {
+        Pact storage pact = _requirePact(id);
+        _requireStatus(pact, Status.Active);
+        if (msg.sender != pact.taker) revert InvalidParty();
+        if (block.timestamp > pact.performanceDeadline) revert TooLate();
+        if (proofHash == bytes32(0)) revert InvalidHash();
+        pact.proofHash = proofHash;
+        pact.status = Status.ProofSubmitted;
+        pact.updatedAt = uint64(block.timestamp);
         emit ProofSubmitted(id, msg.sender, proofHash);
     }
 
-    function reject(uint256 id) external nonReentrant {
-        Pact storage p = pacts[id];
-        _requirePactExists(p);
-        require(p.kind != Kind.Fx, "Kind.Fx");
-        require(p.maker == msg.sender, "only maker");
-        require(p.status == Status.ProofSubmitted, "not ProofSubmitted");
-        require(block.timestamp <= deadlines[id], "past deadline"); 
-        
-        p.status = Status.Active;
-        p.proofHash = bytes32(0);
-        p.updatedAt = uint64(block.timestamp);
-        
-        emit ProofRejected(id, msg.sender);
+    function release(uint256 id) external nonReentrant whenOperational {
+        Pact storage pact = _requirePact(id);
+        if (pact.status != Status.Active && pact.status != Status.ProofSubmitted) revert InvalidStatus(pact.status);
+        if (msg.sender != pact.maker) revert InvalidParty();
+        _finishWithWinner(id, pact, Winner.Taker, Status.Settled);
+        _recordSettlement(pact);
+        emit PactReleased(id, msg.sender);
     }
 
-    function release(uint256 id) external nonReentrant {
-        Pact storage p = pacts[id];
-        _requirePactExists(p);
-        
-        if (p.kind == Kind.Fx) {
-            require(p.status == Status.Active, "not Active");
-            require(msg.sender == p.maker || msg.sender == p.taker, "not a party");
-            
-            p.status = Status.Cleared;
-            p.updatedAt = uint64(block.timestamp);
-            
-            _payout(p.tokenMaker, p.taker, p.amountMaker);
-            _payout(p.tokenTaker, p.maker, p.amountTaker);
-            
-            clearedCount[p.maker]++;
-            clearedCount[p.taker]++;
-            clearedNotional[p.maker] += p.amountMaker;
-            clearedNotional[p.taker] += p.amountMaker;
-            
-        } else {
-            // Delivery or Job
-            require(msg.sender == p.maker, "only maker");
-            require(p.status == Status.Active || p.status == Status.ProofSubmitted, "not Active or ProofSubmitted");
-            
-            p.status = Status.Cleared;
-            p.updatedAt = uint64(block.timestamp);
-            
-            _payout(p.tokenMaker, p.taker, p.amountMaker);
-            if (p.amountTaker > 0) {
-                _payout(p.tokenTaker, p.taker, p.amountTaker); // bond returned
-            }
-            
-            clearedCount[p.maker]++;
-            clearedCount[p.taker]++;
-            clearedNotional[p.maker] += p.amountMaker;
-            clearedNotional[p.taker] += p.amountMaker;
+    /// @notice Escape hatch that remains callable during every pause mode.
+    function refundAfterDeadline(uint256 id) external nonReentrant {
+        Pact storage pact = _requirePact(id);
+        if (pact.status == Status.Offered) {
+            if (block.timestamp <= pact.offerExpiry) revert TooEarly();
+            _finishWithWinner(id, pact, Winner.Maker, Status.Expired);
+            emit PactExpired(id, Winner.Maker);
+            return;
         }
-        emit PactCleared(id, msg.sender);
+        if (pact.status != Status.Active && pact.status != Status.ProofSubmitted) revert InvalidStatus(pact.status);
+        if (block.timestamp <= pact.disputeDeadline) revert TooEarly();
+        Winner winner = pact.status == Status.ProofSubmitted ? Winner.Taker : Winner.Maker;
+        _finishWithWinner(id, pact, winner, Status.Expired);
+        _recordSettlement(pact);
+        emit PactExpired(id, winner);
     }
 
-    function expire(uint256 id) external nonReentrant {
-        Pact storage p = pacts[id];
-        _requirePactExists(p);
-        require(block.timestamp > deadlines[id], "before deadline");
-        
-        if (p.status == Status.Open) {
-            p.status = Status.Expired;
-            p.updatedAt = uint64(block.timestamp);
-            _payout(p.tokenMaker, p.maker, p.amountMaker);
-            emit PactExpired(id);
-        } else if (p.kind == Kind.Fx) {
-            require(p.status == Status.Active, "not Active");
-            p.status = Status.Cleared;
-            p.updatedAt = uint64(block.timestamp);
-            
-            _payout(p.tokenMaker, p.taker, p.amountMaker);
-            _payout(p.tokenTaker, p.maker, p.amountTaker);
-            
-            clearedCount[p.maker]++;
-            clearedCount[p.taker]++;
-            clearedNotional[p.maker] += p.amountMaker;
-            clearedNotional[p.taker] += p.amountMaker;
-            
-            emit PactCleared(id, msg.sender);
-        } else {
-            // Delivery / Job
-            if (p.status == Status.ProofSubmitted) {
-                p.status = Status.Cleared;
-                p.updatedAt = uint64(block.timestamp);
-                
-                _payout(p.tokenMaker, p.taker, p.amountMaker);
-                if (p.amountTaker > 0) {
-                    _payout(p.tokenTaker, p.taker, p.amountTaker);
-                }
-                
-                clearedCount[p.maker]++;
-                clearedCount[p.taker]++;
-                clearedNotional[p.maker] += p.amountMaker;
-                clearedNotional[p.taker] += p.amountMaker;
-                
-                emit PactCleared(id, msg.sender);
-            } else if (p.status == Status.Active) {
-                if (p.kind == Kind.Delivery) {
-                    p.status = Status.Slashed;
-                    p.updatedAt = uint64(block.timestamp);
-                    
-                    _payout(p.tokenMaker, p.maker, p.amountMaker);
-                    if (p.amountTaker > 0) {
-                        _payout(p.tokenTaker, p.maker, p.amountTaker);
-                    }
-                    
-                    slashedCount[p.taker]++;
-                    emit PactSlashed(id, msg.sender);
-                } else {
-                    p.status = Status.Expired;
-                    p.updatedAt = uint64(block.timestamp);
-                    _payout(p.tokenMaker, p.maker, p.amountMaker);
-                    if (p.amountTaker > 0) {
-                        _payout(p.tokenTaker, p.taker, p.amountTaker);
-                    }
-                    emit PactExpired(id);
-                }
-            } else {
-                revert("terminal state");
-            }
+    function openDispute(uint256 id) external nonReentrant {
+        _openDispute(id);
+    }
+
+    function openDisputeWithPermit(uint256 id, uint256 permitDeadline, uint8 v, bytes32 r, bytes32 s)
+        external
+        nonReentrant
+    {
+        Pact storage pact = _requirePact(id);
+        IERC20Permit(USDC).permit(msg.sender, address(this), pact.bondAmount, permitDeadline, v, r, s);
+        _openDispute(id);
+    }
+
+    function _openDispute(uint256 id) internal {
+        Pact storage pact = _requirePact(id);
+        if (pact.status != Status.Active && pact.status != Status.ProofSubmitted) revert InvalidStatus(pact.status);
+        if (msg.sender != pact.maker && msg.sender != pact.taker) revert InvalidParty();
+        if (block.timestamp > pact.disputeDeadline) revert TooLate();
+
+        _pullExact(USDC, msg.sender, pact.bondAmount);
+        Dispute storage dispute = _disputes[id];
+        dispute.opener = msg.sender;
+        dispute.claim = msg.sender == pact.maker ? Winner.Maker : Winner.Taker;
+        dispute.openedAt = uint64(block.timestamp);
+        dispute.responseDeadline = uint64(block.timestamp + RESPONSE_WINDOW);
+        if (msg.sender == pact.maker) dispute.makerBond = pact.bondAmount;
+        else dispute.takerBond = pact.bondAmount;
+        pact.status = Status.Disputed;
+        pact.updatedAt = uint64(block.timestamp);
+        emit DisputeOpened(id, msg.sender, dispute.claim, pact.bondAmount, dispute.responseDeadline);
+    }
+
+    function respondDispute(uint256 id) external nonReentrant {
+        _respondDispute(id);
+    }
+
+    function respondDisputeWithPermit(uint256 id, uint256 permitDeadline, uint8 v, bytes32 r, bytes32 s)
+        external
+        nonReentrant
+    {
+        Pact storage pact = _requirePact(id);
+        IERC20Permit(USDC).permit(msg.sender, address(this), pact.bondAmount, permitDeadline, v, r, s);
+        _respondDispute(id);
+    }
+
+    function _respondDispute(uint256 id) internal {
+        Pact storage pact = _requirePact(id);
+        _requireStatus(pact, Status.Disputed);
+        Dispute storage dispute = _disputes[id];
+        address respondent = dispute.opener == pact.maker ? pact.taker : pact.maker;
+        if (msg.sender != respondent) revert InvalidParty();
+        if (block.timestamp > dispute.responseDeadline) revert TooLate();
+        if (dispute.arbiterDeadline != 0) revert InvalidStatus(pact.status);
+
+        _pullExact(USDC, msg.sender, pact.bondAmount);
+        if (msg.sender == pact.maker) dispute.makerBond = pact.bondAmount;
+        else dispute.takerBond = pact.bondAmount;
+        dispute.arbiterDeadline = uint64(block.timestamp + ARBITER_TIMEOUT);
+        pact.updatedAt = uint64(block.timestamp);
+        emit DisputeResponded(id, msg.sender, dispute.arbiterDeadline);
+    }
+
+    function resolveUnansweredDispute(uint256 id) external nonReentrant {
+        Pact storage pact = _requirePact(id);
+        _requireStatus(pact, Status.Disputed);
+        Dispute storage dispute = _disputes[id];
+        if (dispute.arbiterDeadline != 0) revert InvalidStatus(pact.status);
+        if (block.timestamp <= dispute.responseDeadline) revert TooEarly();
+        Winner winner = dispute.claim;
+        _creditBond(id, pact, dispute, winner, 0);
+        _finishWithWinner(id, pact, winner, Status.Settled);
+        _recordSettlement(pact);
+        _recordDisputeLoss(pact, winner);
+        emit DisputeResolved(id, winner, 0, false);
+    }
+
+    function ruleDispute(uint256 id, Winner winner, uint128 feeClaimed) external nonReentrant {
+        Pact storage pact = _requirePact(id);
+        _requireStatus(pact, Status.Disputed);
+        Dispute storage dispute = _disputes[id];
+        if (msg.sender != pact.arbiter) revert Unauthorized();
+        if (winner != Winner.Maker && winner != Winner.Taker) revert InvalidWinner();
+        if (dispute.arbiterDeadline == 0) revert TooEarly();
+        if (block.timestamp > dispute.arbiterDeadline) revert TooLate();
+        if (feeClaimed > pact.arbiterFeeCap || feeClaimed > pact.bondAmount) revert FeeExceedsCap();
+
+        _creditBond(id, pact, dispute, winner, feeClaimed);
+        _finishWithWinner(id, pact, winner, Status.Settled);
+        _recordSettlement(pact);
+        _recordDisputeLoss(pact, winner);
+        if (feeClaimed != 0) _credit(id, pact.arbiter, USDC, feeClaimed);
+        emit DisputeResolved(id, winner, feeClaimed, false);
+    }
+
+    function arbiterTimeout(uint256 id) external nonReentrant {
+        Pact storage pact = _requirePact(id);
+        _requireStatus(pact, Status.Disputed);
+        Dispute storage dispute = _disputes[id];
+        if (dispute.arbiterDeadline == 0 || block.timestamp <= dispute.arbiterDeadline) revert TooEarly();
+        _refundBonds(id, pact, dispute);
+        _splitCollateral(id, pact);
+        pact.status = Status.Settled;
+        pact.updatedAt = uint64(block.timestamp);
+        settledCount[pact.maker]++;
+        settledCount[pact.taker]++;
+        settledNotionalUSDC[pact.maker] += pact.notionalUSDC;
+        settledNotionalUSDC[pact.taker] += pact.notionalUSDC;
+        emit DisputeResolved(id, Winner.None, 0, true);
+    }
+
+    function withdraw(address token) external nonReentrant {
+        uint256 amount = credits[msg.sender][token];
+        if (amount == 0) revert NoCredit();
+        credits[msg.sender][token] = 0;
+        totalCredits[token] -= amount;
+        IERC20(token).safeTransfer(msg.sender, amount);
+        emit Withdrawn(msg.sender, token, amount);
+    }
+
+    function pauseIntake() external onlyPauseAuthority {
+        intakePaused = true;
+        emit IntakePaused(msg.sender);
+    }
+
+    function unpauseIntake() external onlyAdmin {
+        intakePaused = false;
+        emit IntakeUnpaused(msg.sender);
+    }
+
+    function pauseAll() external onlyPauseAuthority {
+        if (msg.sender == pauseGuardian) {
+            if (!guardianAllPauseArmed) revert GuardianPauseNotArmed();
+            guardianAllPauseArmed = false;
         }
+        allPausedUntil = uint64(block.timestamp + MAX_ALL_PAUSE);
+        emit AllPaused(msg.sender, allPausedUntil);
     }
 
+    function unpauseAll() external onlyAdmin {
+        allPausedUntil = 0;
+        guardianAllPauseArmed = true;
+        emit AllUnpaused(msg.sender);
+    }
+
+    function setPauseGuardian(address newGuardian) external onlyAdmin {
+        if (newGuardian == address(0)) revert ZeroAddress();
+        address oldGuardian = pauseGuardian;
+        pauseGuardian = newGuardian;
+        emit PauseGuardianChanged(oldGuardian, newGuardian);
+    }
+
+    function getPact(uint256 id) external view returns (Pact memory) {
+        if (_pacts[id].maker == address(0)) revert PactNotFound();
+        return _pacts[id];
+    }
+
+    function getDispute(uint256 id) external view returns (Dispute memory) {
+        if (_pacts[id].maker == address(0)) revert PactNotFound();
+        return _disputes[id];
+    }
+
+    function isAllPaused() public view returns (bool) {
+        return allPausedUntil >= block.timestamp;
+    }
+
+    function accountedBalance(address token) external view returns (uint256) {
+        return totalEscrow[token] + totalCredits[token];
+    }
+
+    function _requirePact(uint256 id) internal view returns (Pact storage pact) {
+        pact = _pacts[id];
+        if (pact.maker == address(0)) revert PactNotFound();
+    }
+
+    function _requireStatus(Pact storage pact, Status expected) internal view {
+        if (pact.status != expected) revert InvalidStatus(pact.status);
+    }
+
+    function _requireNotAllPaused() internal view {
+        if (isAllPaused()) revert ProtocolIsPaused(allPausedUntil);
+    }
+
+    function _pullExact(address token, address from, uint256 amount) internal {
+        uint256 beforeBalance = IERC20(token).balanceOf(address(this));
+        IERC20(token).safeTransferFrom(from, address(this), amount);
+        uint256 received = IERC20(token).balanceOf(address(this)) - beforeBalance;
+        if (received != amount) revert TransferAmountMismatch();
+        totalEscrow[token] += amount;
+    }
+
+    function _credit(uint256 id, address recipient, address token, uint256 amount) internal {
+        if (amount == 0) return;
+        totalEscrow[token] -= amount;
+        totalCredits[token] += amount;
+        credits[recipient][token] += amount;
+        emit Credited(id, recipient, token, amount);
+    }
+
+    function _finishWithWinner(uint256 id, Pact storage pact, Winner winner, Status terminalStatus) internal {
+        address recipient = winner == Winner.Maker ? pact.maker : pact.taker;
+        uint128 makerCollateral = pact.collateralMaker;
+        uint128 takerCollateral = pact.collateralTaker;
+        pact.collateralMaker = 0;
+        pact.collateralTaker = 0;
+        pact.status = terminalStatus;
+        pact.updatedAt = uint64(block.timestamp);
+        _credit(id, recipient, pact.tokenMaker, makerCollateral);
+        if (takerCollateral != 0) _credit(id, recipient, pact.tokenTaker, takerCollateral);
+    }
+
+    function _creditBond(uint256 id, Pact storage pact, Dispute storage dispute, Winner winner, uint128 arbiterFee)
+        internal
+    {
+        uint256 totalBonds = uint256(dispute.makerBond) + uint256(dispute.takerBond);
+        dispute.makerBond = 0;
+        dispute.takerBond = 0;
+        address recipient = winner == Winner.Maker ? pact.maker : pact.taker;
+        _credit(id, recipient, USDC, totalBonds - arbiterFee);
+    }
+
+    function _refundBonds(uint256 id, Pact storage pact, Dispute storage dispute) internal {
+        uint128 makerBond = dispute.makerBond;
+        uint128 takerBond = dispute.takerBond;
+        dispute.makerBond = 0;
+        dispute.takerBond = 0;
+        _credit(id, pact.maker, USDC, makerBond);
+        _credit(id, pact.taker, USDC, takerBond);
+    }
+
+    function _splitCollateral(uint256 id, Pact storage pact) internal {
+        uint128 makerCollateral = pact.collateralMaker;
+        uint128 takerCollateral = pact.collateralTaker;
+        pact.collateralMaker = 0;
+        pact.collateralTaker = 0;
+        _splitToken(id, pact, pact.tokenMaker, makerCollateral);
+        if (takerCollateral != 0) _splitToken(id, pact, pact.tokenTaker, takerCollateral);
+    }
+
+    function _splitToken(uint256 id, Pact storage pact, address token, uint128 amount) internal {
+        uint256 takerHalf = uint256(amount) / 2;
+        _credit(id, pact.taker, token, takerHalf);
+        _credit(id, pact.maker, token, uint256(amount) - takerHalf);
+    }
+
+    function _recordSettlement(Pact storage pact) internal {
+        settledCount[pact.maker]++;
+        settledCount[pact.taker]++;
+        settledNotionalUSDC[pact.maker] += pact.notionalUSDC;
+        settledNotionalUSDC[pact.taker] += pact.notionalUSDC;
+    }
+
+    function _recordDisputeLoss(Pact storage pact, Winner winner) internal {
+        address loser = winner == Winner.Maker ? pact.taker : pact.maker;
+        lostDisputeCount[loser]++;
+    }
+
+    function _ceilDiv(uint256 value, uint256 divisor) internal pure returns (uint256) {
+        return value == 0 ? 0 : (value - 1) / divisor + 1;
+    }
 }

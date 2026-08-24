@@ -26,7 +26,7 @@ export default function OnboardingModal({ open, onClose }: { open: boolean; onCl
           </button>
         </div>
         <ol className="mt-5 grid gap-3 font-code-hash text-[12px] text-text-muted md:grid-cols-3">
-          <li><span className="text-primary-fixed">01</span> Create a pact — choose Delivery, FX, or Job.</li>
+          <li><span className="text-primary-fixed">01</span> Create a committed Delivery or Job offer.</li>
           <li><span className="text-primary-fixed">02</span> Lock collateral — both parties deposit USDC.</li>
           <li><span className="text-primary-fixed">03</span> Settle — fulfill conditions or claim timeout.</li>
         </ol>

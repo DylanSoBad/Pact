@@ -21,7 +21,7 @@ export default function TrustStrip({ lastUpdated, rpcError, onRetry }: { lastUpd
   }, [lastUpdated, blockNumber])
 
   const handleCopy = () => {
-    if (PACT_ADDRESS !== '0x0000000000000000000000000000000000000000') {
+    if (PACT_ADDRESS) {
       navigator.clipboard.writeText(PACT_ADDRESS)
       setCopied(true)
       setTimeout(() => setCopied(false), 1500)
@@ -29,7 +29,7 @@ export default function TrustStrip({ lastUpdated, rpcError, onRetry }: { lastUpd
   }
 
   const hasError = rpcError || blockError
-  const configured = PACT_ADDRESS !== '0x0000000000000000000000000000000000000000'
+  const configured = Boolean(PACT_ADDRESS)
 
   return (
     <div className="flex items-center gap-3 text-[12px] text-zinc-600 mb-8 font-mono">
@@ -41,7 +41,7 @@ export default function TrustStrip({ lastUpdated, rpcError, onRetry }: { lastUpd
         <>
           <span className="text-zinc-700">·</span>
           <button onClick={handleCopy} className="text-zinc-500 hover:text-zinc-300 transition-colors cursor-pointer">
-            {copied ? 'copied' : truncateAddress(PACT_ADDRESS)}
+            {copied ? 'copied' : truncateAddress(PACT_ADDRESS!)}
           </button>
         </>
       )}

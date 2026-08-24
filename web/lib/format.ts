@@ -2,8 +2,8 @@ import { USDC_ERC20, EURC } from './arc'
 
 const DECIMALS = 6
 
-export const KIND_LABELS = ['DELIVERY', 'FX', 'JOB'] as const
-export const STATUS_LABELS = ['OPEN', 'FUNDED', 'ACTIVE', 'PROOF IN', 'CLEARED', 'SLASHED', 'EXPIRED', 'CANCELLED'] as const
+export const KIND_LABELS = ['DELIVERY', 'JOB'] as const
+export const STATUS_LABELS = ['OFFERED', 'ACTIVE', 'PROOF IN', 'DISPUTED', 'SETTLED', 'CANCELLED', 'EXPIRED'] as const
 
 export function kindLabel(kind: number): string {
   return KIND_LABELS[kind] ?? `KIND(${kind})`
@@ -42,14 +42,13 @@ export function truncateAddress(addr: string): string {
 
 export function statusColor(status: number): string {
   switch (status) {
-    case 0: return 'text-[var(--color-muted)]'        // Open
-    case 1: return 'text-[var(--color-muted)]'        // Funded
-    case 2: return 'text-[var(--color-red)]'           // Active (LIVE)
-    case 3: return 'text-[var(--color-lime)]'          // ProofSubmitted
-    case 4: return 'text-[var(--color-lime)]'          // Cleared
-    case 5: return 'text-[var(--color-amber)]'         // Slashed
+    case 0: return 'text-[var(--color-muted)]'         // Offered
+    case 1: return 'text-[var(--color-red)]'           // Active
+    case 2: return 'text-[var(--color-lime)]'          // ProofSubmitted
+    case 3: return 'text-[var(--color-amber)]'         // Disputed
+    case 4: return 'text-[var(--color-lime)]'          // Settled
+    case 5: return 'text-gray-500'                     // Cancelled
     case 6: return 'text-gray-500'                     // Expired
-    case 7: return 'text-gray-500'                     // Cancelled
 
     default: return 'text-[var(--color-muted)]'
   }
@@ -66,7 +65,7 @@ export function formatDate(ts: bigint | number): string {
 }
 
 export function isTerminal(status: number): boolean {
-  return status >= 4 // Cleared, Slashed, Expired, Cancelled
+  return status >= 4 // Settled, Cancelled, Expired
 }
 
 const ZERO_ADDR = '0x0000000000000000000000000000000000000000'

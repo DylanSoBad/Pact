@@ -2,7 +2,7 @@ import { create } from 'zustand'
 import { devtools } from 'zustand/middleware'
 import { PactData } from '../reads'
 
-export type FilterCategory = 'ALL' | 'DELIVERY' | 'FX' | 'JOB' | 'LIVE'
+export type FilterCategory = 'ALL' | 'DELIVERY' | 'JOB' | 'LIVE'
 
 interface PactStoreState {
   filter: FilterCategory

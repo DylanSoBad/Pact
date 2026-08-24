@@ -42,3 +42,4 @@ broadcast/
 
 .vercel
 .env*
+!.env.example

@@ -1,4 +1,4 @@
-import { defineChain } from 'viem'
+import { defineChain, isAddress } from 'viem'
 
 export const CIRCLE_FAUCET_URL = 'https://faucet.circle.com/'
 
@@ -24,22 +24,19 @@ export const arcTestnet = defineChain({
   },
 })
 
-export const USDC_ERC20 = "0x3600000000000000000000000000000000000000"; // 6 decimals
-export const EURC = "0x89B50855Aa3bE2F677cD6303Cec089B5F319D72a";       // 6 decimals
+export const USDC_ERC20: `0x${string}` = "0x3600000000000000000000000000000000000000"; // 6 decimals
+export const EURC: `0x${string}` = "0x89B50855Aa3bE2F677cD6303Cec089B5F319D72a";       // 6 decimals
+export const USYC: `0x${string}` = "0xe9185F0c5F296Ed1797AaE4238D26CCaBEadb86C";       // allowlisted in V1
 
-export const OFFICIAL_PACT_ADDRESS: `0x${string}` = "0x0000000000000000000000000000000000000000";
+const ARC_TESTNET_PACT_ADDRESS = process.env.NEXT_PUBLIC_PACT_ADDRESS_5042002
 
-export function getPactAddress(): `0x${string}` {
-  const configuredAddress = process.env.NEXT_PUBLIC_PACT_ADDRESS
-  if (configuredAddress && configuredAddress !== '0x0000000000000000000000000000000000000000') {
-    return configuredAddress as `0x${string}`
-  }
-
-  if (typeof window !== 'undefined') {
-    const saved = localStorage.getItem('pact_contract_address')
-    if (saved && saved.startsWith('0x') && saved.length === 42 && saved !== '0x0000000000000000000000000000000000000000') {
-      return saved as `0x${string}`
-    }
-  }
-  return OFFICIAL_PACT_ADDRESS
+/**
+ * Protocol addresses are build-time configuration keyed by chain ID.
+ * User input and browser storage are intentionally never consulted.
+ */
+export function getPactAddress(chainId: number = arcTestnet.id): `0x${string}` | null {
+  if (chainId !== arcTestnet.id) return null
+  if (!ARC_TESTNET_PACT_ADDRESS || !isAddress(ARC_TESTNET_PACT_ADDRESS)) return null
+  if (ARC_TESTNET_PACT_ADDRESS === '0x0000000000000000000000000000000000000000') return null
+  return ARC_TESTNET_PACT_ADDRESS
 }

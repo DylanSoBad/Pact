@@ -2,6 +2,26 @@ import { NextRequest } from 'next/server'
 
 export const dynamic = 'force-dynamic'
 
+const RPC_URL = process.env.ARC_RPC_URL || 'https://rpc.testnet.arc.network'
+
+async function getLatestBlock(signal: AbortSignal): Promise<{ blockNumber: string; latencyMs: number }> {
+  const startedAt = performance.now()
+  const response = await fetch(RPC_URL, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'eth_blockNumber', params: [] }),
+    cache: 'no-store',
+    signal,
+  })
+  if (!response.ok) throw new Error(`Arc RPC returned HTTP ${response.status}`)
+  const payload = await response.json() as { result?: string; error?: { message?: string } }
+  if (!payload.result) throw new Error(payload.error?.message || 'Arc RPC returned no block number')
+  return {
+    blockNumber: BigInt(payload.result).toString(),
+    latencyMs: Math.round(performance.now() - startedAt),
+  }
+}
+
 export async function GET(req: NextRequest) {
   let isClosed = false
   let timer: NodeJS.Timeout | null = null
@@ -19,26 +39,26 @@ export async function GET(req: NextRequest) {
       })
       controller.enqueue(encoder.encode(`event: connected\ndata: ${initialPayload}\n\n`))
 
-      let currentBlock = 1845200n
-
-      // Stream block heartbeats and pact updates every 6 seconds
-      timer = setInterval(() => {
+      const publishLatestBlock = async () => {
         if (isClosed) return
-
-        currentBlock += 1n
-        const blockEvent = JSON.stringify({
-          type: 'block',
-          blockNumber: currentBlock.toString(),
-          timestamp: Date.now(),
-          latencyMs: Math.floor(Math.random() * 40) + 120,
-        })
-
         try {
+          const latest = await getLatestBlock(req.signal)
+          const blockEvent = JSON.stringify({ type: 'block', ...latest, timestamp: Date.now() })
           controller.enqueue(encoder.encode(`event: block\ndata: ${blockEvent}\n\n`))
-        } catch {
+        } catch (error) {
+          if (req.signal.aborted || isClosed) return
+          const message = error instanceof Error ? error.message : 'Arc RPC unavailable'
+          const errorEvent = JSON.stringify({ type: 'rpc-error', message, timestamp: Date.now() })
+          controller.enqueue(encoder.encode(`event: rpc-error\ndata: ${errorEvent}\n\n`))
+        }
+      }
+
+      void publishLatestBlock()
+      timer = setInterval(() => {
+        void publishLatestBlock().catch(() => {
           if (timer) clearInterval(timer)
           isClosed = true
-        }
+        })
       }, 6000)
 
       req.signal.addEventListener('abort', () => {

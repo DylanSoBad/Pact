@@ -1,16 +1,16 @@
 'use client'
 
 const STEPS = [
-  { s: 0, label: 'Open' },
-  { s: 1, label: 'Funded' },
-  { s: 2, label: 'Active' },
-  { s: 3, label: 'Proof in' },
-  { s: 4, label: 'Cleared' },
+  { s: 0, label: 'Offered' },
+  { s: 1, label: 'Active' },
+  { s: 2, label: 'Proof in' },
+  { s: 3, label: 'Disputed' },
+  { s: 4, label: 'Settled' },
 ]
 
 export default function PactStateMachine({ status }: { status: number }) {
-  const isTerminal = status >= 5 && status <= 7
-  const terminalLabel = status === 5 ? 'Slashed' : status === 6 ? 'Expired' : status === 7 ? 'Cancelled' : ''
+  const isTerminal = status >= 4 && status <= 6
+  const terminalLabel = status === 4 ? 'Settled' : status === 5 ? 'Cancelled' : 'Expired'
 
   return (
     <div className="mb-8">

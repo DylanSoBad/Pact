@@ -2,9 +2,11 @@
 
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
+import { getPactAddress } from '../lib/arc'
 
 export default function SideNav() {
   const pathname = usePathname()
+  const protocolAddress = getPactAddress()
   
   return (
     <aside className="hidden @lg:flex flex-col h-screen fixed left-0 top-0 w-64 bg-surface-container-lowest text-primary-fixed border-r border-outline-hairline z-30 transition-all duration-200 pt-16">
@@ -55,8 +57,8 @@ export default function SideNav() {
         </ul>
       </nav>
       <div className="p-lg border-t border-outline-hairline mt-auto">
-        {process.env.NEXT_PUBLIC_PACT_ADDRESS && (
-          <a href={`https://testnet.arcscan.app/address/${process.env.NEXT_PUBLIC_PACT_ADDRESS}`} target="_blank" rel="noreferrer" className="mt-3 flex items-center gap-1 text-[10px] text-text-dim hover:text-primary-fixed" title="View verified protocol contract on ArcScan"><span aria-hidden="true" className="material-symbols-outlined text-[13px]">verified</span> Verified contract ↗</a>
+        {protocolAddress && (
+          <a href={`https://testnet.arcscan.app/address/${protocolAddress}`} target="_blank" rel="noreferrer" className="mt-3 flex items-center gap-1 text-[10px] text-text-dim hover:text-primary-fixed" title="View verified protocol contract on ArcScan"><span aria-hidden="true" className="material-symbols-outlined text-[13px]">verified</span> Verified contract ↗</a>
         )}
       </div>
     </aside>

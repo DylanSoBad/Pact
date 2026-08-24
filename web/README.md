@@ -1,36 +1,16 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# PACT web
 
-## Getting Started
-
-First, run the development server:
+Next.js interface for PACT V1 on Arc Testnet (`5042002`). Copy `.env.example` to `.env.local`, set a WalletConnect project ID, and set the deployed protocol address after the maintainer deployment is verified.
 
 ```bash
+npm ci
+npm test
+npm run build
 npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+Protocol addresses are build-time constants keyed by chain ID. The interface deliberately has no contract deployment route, bytecode, empty-`to` transaction, custom address field, or local-storage address override. A missing or invalid `NEXT_PUBLIC_PACT_ADDRESS_5042002` puts write actions into a blocked state.
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+Arc USDC actions prefer an atomic EIP-2612 signature, combining permit and protocol action in one transaction. The client verifies the live domain separator and uses a short-lived signature. Other tokens or unsupported wallets fall back to resetting allowance to zero and approving the exact amount.
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
-
-## Learn More
-
-To learn more about Next.js, take a look at the following resources:
-
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
-
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
-
-## Deploy on Vercel
-
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
-
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+`NEXT_PUBLIC_ARC_RPC_URL` and its fallback feed both wallet and read clients. `ARC_RPC_URL` is server-only and powers the real block stream. `NEXT_PUBLIC_ERROR_REPORT_URL` is optional; reports are deliberately stripped of wallet addresses, pact terms, calldata, and stack traces.

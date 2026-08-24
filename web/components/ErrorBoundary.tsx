@@ -1,6 +1,7 @@
 'use client'
 
 import React, { Component, ErrorInfo, ReactNode } from 'react'
+import { captureClientError } from '../lib/telemetry'
 
 interface Props {
   children: ReactNode
@@ -26,6 +27,7 @@ export default class ErrorBoundary extends Component<Props, State> {
 
   public componentDidCatch(error: Error, errorInfo: ErrorInfo) {
     console.error('Uncaught error in component tree:', error, errorInfo)
+    captureClientError(error, { source: 'react-error-boundary' })
     this.setState({ errorInfo })
   }
 
