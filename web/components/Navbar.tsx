@@ -4,6 +4,7 @@ import Link from 'next/link'
 import Image from 'next/image'
 import { usePathname } from 'next/navigation'
 import ConnectButton from './ConnectButton'
+import { CIRCLE_FAUCET_URL } from '../lib/arc'
 
 export default function Navbar() {
   const pathname = usePathname()
@@ -35,6 +36,16 @@ export default function Navbar() {
       </div>
 
       <div className="flex min-w-0 items-center gap-2 @md:gap-3">
+        <a
+          href={CIRCLE_FAUCET_URL}
+          target="_blank"
+          rel="noopener noreferrer"
+          aria-label="Get test USDC from Circle Faucet (opens in a new tab)"
+          className="pact-button-secondary min-h-10 shrink-0 gap-1.5 px-2.5 text-primary-fixed @sm:px-3"
+        >
+          <span className="material-symbols-outlined text-[17px]" aria-hidden="true">water_drop</span>
+          <span className="hidden @sm:inline">Get test USDC</span>
+        </a>
         <ConnectButton />
         <Link href="/new" className="pact-button-primary hidden px-4 @md:inline-flex">New pact</Link>
       </div>

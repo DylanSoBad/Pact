@@ -2,6 +2,7 @@
 
 import { useEffect } from 'react'
 import { createPortal } from 'react-dom'
+import { CIRCLE_FAUCET_URL } from '../lib/arc'
 
 export default function OnboardingModal({ open, onClose }: { open: boolean; onClose: () => void }) {
   useEffect(() => {
@@ -29,6 +30,21 @@ export default function OnboardingModal({ open, onClose }: { open: boolean; onCl
           <li><span className="text-primary-fixed">02</span> Lock collateral — both parties deposit USDC.</li>
           <li><span className="text-primary-fixed">03</span> Settle — fulfill conditions or claim timeout.</li>
         </ol>
+        <div className="mt-5 flex flex-col gap-3 border border-primary-fixed/30 bg-primary-fixed/[0.06] p-4 sm:flex-row sm:items-center sm:justify-between">
+          <div>
+            <p className="text-[13px] font-medium text-on-surface">Need test funds first?</p>
+            <p className="mt-1 font-code-hash text-[11px] leading-5 text-text-muted">Get free testnet USDC for Arc before creating a pact.</p>
+          </div>
+          <a
+            href={CIRCLE_FAUCET_URL}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="pact-button-primary shrink-0 px-4"
+          >
+            Open Circle Faucet
+            <span className="material-symbols-outlined text-[16px]" aria-hidden="true">open_in_new</span>
+          </a>
+        </div>
       </section>
     </div>,
     document.body,

@@ -7,7 +7,7 @@ import { useModal } from 'connectkit'
 import { parseUnits, formatUnits, decodeEventLog, isAddress } from 'viem'
 import { toast } from 'sonner'
 import { PACT_ABI, ERC20_ABI } from '../../lib/abi'
-import { USDC_ERC20, EURC, getPactAddress } from '../../lib/arc'
+import { CIRCLE_FAUCET_URL, USDC_ERC20, EURC, getPactAddress } from '../../lib/arc'
 import { PACT_BYTECODE } from '../../lib/bytecode'
 import { hashTerms } from '../../lib/terms'
 import { fetchReputation } from '../../lib/reads'
@@ -378,13 +378,16 @@ export default function NewPactPage() {
       <button type="button" onClick={toggleBanners} className="mb-4 flex w-full items-center justify-between border-b border-outline-hairline px-1 py-2 text-[11px] text-text-muted hover:text-on-surface" aria-expanded={!bannersCollapsed}>
         <span>{bannersCollapsed ? 'Network and risk notices hidden' : 'Hide network and risk notices'}</span><span aria-hidden="true" className="material-symbols-outlined text-[16px]">{bannersCollapsed ? 'expand_more' : 'expand_less'}</span>
       </button>
-      {!bannersCollapsed && <><div className="mb-3 p-3 bg-[#c8f542]/10 border border-[#c8f542]/30 flex items-center justify-between text-[12px] text-[#c8f542] animate-enter rounded-none">
+      {!bannersCollapsed && <><div className="mb-3 flex flex-col items-start justify-between gap-3 border border-[#c8f542]/30 bg-[#c8f542]/10 p-3 text-[12px] text-[#c8f542] animate-enter rounded-none @sm:flex-row @sm:items-center">
         <div className="flex items-center gap-2">
           <span><strong>Arc Testnet:</strong> Native USDC Gas · Direct On-Chain Pact</span>
         </div>
-        <span className="bg-[#c8f542]/20 px-2 py-0.5 text-[10px] font-mono border border-[#c8f542]/30 rounded-none">
-          Chain ID 5042002
-        </span>
+        <div className="flex w-full items-center gap-2 @sm:w-auto">
+          <span className="bg-[#c8f542]/20 px-2 py-1 text-[10px] font-mono border border-[#c8f542]/30 rounded-none">Chain ID 5042002</span>
+          <a href={CIRCLE_FAUCET_URL} target="_blank" rel="noopener noreferrer" className="ml-auto inline-flex min-h-8 items-center gap-1 border border-[#c8f542]/50 px-2.5 text-[10px] font-semibold uppercase tracking-wide hover:bg-[#c8f542] hover:text-black @sm:ml-0">
+            Get test USDC <span className="material-symbols-outlined text-[14px]" aria-hidden="true">open_in_new</span>
+          </a>
+        </div>
       </div>
 
       <div role="note" className="mb-6 p-3 border border-status-warning/60 bg-status-warning/10 text-[12px] text-[#f7d36b]">

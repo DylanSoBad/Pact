@@ -1,5 +1,7 @@
 import { defineChain } from 'viem'
 
+export const CIRCLE_FAUCET_URL = 'https://faucet.circle.com/'
+
 export const arcTestnet = defineChain({
   id: 5042002,
   name: 'Arc Testnet',
