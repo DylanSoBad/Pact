@@ -19,7 +19,7 @@ export default function Navbar() {
       <div className="flex items-center gap-8">
         <Link href="/" className="font-display-mono text-[17px] @md:text-display-mono text-primary-fixed tracking-tighter flex shrink-0 items-center gap-2">
           <Image
-            src="/icon.png"
+            src="/logo.png"
             alt="PACT Logo"
             width={24}
             height={24}
