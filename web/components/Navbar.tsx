@@ -21,9 +21,9 @@ export default function Navbar() {
           <Image
             src="/logo.png"
             alt="PACT Logo"
-            width={24}
-            height={24}
-            className="rounded-DEFAULT border border-primary-fixed/30"
+            width={48}
+            height={48}
+            className="h-11 w-11 object-contain @md:h-12 @md:w-12"
           />
           PACT
         </Link>
