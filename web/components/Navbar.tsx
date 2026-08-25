@@ -25,7 +25,7 @@ export default function Navbar() {
             height={48}
             className="h-11 w-11 object-contain @md:h-12 @md:w-12"
           />
-          PACT
+          <span className="hidden @md:inline">PACT</span>
         </Link>
         <div className="hidden @md:flex items-center gap-1">
           {navItems.map(item => {
