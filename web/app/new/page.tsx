@@ -1,7 +1,7 @@
 'use client'
 
 import Link from 'next/link'
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { decodeEventLog, formatUnits, isAddress, parseUnits } from 'viem'
 import { useAccount, useChainId, usePublicClient, useReadContract, useSwitchChain, useWalletClient } from 'wagmi'
 import { useModal } from 'connectkit'
@@ -11,6 +11,7 @@ import { CIRCLE_FAUCET_URL, EURC, USDC_ERC20, arcTestnet, getPactAddress } from 
 import { hashPactTerms, hashTerms } from '../../lib/terms'
 import { signPermit, type PermitAuthorization } from '../../lib/permit'
 import { fetchReputation } from '../../lib/reads'
+import { NEW_PACT_FIELD_ORDER, validateNewPactForm, type NewPactField } from '../../lib/newPactValidation'
 import TokenSelect from '../../components/TokenSelect'
 
 const ZERO_ADDRESS = '0x0000000000000000000000000000000000000000' as const
@@ -60,6 +61,9 @@ export default function NewPactPage() {
   const [txHash, setTxHash] = useState<`0x${string}` | null>(null)
   const [createdPactId, setCreatedPactId] = useState<number | null>(null)
   const [reputation, setReputation] = useState<{ cleared: number; slashed: number; notional: bigint } | null>(null)
+  const [touchedFields, setTouchedFields] = useState<Partial<Record<NewPactField, boolean>>>({})
+  const [submitAttempted, setSubmitAttempted] = useState(false)
+  const fieldRefs = useRef<Partial<Record<NewPactField, HTMLInputElement | HTMLTextAreaElement | null>>>({})
 
   useEffect(() => {
     document.title = 'PACT · New Pact'
@@ -106,9 +110,13 @@ export default function NewPactPage() {
 
   const timestamps = useMemo(() => {
     const now = Math.floor(Date.now() / 1000)
-    const offerExpiry = now + Math.max(0, Number(offerHours)) * 60 * 60
-    const performanceDeadline = offerExpiry + Math.max(0, Number(performanceDays)) * 24 * 60 * 60
-    const disputeDeadline = performanceDeadline + Math.max(0, Number(disputeDays)) * 24 * 60 * 60
+    const safeWindow = (value: string) => {
+      const parsed = Number(value)
+      return Number.isFinite(parsed) && parsed > 0 ? parsed : 0
+    }
+    const offerExpiry = now + safeWindow(offerHours) * 60 * 60
+    const performanceDeadline = offerExpiry + safeWindow(performanceDays) * 24 * 60 * 60
+    const disputeDeadline = performanceDeadline + safeWindow(disputeDays) * 24 * 60 * 60
     return { offerExpiry: BigInt(Math.floor(offerExpiry)), performanceDeadline: BigInt(Math.floor(performanceDeadline)), disputeDeadline: BigInt(Math.floor(disputeDeadline)) }
   }, [offerHours, performanceDays, disputeDays])
 
@@ -116,20 +124,42 @@ export default function NewPactPage() {
     ? ((notionalAmount * 500n + 9_999n) / 10_000n < 1_000_000n ? 1_000_000n : (notionalAmount * 500n + 9_999n) / 10_000n)
     : 0n
 
-  const validationError = useMemo(() => {
-    if (!protocolAddress) return 'Official testnet contract is not configured in this build'
-    if (!isAddress(taker) || taker === ZERO_ADDRESS) return 'A designated counterparty is required'
-    if (!isAddress(arbiter) || arbiter === ZERO_ADDRESS) return 'A designated arbiter is required'
-    if (address && [taker.toLowerCase(), arbiter.toLowerCase()].includes(address.toLowerCase())) return 'Maker, counterparty and arbiter must be different addresses'
-    if (taker.toLowerCase() === arbiter.toLowerCase()) return 'Counterparty and arbiter must be different addresses'
-    if (makerAmount <= 0n) return 'Maker collateral must be greater than zero'
-    if (notionalAmount <= 0n) return 'USDC notional must be greater than zero'
-    if (feeCapAmount > calculatedBond) return 'Arbiter fee cap cannot exceed the dispute bond'
-    if (!terms.trim()) return 'Written agreement terms are required'
-    if (Number(offerHours) <= 0 || Number(performanceDays) <= 0 || Number(disputeDays) <= 0) return 'All deadline windows must be greater than zero'
-    if (isConnected && makerAmount > makerBalance) return 'Insufficient maker collateral balance'
-    return ''
-  }, [address, arbiter, calculatedBond, disputeDays, feeCapAmount, isConnected, makerAmount, makerBalance, notionalAmount, offerHours, performanceDays, protocolAddress, taker, terms])
+  const fieldErrors = useMemo(() => validateNewPactForm({
+    makerAddress: address,
+    isConnected,
+    makerBalanceKnown: makerBalanceData !== undefined,
+    taker,
+    arbiter,
+    amountMaker,
+    amountTaker,
+    notionalUSDC,
+    arbiterFeeCap,
+    offerHours,
+    performanceDays,
+    disputeDays,
+    terms,
+    makerAmount,
+    makerBalance,
+    notionalAmount,
+    feeCapAmount,
+    calculatedBond,
+  }), [address, amountMaker, amountTaker, arbiter, arbiterFeeCap, calculatedBond, disputeDays, feeCapAmount, isConnected, makerAmount, makerBalance, makerBalanceData, notionalAmount, notionalUSDC, offerHours, performanceDays, taker, terms])
+
+  const validationError = NEW_PACT_FIELD_ORDER.map(field => fieldErrors[field]).find(Boolean) ?? ''
+
+  function touchField(field: NewPactField) {
+    setTouchedFields(current => ({ ...current, [field]: true }))
+  }
+
+  function visibleFieldError(field: NewPactField) {
+    return submitAttempted || touchedFields[field] ? fieldErrors[field] : undefined
+  }
+
+  function focusFirstInvalidField() {
+    const firstInvalid = NEW_PACT_FIELD_ORDER.find(field => fieldErrors[field])
+    if (!firstInvalid) return
+    requestAnimationFrame(() => fieldRefs.current[firstInvalid]?.focus())
+  }
 
   const createArgs = useMemo(() => [
     kind,
@@ -177,8 +207,10 @@ export default function NewPactPage() {
       switchChain({ chainId: arcTestnet.id })
       return
     }
+    setSubmitAttempted(true)
     if (validationError || !address || !protocolAddress || !publicClient || !walletClient) {
       toast.error(validationError || 'Wallet client is not ready')
+      focusFirstInvalidField()
       return
     }
 
@@ -260,7 +292,13 @@ export default function NewPactPage() {
     )
   }
 
-  const fieldClass = 'w-full border border-zinc-800 bg-[#07080a] px-3.5 py-2.5 text-[13px] text-white outline-none focus:border-primary-fixed'
+  const fieldClass = 'w-full border bg-[#07080a] px-3.5 py-2.5 text-[13px] text-white outline-none'
+  const fieldClassFor = (field: NewPactField) => `${fieldClass} ${visibleFieldError(field) ? 'border-status-error focus:border-status-error' : 'border-zinc-800 focus:border-primary-fixed'}`
+  const errorId = (field: NewPactField) => `${field}-error`
+  const renderFieldError = (field: NewPactField) => {
+    const error = visibleFieldError(field)
+    return error ? <span id={errorId(field)} className="mt-1.5 block text-[11px] leading-4 text-status-error">{error}</span> : null
+  }
   const busy = phase !== 'idle'
 
   return (
@@ -292,8 +330,8 @@ export default function NewPactPage() {
             {KINDS.map(option => <button key={option.value} type="button" onClick={() => setKind(option.value)} className={`border p-4 text-left ${kind === option.value ? 'border-primary-fixed bg-primary-fixed/[0.06]' : 'border-zinc-800'}`}><span className="block text-sm text-white">{option.label}</span><span className="mt-1 block text-[11px] text-text-muted">{option.desc}</span></button>)}
           </div>
           <div className="grid gap-4 @sm:grid-cols-2">
-            <label className="text-[11px] text-text-muted">Designated counterparty<input value={taker} onChange={event => setTaker(event.target.value)} placeholder="0x…" className={`${fieldClass} mt-2`} /></label>
-            <label className="text-[11px] text-text-muted">Designated arbiter<input value={arbiter} onChange={event => setArbiter(event.target.value)} placeholder="0x…" className={`${fieldClass} mt-2`} /></label>
+            <label className="text-[11px] text-text-muted">Designated counterparty<input ref={element => { fieldRefs.current.taker = element }} value={taker} onChange={event => setTaker(event.target.value)} onBlur={() => touchField('taker')} aria-invalid={Boolean(visibleFieldError('taker'))} aria-describedby={visibleFieldError('taker') ? errorId('taker') : undefined} placeholder="0x…" className={`${fieldClassFor('taker')} mt-2`} />{renderFieldError('taker')}</label>
+            <label className="text-[11px] text-text-muted">Designated arbiter<input ref={element => { fieldRefs.current.arbiter = element }} value={arbiter} onChange={event => setArbiter(event.target.value)} onBlur={() => touchField('arbiter')} aria-invalid={Boolean(visibleFieldError('arbiter'))} aria-describedby={visibleFieldError('arbiter') ? errorId('arbiter') : undefined} placeholder="0x…" className={`${fieldClassFor('arbiter')} mt-2`} />{renderFieldError('arbiter')}</label>
           </div>
           {reputation && <p className="mt-3 text-[11px] text-text-muted">Counterparty history: <span className="text-primary-fixed">{reputation.cleared} settled</span> · {reputation.slashed} disputes lost</p>}
         </section>
@@ -302,11 +340,11 @@ export default function NewPactPage() {
           <h2 className="mb-4 text-[12px] font-semibold uppercase tracking-widest text-white">02 · Collateral and dispute economics</h2>
           <div className="grid gap-4 @sm:grid-cols-2">
             <TokenSelect label="Maker token" value={tokenMaker} onChange={value => setTokenMaker(value as `0x${string}`)} tokens={TOKENS} />
-            <label className="text-[11px] text-text-muted">Maker collateral<input inputMode="decimal" value={amountMaker} onChange={event => setAmountMaker(event.target.value)} placeholder="0.00" className={`${fieldClass} mt-2`} /></label>
+            <label className="text-[11px] text-text-muted">Maker collateral<input ref={element => { fieldRefs.current.amountMaker = element }} inputMode="decimal" value={amountMaker} onChange={event => setAmountMaker(event.target.value)} onBlur={() => touchField('amountMaker')} aria-invalid={Boolean(visibleFieldError('amountMaker'))} aria-describedby={visibleFieldError('amountMaker') ? errorId('amountMaker') : undefined} placeholder="0.00" className={`${fieldClassFor('amountMaker')} mt-2`} />{renderFieldError('amountMaker')}</label>
             <TokenSelect label="Counterparty token" value={tokenTaker} onChange={value => setTokenTaker(value as `0x${string}`)} tokens={TOKENS} />
-            <label className="text-[11px] text-text-muted">Counterparty collateral<input inputMode="decimal" value={amountTaker} onChange={event => setAmountTaker(event.target.value)} placeholder="0.00 (optional)" className={`${fieldClass} mt-2`} /></label>
-            <label className="text-[11px] text-text-muted">Notional value in USDC<input inputMode="decimal" value={notionalUSDC} onChange={event => setNotionalUSDC(event.target.value)} placeholder="Used once to calculate the 5% bond" className={`${fieldClass} mt-2`} /></label>
-            <label className="text-[11px] text-text-muted">Arbiter fee cap (USDC)<input inputMode="decimal" value={arbiterFeeCap} onChange={event => setArbiterFeeCap(event.target.value)} className={`${fieldClass} mt-2`} /></label>
+            <label className="text-[11px] text-text-muted">Counterparty collateral<input ref={element => { fieldRefs.current.amountTaker = element }} inputMode="decimal" value={amountTaker} onChange={event => setAmountTaker(event.target.value)} onBlur={() => touchField('amountTaker')} aria-invalid={Boolean(visibleFieldError('amountTaker'))} aria-describedby={visibleFieldError('amountTaker') ? errorId('amountTaker') : undefined} placeholder="0.00 (optional)" className={`${fieldClassFor('amountTaker')} mt-2`} />{renderFieldError('amountTaker')}</label>
+            <label className="text-[11px] text-text-muted">Notional value in USDC<input ref={element => { fieldRefs.current.notionalUSDC = element }} inputMode="decimal" value={notionalUSDC} onChange={event => setNotionalUSDC(event.target.value)} onBlur={() => touchField('notionalUSDC')} aria-invalid={Boolean(visibleFieldError('notionalUSDC'))} aria-describedby={visibleFieldError('notionalUSDC') ? errorId('notionalUSDC') : undefined} placeholder="Used once to calculate the 5% bond" className={`${fieldClassFor('notionalUSDC')} mt-2`} />{renderFieldError('notionalUSDC')}</label>
+            <label className="text-[11px] text-text-muted">Arbiter fee cap (USDC)<input ref={element => { fieldRefs.current.arbiterFeeCap = element }} inputMode="decimal" value={arbiterFeeCap} onChange={event => setArbiterFeeCap(event.target.value)} onBlur={() => touchField('arbiterFeeCap')} aria-invalid={Boolean(visibleFieldError('arbiterFeeCap'))} aria-describedby={visibleFieldError('arbiterFeeCap') ? errorId('arbiterFeeCap') : undefined} className={`${fieldClassFor('arbiterFeeCap')} mt-2`} />{renderFieldError('arbiterFeeCap')}</label>
           </div>
           <p className="mt-4 border-l-2 border-primary-fixed pl-3 text-[11px] leading-5 text-text-muted">Dispute bond: <strong className="text-primary-fixed">{formatUnits(calculatedBond, 6)} USDC</strong>. Both parties post the same bond; arbiter fees can only come from the losing bond.</p>
         </section>
@@ -314,11 +352,11 @@ export default function NewPactPage() {
         <section className="pact-panel p-5">
           <h2 className="mb-4 text-[12px] font-semibold uppercase tracking-widest text-white">03 · Deadlines and written terms</h2>
           <div className="grid gap-4 @sm:grid-cols-3">
-            <label className="text-[11px] text-text-muted">Offer expires (hours)<input inputMode="numeric" value={offerHours} onChange={event => setOfferHours(event.target.value)} className={`${fieldClass} mt-2`} /></label>
-            <label className="text-[11px] text-text-muted">Performance window (days)<input inputMode="numeric" value={performanceDays} onChange={event => setPerformanceDays(event.target.value)} className={`${fieldClass} mt-2`} /></label>
-            <label className="text-[11px] text-text-muted">Dispute window (days)<input inputMode="numeric" value={disputeDays} onChange={event => setDisputeDays(event.target.value)} className={`${fieldClass} mt-2`} /></label>
+            <label className="text-[11px] text-text-muted">Offer expires (hours)<input ref={element => { fieldRefs.current.offerHours = element }} inputMode="numeric" value={offerHours} onChange={event => setOfferHours(event.target.value)} onBlur={() => touchField('offerHours')} aria-invalid={Boolean(visibleFieldError('offerHours'))} aria-describedby={visibleFieldError('offerHours') ? errorId('offerHours') : undefined} className={`${fieldClassFor('offerHours')} mt-2`} />{renderFieldError('offerHours')}</label>
+            <label className="text-[11px] text-text-muted">Performance window (days)<input ref={element => { fieldRefs.current.performanceDays = element }} inputMode="numeric" value={performanceDays} onChange={event => setPerformanceDays(event.target.value)} onBlur={() => touchField('performanceDays')} aria-invalid={Boolean(visibleFieldError('performanceDays'))} aria-describedby={visibleFieldError('performanceDays') ? errorId('performanceDays') : undefined} className={`${fieldClassFor('performanceDays')} mt-2`} />{renderFieldError('performanceDays')}</label>
+            <label className="text-[11px] text-text-muted">Dispute window (days)<input ref={element => { fieldRefs.current.disputeDays = element }} inputMode="numeric" value={disputeDays} onChange={event => setDisputeDays(event.target.value)} onBlur={() => touchField('disputeDays')} aria-invalid={Boolean(visibleFieldError('disputeDays'))} aria-describedby={visibleFieldError('disputeDays') ? errorId('disputeDays') : undefined} className={`${fieldClassFor('disputeDays')} mt-2`} />{renderFieldError('disputeDays')}</label>
           </div>
-          <label className="mt-5 block text-[11px] text-text-muted">Agreement terms<textarea value={terms} onChange={event => setTerms(event.target.value)} maxLength={2000} rows={6} placeholder="Exact off-chain agreement anchored by termsHash…" className={`${fieldClass} mt-2 resize-y`} /></label>
+          <label className="mt-5 block text-[11px] text-text-muted">Agreement terms<textarea ref={element => { fieldRefs.current.terms = element }} value={terms} onChange={event => setTerms(event.target.value)} onBlur={() => touchField('terms')} aria-invalid={Boolean(visibleFieldError('terms'))} aria-describedby={visibleFieldError('terms') ? errorId('terms') : undefined} maxLength={2000} rows={6} placeholder="Exact off-chain agreement anchored by termsHash…" className={`${fieldClassFor('terms')} mt-2 resize-y`} />{renderFieldError('terms')}</label>
           <label className="mt-4 flex items-center gap-2 text-[11px] text-text-muted"><input type="checkbox" checked={blurSize} onChange={event => setBlurSize(event.target.checked)} /> Blur amount in UI (cosmetic only; on-chain data remains public)</label>
         </section>
 
@@ -329,8 +367,15 @@ export default function NewPactPage() {
             <p>Maker locks now <span className="mt-1 block text-primary-fixed">{amountMaker || '0'} {TOKENS.find(token => token.value === tokenMaker)?.label}</span></p>
             <p>Offer / performance / dispute <span className="mt-1 block text-white">{offerHours}h / {performanceDays}d / +{disputeDays}d</span></p>
           </div>
-          {validationError && <p role="alert" className="mt-4 text-[11px] text-status-error">{validationError}</p>}
-          <button type="button" onClick={submitPact} disabled={busy || Boolean(validationError)} className="btn-primary mt-5 min-h-12 w-full disabled:cursor-not-allowed disabled:opacity-40">
+          {submitAttempted && validationError && (
+            <div role="alert" className="mt-4 border border-status-error/60 bg-status-error/10 p-3 text-[11px] text-status-error">
+              <p className="font-semibold">Please correct the highlighted fields before creating this pact.</p>
+              <ul className="mt-2 list-disc space-y-1 pl-4">
+                {NEW_PACT_FIELD_ORDER.filter(field => fieldErrors[field]).map(field => <li key={field}>{fieldErrors[field]}</li>)}
+              </ul>
+            </div>
+          )}
+          <button type="button" onClick={submitPact} disabled={busy} className="btn-primary mt-5 min-h-12 w-full disabled:cursor-not-allowed disabled:opacity-40">
             {phase === 'approving' ? 'Authorizing exact collateral…' : phase === 'creating' ? 'Creating committed offer…' : !isConnected ? 'Connect wallet' : 'Authorize & create pact'}
           </button>
           {txHash && <a href={`https://testnet.arcscan.app/tx/${txHash}`} target="_blank" rel="noreferrer" className="mt-3 block text-center text-[11px] text-text-muted hover:text-primary-fixed">Track current transaction on ArcScan ↗</a>}
