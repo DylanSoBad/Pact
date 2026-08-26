@@ -1,12 +1,12 @@
 'use client'
 
-import { useState, useEffect, useMemo } from 'react'
+import { useState, useEffect, useMemo, useCallback } from 'react'
 import Link from 'next/link'
 import TapeLine from '../../components/TapeLine'
+import ActionCenter from '../../components/ActionCenter'
 import { useAccount } from 'wagmi'
 import { useModal } from 'connectkit'
-import { fetchPacts, fetchReputation, PactData } from '../../lib/reads'
-import { getPactAddress } from '../../lib/arc'
+import { fetchPactPage, fetchReputation, PactData } from '../../lib/reads'
 import {
   kindLabel, statusLabel, formatAmount, tokenSymbol,
   formatTimestamp, truncateAddress
@@ -21,46 +21,50 @@ export default function MePage() {
   const [loading, setLoading] = useState(true)
   const [roleFilter, setRoleFilter] = useState<'ALL' | 'MAKER' | 'TAKER'>('ALL')
   const [copiedAddr, setCopiedAddr] = useState(false)
-  const [lastFetchTime, setLastFetchTime] = useState<number>(Date.now())
-  const [rpcError, setRpcError] = useState(false)
+  const [nextCursor, setNextCursor] = useState<string | null>(null)
+  const [loadingMore, setLoadingMore] = useState(false)
 
   useEffect(() => { document.title = 'PACT · My Profile' }, [])
 
-  async function loadUserData() {
+  const loadUserData = useCallback(async (cursor: string | null = null, mode: 'replace' | 'refresh' | 'append' = 'refresh') => {
     if (!address) {
       setLoading(false)
       return
     }
     try {
-      const [allPacts, rep] = await Promise.all([
-        fetchPacts(100),
+      const [page, rep] = await Promise.all([
+        fetchPactPage({ account: address, cursor, limit: 25 }),
         fetchReputation(address as `0x${string}`)
       ])
-
-      const userPacts = allPacts.filter(
-        p => p.maker.toLowerCase() === address.toLowerCase() || p.taker.toLowerCase() === address.toLowerCase()
-      )
-
-      setPacts(userPacts)
+      setPacts(current => {
+        if (mode === 'replace') return page.items
+        const combined = mode === 'append' ? [...current, ...page.items] : [...page.items, ...current]
+        return [...new Map(combined.map(pact => [pact.id, pact])).values()].sort((a, b) => b.id - a.id)
+      })
+      if (mode !== 'refresh') setNextCursor(page.nextCursor)
       setReputation(rep)
-      setRpcError(false)
-      setLastFetchTime(Date.now())
     } catch (err) {
       console.error('Error loading /me data:', err)
-      setRpcError(true)
     } finally {
       setLoading(false)
     }
+  }, [address])
+
+  async function loadMore() {
+    if (!nextCursor || loadingMore) return
+    setLoadingMore(true)
+    try { await loadUserData(nextCursor, 'append') } finally { setLoadingMore(false) }
   }
 
   useEffect(() => {
     let ok = true
-    loadUserData()
+    setLoading(true)
+    void loadUserData(null, 'replace')
     const iv = setInterval(() => { if (ok && !document.hidden && address) loadUserData() }, 3000)
     const vis = () => { if (!document.hidden && address) loadUserData() }
     document.addEventListener('visibilitychange', vis)
     return () => { ok = false; clearInterval(iv); document.removeEventListener('visibilitychange', vis) }
-  }, [address])
+  }, [address, loadUserData])
 
   const copyAddress = () => {
     if (address) {
@@ -82,9 +86,10 @@ export default function MePage() {
   const makerCount = useMemo(() => pacts.filter(p => address && p.maker.toLowerCase() === address.toLowerCase()).length, [pacts, address])
   const takerCount = useMemo(() => pacts.filter(p => address && p.taker.toLowerCase() === address.toLowerCase()).length, [pacts, address])
 
-  const successRate = reputation && (reputation.cleared + reputation.slashed > 0)
+  const hasReputation = Boolean(reputation && (reputation.cleared + reputation.slashed > 0))
+  const successRate = hasReputation && reputation
     ? ((reputation.cleared / (reputation.cleared + reputation.slashed)) * 100).toFixed(0)
-    : '100'
+    : null
 
   if (!isConnected) {
     return (
@@ -174,11 +179,13 @@ export default function MePage() {
           <div className="p-4 bg-[#0c0f12]">
             <span className="text-[10px] uppercase tracking-widest text-zinc-500 block">Reliability Score</span>
             <span className="text-[18px] font-bold text-[#c8f542] mt-0.5 tabular-nums block">
-              {successRate}%
+              {successRate === null ? 'NO HISTORY' : `${successRate}%`}
             </span>
           </div>
         </div>
       </div>
+
+      <ActionCenter pacts={pacts} address={address || ''} />
 
       {/* Role Filters */}
       <div className="flex items-center justify-between gap-3 mb-6 animate-enter-delay overflow-x-auto hide-scroll">
@@ -247,6 +254,7 @@ export default function MePage() {
               }} />
             )
           })}
+          {nextCursor && <button type="button" disabled={loadingMore} onClick={loadMore} className="btn-ghost mt-4 w-full py-3 text-[11px] uppercase tracking-widest disabled:opacity-50">{loadingMore ? 'Indexing earlier pacts…' : 'Load earlier account history'}</button>}
         </div>
       )}
     </div>

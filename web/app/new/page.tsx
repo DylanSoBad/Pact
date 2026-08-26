@@ -13,6 +13,8 @@ import { signPermit, type PermitAuthorization } from '../../lib/permit'
 import { fetchReputation } from '../../lib/reads'
 import { NEW_PACT_FIELD_ORDER, validateNewPactForm, type NewPactField } from '../../lib/newPactValidation'
 import TokenSelect from '../../components/TokenSelect'
+import TransactionProgress, { type TransactionStage } from '../../components/TransactionProgress'
+import { transactionErrorMessage } from '../../lib/transactionErrors'
 
 const ZERO_ADDRESS = '0x0000000000000000000000000000000000000000' as const
 const KINDS = [
@@ -59,6 +61,9 @@ export default function NewPactPage() {
   const [blurSize, setBlurSize] = useState(false)
   const [phase, setPhase] = useState<TransactionPhase>('idle')
   const [txHash, setTxHash] = useState<`0x${string}` | null>(null)
+  const [txStage, setTxStage] = useState<TransactionStage>('idle')
+  const [txLabel, setTxLabel] = useState('')
+  const [txError, setTxError] = useState('')
   const [createdPactId, setCreatedPactId] = useState<number | null>(null)
   const [reputation, setReputation] = useState<{ cleared: number; slashed: number; notional: bigint } | null>(null)
   const [touchedFields, setTouchedFields] = useState<Partial<Record<NewPactField, boolean>>>({})
@@ -218,6 +223,8 @@ export default function NewPactPage() {
       let permit: PermitAuthorization | null = null
       if (allowance !== makerAmount) {
         setPhase('approving')
+        setTxStage('awaiting-signature')
+        setTxLabel('Authorize the exact collateral amount. PACT never requests an unlimited allowance.')
         const approve = async (value: bigint) => {
           const approval = await publicClient.simulateContract({
             account: address,
@@ -228,6 +235,8 @@ export default function NewPactPage() {
           })
           const approvalHash = await walletClient.writeContract(approval.request)
           setTxHash(approvalHash)
+          setTxStage('confirming')
+          setTxLabel('The exact token approval is being confirmed on Arc Testnet.')
           await publicClient.waitForTransactionReceipt({ hash: approvalHash })
         }
         if (tokenMaker.toLowerCase() === USDC_ERC20.toLowerCase()) {
@@ -254,6 +263,8 @@ export default function NewPactPage() {
       }
 
       setPhase('creating')
+      setTxStage('awaiting-signature')
+      setTxLabel('Confirm creation of the committed pact offer in your wallet.')
       const simulation = await publicClient.simulateContract({
         account: address,
         address: protocolAddress,
@@ -263,6 +274,8 @@ export default function NewPactPage() {
       } as never)
       const creationHash = await walletClient.writeContract(simulation.request)
       setTxHash(creationHash)
+      setTxStage('confirming')
+      setTxLabel('Maker collateral is being escrowed and the pact is being recorded on-chain.')
       const receipt = await publicClient.waitForTransactionReceipt({ hash: creationHash })
       for (const log of receipt.logs) {
         try {
@@ -271,10 +284,15 @@ export default function NewPactPage() {
         } catch { /* unrelated log */ }
       }
       setPhase('done')
+      setTxStage('success')
+      setTxLabel('The pact offer is live and maker collateral is escrowed.')
       toast.success('Pact offer created and maker collateral escrowed')
     } catch (error) {
+      const message = transactionErrorMessage(error)
       setPhase('idle')
-      toast.error(error instanceof Error ? error.message : 'Transaction failed')
+      setTxStage('error')
+      setTxError(message)
+      toast.error(message)
     }
   }
 
@@ -288,6 +306,7 @@ export default function NewPactPage() {
           {createdPactId && <Link href={`/p/${createdPactId}`} className="btn-primary px-5 py-2.5">Open pact →</Link>}
           {txHash && <a href={`https://testnet.arcscan.app/tx/${txHash}`} target="_blank" rel="noreferrer" className="btn-ghost px-5 py-2.5">ArcScan ↗</a>}
         </div>
+        <TransactionProgress stage={txStage} label={txLabel} hash={txHash} error={txError} />
       </div>
     )
   }
@@ -378,7 +397,7 @@ export default function NewPactPage() {
           <button type="button" onClick={submitPact} disabled={busy} className="btn-primary mt-5 min-h-12 w-full disabled:cursor-not-allowed disabled:opacity-40">
             {phase === 'approving' ? 'Authorizing exact collateral…' : phase === 'creating' ? 'Creating committed offer…' : !isConnected ? 'Connect wallet' : 'Authorize & create pact'}
           </button>
-          {txHash && <a href={`https://testnet.arcscan.app/tx/${txHash}`} target="_blank" rel="noreferrer" className="mt-3 block text-center text-[11px] text-text-muted hover:text-primary-fixed">Track current transaction on ArcScan ↗</a>}
+          <TransactionProgress stage={txStage} label={txLabel} hash={txHash} error={txError} onDismiss={() => { setTxStage('idle'); setTxError(''); setTxHash(null) }} />
         </section>
       </div>
     </div>

@@ -2,7 +2,7 @@
 
 import { ConnectKitButton } from 'connectkit'
 import { useAccount, useReadContract, useSwitchChain } from 'wagmi'
-import { USDC_ERC20, EURC, arcTestnet } from '../lib/arc'
+import { USDC_ERC20, arcTestnet } from '../lib/arc'
 import { ERC20_ABI } from '../lib/abi'
 import { formatUnits } from 'viem'
 
@@ -14,15 +14,6 @@ export default function ConnectButton() {
 
   const { data: usdcBal } = useReadContract({
     address: USDC_ERC20 as `0x${string}`,
-    abi: ERC20_ABI,
-    functionName: 'balanceOf',
-    args: address ? [address] : undefined,
-    chainId: arcTestnet.id,
-    query: { enabled: !!address && !isWrongNetwork }
-  })
-
-  const { data: eurcBal } = useReadContract({
-    address: EURC as `0x${string}`,
     abi: ERC20_ABI,
     functionName: 'balanceOf',
     args: address ? [address] : undefined,

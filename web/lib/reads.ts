@@ -41,6 +41,48 @@ export type PactData = {
   deadline: bigint
 }
 
+export type PactPage = {
+  items: PactData[]
+  nextCursor: string | null
+  indexedThroughBlock: bigint
+}
+
+type WirePact = Omit<PactData,
+  'amountMaker' | 'amountTaker' | 'collateralMaker' | 'collateralTaker' | 'notionalUSDC' |
+  'bondAmount' | 'arbiterFeeCap' | 'offerExpiry' | 'performanceDeadline' | 'disputeDeadline' |
+  'createdAt' | 'updatedAt' | 'deadline'
+> & Record<
+  'amountMaker' | 'amountTaker' | 'collateralMaker' | 'collateralTaker' | 'notionalUSDC' |
+  'bondAmount' | 'arbiterFeeCap' | 'offerExpiry' | 'performanceDeadline' | 'disputeDeadline' |
+  'createdAt' | 'updatedAt' | 'deadline', string
+>
+
+function hydratePact(value: WirePact): PactData {
+  return {
+    ...value,
+    amountMaker: BigInt(value.amountMaker), amountTaker: BigInt(value.amountTaker),
+    collateralMaker: BigInt(value.collateralMaker), collateralTaker: BigInt(value.collateralTaker),
+    notionalUSDC: BigInt(value.notionalUSDC), bondAmount: BigInt(value.bondAmount),
+    arbiterFeeCap: BigInt(value.arbiterFeeCap), offerExpiry: BigInt(value.offerExpiry),
+    performanceDeadline: BigInt(value.performanceDeadline), disputeDeadline: BigInt(value.disputeDeadline),
+    createdAt: BigInt(value.createdAt), updatedAt: BigInt(value.updatedAt), deadline: BigInt(value.deadline),
+  }
+}
+
+export async function fetchPactPage(options: { account?: string; cursor?: string | null; limit?: number } = {}): Promise<PactPage> {
+  const params = new URLSearchParams({ limit: String(options.limit ?? 25) })
+  if (options.account) params.set('account', options.account)
+  if (options.cursor) params.set('cursor', options.cursor)
+  const response = await fetch(`/api/pacts?${params}`, { cache: 'no-store' })
+  const body = await response.json() as { items?: WirePact[]; nextCursor?: string | null; indexedThroughBlock?: string; error?: string }
+  if (!response.ok || !body.items || body.indexedThroughBlock === undefined) throw new Error(body.error || 'PACT indexer unavailable')
+  return {
+    items: body.items.map(hydratePact),
+    nextCursor: body.nextCursor ?? null,
+    indexedThroughBlock: BigInt(body.indexedThroughBlock),
+  }
+}
+
 const terminalPactCache = new Map<number, PactData>()
 
 function requireProtocolAddress(): `0x${string}` | null {

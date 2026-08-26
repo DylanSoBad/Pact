@@ -1,14 +1,13 @@
 'use client'
 
 import { useState, useEffect, useMemo, useCallback } from 'react'
-import Link from 'next/link'
-import { useQuery } from '@tanstack/react-query'
+import { useInfiniteQuery } from '@tanstack/react-query'
 import TapeLine from '../components/TapeLine'
 import TableSkeleton from '../components/TableSkeleton'
 import NetworkStatusBanner from '../components/NetworkStatusBanner'
 import ErrorBoundary from '../components/ErrorBoundary'
 import OnboardingModal from '../components/OnboardingModal'
-import { fetchPacts, PactData } from '../lib/reads'
+import { fetchPactPage, PactData } from '../lib/reads'
 import { getPactAddress } from '../lib/arc'
 import { useBlockNumber } from 'wagmi'
 import { usePactStore, FilterCategory } from '../lib/store/usePactStore'
@@ -38,23 +37,27 @@ function TapeDashboard() {
 
   // TanStack Query for caching and smart RPC fetching
   const {
-    data: pacts = [],
+    data,
     isLoading,
     isError,
     refetch,
     isFetching,
-  } = useQuery({
+    fetchNextPage,
+    hasNextPage,
+    isFetchingNextPage,
+  } = useInfiniteQuery({
     queryKey: ['pacts', getPactAddress()],
-    queryFn: async () => {
-      return await fetchPacts(50)
-    },
+    queryFn: ({ pageParam }) => fetchPactPage({ cursor: pageParam, limit: 25 }),
+    initialPageParam: null as string | null,
+    getNextPageParam: page => page.nextCursor ?? undefined,
     staleTime: 5000,
     gcTime: 60000,
     retry: 2,
   })
+  const pacts = useMemo(() => data?.pages.flatMap(page => page.items) ?? [], [data])
 
   // SSE real-time stream listener
-  const handleNewBlock = useCallback((blockNum: bigint) => {
+  const handleNewBlock = useCallback(() => {
     refetch()
   }, [refetch])
 
@@ -280,7 +283,13 @@ function TapeDashboard() {
 
         {/* Tape Footer */}
         <div className="px-3 @md:px-md py-2.5 @md:py-sm bg-surface-container-lowest text-center border-t border-outline-hairline">
-          <span className="font-code-hash text-[11px] @md:text-code-hash text-text-dim">End of Tape. Awaiting new prints...</span>
+          {hasNextPage ? (
+            <button type="button" disabled={isFetchingNextPage} onClick={() => fetchNextPage()} className="font-label-caps text-[11px] uppercase tracking-wider text-primary-fixed disabled:opacity-50">
+              {isFetchingNextPage ? 'Indexing earlier pacts…' : 'Load earlier pacts'}
+            </button>
+          ) : (
+            <span className="font-code-hash text-[11px] @md:text-code-hash text-text-dim">End of indexed history. Awaiting new prints...</span>
+          )}
         </div>
       </div>
 

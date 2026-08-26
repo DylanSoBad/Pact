@@ -13,7 +13,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
 
   return (
     <>
-      <div className="fixed bottom-20 right-3 z-[70] flex items-center border border-outline-border bg-[#0c0f12] p-1 md:bottom-5 md:right-5" role="group" aria-label="Preview layout">
+      <aside className="fixed bottom-20 right-3 z-[70] flex items-center border border-outline-border bg-[#0c0f12] p-1 md:bottom-5 md:right-5" aria-label="Preview layout">
         {(['desktop', 'mobile'] as const).map(mode => {
           const active = activeView === mode
           return (
@@ -29,7 +29,7 @@ export default function AppShell({ children }: { children: React.ReactNode }) {
             </button>
           )
         })}
-      </div>
+      </aside>
 
       <div className={`@container mx-auto flex w-full flex-col bg-background text-on-background transition-[max-width,border-color] duration-300 ${
         activeView === 'mobile'

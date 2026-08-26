@@ -13,6 +13,8 @@ import { hashPactTerms, hashTerms, verifyPactTerms } from '../../../lib/terms'
 import { signPermit, type PermitAuthorization } from '../../../lib/permit'
 import PactStateMachine from '../../../components/PactStateMachine'
 import Countdown from '../../../components/Countdown'
+import TransactionProgress, { type TransactionStage } from '../../../components/TransactionProgress'
+import { transactionErrorMessage } from '../../../lib/transactionErrors'
 
 type DisputeData = {
   opener: `0x${string}`
@@ -22,11 +24,6 @@ type DisputeData = {
   openedAt: bigint
   responseDeadline: bigint
   arbiterDeadline: bigint
-}
-
-function errorMessage(error: unknown): string {
-  if (typeof error === 'object' && error && 'shortMessage' in error) return String(error.shortMessage)
-  return error instanceof Error ? error.message : 'Transaction failed'
 }
 
 export default function PactDetailPage({ params }: { params: Promise<{ id: string }> }) {
@@ -43,6 +40,9 @@ export default function PactDetailPage({ params }: { params: Promise<{ id: strin
   const [loading, setLoading] = useState(true)
   const [busyLabel, setBusyLabel] = useState('')
   const [txHash, setTxHash] = useState<`0x${string}` | null>(null)
+  const [txStage, setTxStage] = useState<TransactionStage>('idle')
+  const [txLabel, setTxLabel] = useState('')
+  const [txError, setTxError] = useState('')
   const [termsInput, setTermsInput] = useState('')
   const [proofInput, setProofInput] = useState('')
   const [feeInput, setFeeInput] = useState('0')
@@ -77,6 +77,8 @@ export default function PactDetailPage({ params }: { params: Promise<{ id: strin
     const current = await publicClient.readContract({ address: token, abi: ERC20_ABI, functionName: 'allowance', args: [address, protocolAddress] })
     if (current === amount) return null
     setBusyLabel(`Authorize exactly ${formatUnits(amount, 6)} ${tokenSymbol(token)}`)
+    setTxStage('awaiting-signature')
+    setTxLabel(`Authorize exactly ${formatUnits(amount, 6)} ${tokenSymbol(token)}. No unlimited allowance is requested.`)
     if (token.toLowerCase() === USDC_ERC20.toLowerCase()) {
       try {
         return await signPermit({
@@ -96,6 +98,8 @@ export default function PactDetailPage({ params }: { params: Promise<{ id: strin
       const simulation = await publicClient.simulateContract({ account: address, address: token, abi: ERC20_ABI, functionName: 'approve', args: [protocolAddress, value] })
       const hash = await walletClient.writeContract(simulation.request)
       setTxHash(hash)
+      setTxStage('confirming')
+      setTxLabel(`Exact ${tokenSymbol(token)} approval is being confirmed on Arc Testnet.`)
       await publicClient.waitForTransactionReceipt({ hash })
     }
     if (current !== 0n) await approve(0n)
@@ -110,6 +114,10 @@ export default function PactDetailPage({ params }: { params: Promise<{ id: strin
     }
     try {
       setBusyLabel(label)
+      setTxHash(null)
+      setTxError('')
+      setTxStage('awaiting-signature')
+      setTxLabel(`${label}. Confirm this action in your wallet.`)
       const simulation = await publicClient.simulateContract({
         account: address,
         address: protocolAddress,
@@ -119,11 +127,18 @@ export default function PactDetailPage({ params }: { params: Promise<{ id: strin
       } as never)
       const hash = await walletClient.writeContract(simulation.request)
       setTxHash(hash)
+      setTxStage('confirming')
+      setTxLabel(`${label} is waiting for on-chain confirmation.`)
       await publicClient.waitForTransactionReceipt({ hash })
+      setTxStage('success')
+      setTxLabel(`${label} was confirmed on Arc Testnet.`)
       toast.success(`${label} confirmed`)
       await refresh()
     } catch (error) {
-      toast.error(errorMessage(error))
+      const message = transactionErrorMessage(error)
+      setTxStage('error')
+      setTxError(message)
+      toast.error(message)
     } finally {
       setBusyLabel('')
     }
@@ -149,7 +164,10 @@ export default function PactDetailPage({ params }: { params: Promise<{ id: strin
       )
     } catch (error) {
       setBusyLabel('')
-      toast.error(errorMessage(error))
+      const message = transactionErrorMessage(error)
+      setTxStage('error')
+      setTxError(message)
+      toast.error(message)
     }
   }
 
@@ -164,7 +182,10 @@ export default function PactDetailPage({ params }: { params: Promise<{ id: strin
       )
     } catch (error) {
       setBusyLabel('')
-      toast.error(errorMessage(error))
+      const message = transactionErrorMessage(error)
+      setTxStage('error')
+      setTxError(message)
+      toast.error(message)
     }
   }
 
@@ -244,8 +265,7 @@ export default function PactDetailPage({ params }: { params: Promise<{ id: strin
 
       {Object.values(credits).some(value => value > 0n) && <section className="pact-panel mb-6 p-5"><h2 className="text-[12px] font-semibold uppercase tracking-widest text-white">Claimable credits</h2><div className="mt-4 space-y-2">{uniqueTokens.map(token => credits[token] > 0n && <button key={token} disabled={busy} onClick={() => execute('withdraw', [token], `Withdraw ${tokenSymbol(token)}`)} className="btn-primary flex w-full justify-between px-4 py-3"><span>{tokenSymbol(token)}</span><span>{formatAmount(credits[token])}</span></button>)}</div></section>}
 
-      {busyLabel && <div className="border border-primary-fixed/30 bg-primary-fixed/10 p-3 text-[12px] text-primary-fixed">{busyLabel}…</div>}
-      {txHash && <a href={`https://testnet.arcscan.app/tx/${txHash}`} target="_blank" rel="noreferrer" className="mt-3 block text-center text-[11px] text-text-muted hover:text-primary-fixed">View latest transaction on ArcScan ↗</a>}
+      <TransactionProgress stage={txStage} label={txLabel || busyLabel} hash={txHash} error={txError} onDismiss={() => { setTxStage('idle'); setTxError(''); setTxHash(null) }} />
     </div>
   )
 }
