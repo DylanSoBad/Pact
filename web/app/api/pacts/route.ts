@@ -7,7 +7,8 @@ export const dynamic = 'force-dynamic'
 
 const RPC_URL = process.env.ARC_RPC_URL || process.env.NEXT_PUBLIC_ARC_RPC_URL || 'https://rpc.testnet.arc.network'
 const MAX_PAGE_SIZE = 50
-const BLOCK_WINDOW = 50_000n
+// Arc RPC rejects broad eth_getLogs ranges; 10k blocks has been live-verified.
+const BLOCK_WINDOW = 10_000n
 
 const client = createPublicClient({ chain: arcTestnet, transport: http(RPC_URL, { timeout: 10_000 }) })
 
