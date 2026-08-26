@@ -28,9 +28,6 @@ export const USDC_ERC20: `0x${string}` = "0x360000000000000000000000000000000000
 export const EURC: `0x${string}` = "0x89B50855Aa3bE2F677cD6303Cec089B5F319D72a";       // 6 decimals
 export const USYC: `0x${string}` = "0xe9185F0c5F296Ed1797AaE4238D26CCaBEadb86C";       // allowlisted in V1
 
-/** Block containing the verified PACT V1 deployment transaction. */
-export const PACT_V1_DEPLOYMENT_BLOCK = 0x3815d83n
-
 const ARC_TESTNET_PACT_ADDRESS = process.env.NEXT_PUBLIC_PACT_ADDRESS_5042002
 
 /**

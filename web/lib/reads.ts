@@ -44,7 +44,7 @@ export type PactData = {
 export type PactPage = {
   items: PactData[]
   nextCursor: string | null
-  indexedThroughBlock: bigint
+  indexedThroughId: number
 }
 
 type WirePact = Omit<PactData,
@@ -74,12 +74,12 @@ export async function fetchPactPage(options: { account?: string; cursor?: string
   if (options.account) params.set('account', options.account)
   if (options.cursor) params.set('cursor', options.cursor)
   const response = await fetch(`/api/pacts?${params}`, { cache: 'no-store' })
-  const body = await response.json() as { items?: WirePact[]; nextCursor?: string | null; indexedThroughBlock?: string; error?: string }
-  if (!response.ok || !body.items || body.indexedThroughBlock === undefined) throw new Error(body.error || 'PACT indexer unavailable')
+  const body = await response.json() as { items?: WirePact[]; nextCursor?: string | null; indexedThroughId?: number; error?: string }
+  if (!response.ok || !body.items || body.indexedThroughId === undefined) throw new Error(body.error || 'PACT indexer unavailable')
   return {
     items: body.items.map(hydratePact),
     nextCursor: body.nextCursor ?? null,
-    indexedThroughBlock: BigInt(body.indexedThroughBlock),
+    indexedThroughId: body.indexedThroughId,
   }
 }
 

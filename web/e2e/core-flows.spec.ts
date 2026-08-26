@@ -4,7 +4,7 @@ test.beforeEach(async ({ page }) => {
   await page.route('**/api/pacts**', route => route.fulfill({
     status: 200,
     contentType: 'application/json',
-    body: JSON.stringify({ items: [], nextCursor: null, indexedThroughBlock: '0' }),
+    body: JSON.stringify({ items: [], nextCursor: null, indexedThroughId: 0 }),
   }))
 })
 
