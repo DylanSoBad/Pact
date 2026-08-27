@@ -14,7 +14,7 @@ import { useBlockNumber } from 'wagmi'
 import { usePactStore, FilterCategory } from '../lib/store/usePactStore'
 import { usePactStream } from '../hooks/usePactStream'
 import {
-  kindLabel, statusLabel, formatAmount, tokenSymbol,
+  kindLabel, statusLabel, effectiveStatusLabel, formatAmount, tokenSymbol,
   formatTimestamp, truncateAddress
 } from '../lib/format'
 
@@ -274,7 +274,7 @@ function TapeDashboard() {
                     id: p.id,
                     time: formatTimestamp(p.updatedAt),
                     kind: kindLabel(p.kind),
-                    status: statusLabel(p.status),
+                    status: effectiveStatusLabel(p.status, p.offerExpiry, p.disputeDeadline),
                     amount: amt,
                     address: truncateAddress(p.maker),
                   }}

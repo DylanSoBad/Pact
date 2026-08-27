@@ -2,6 +2,8 @@
 
 export interface PactStateMachineProps {
   status: number
+  offerExpiry?: bigint
+  disputeDeadline?: bigint
 }
 
 const STEPS = [
@@ -12,10 +14,13 @@ const STEPS = [
   { s: 4, label: 'Settled', desc: 'Funds released' },
 ]
 
-export default function PactStateMachine({ status }: PactStateMachineProps) {
+export default function PactStateMachine({ status, offerExpiry, disputeDeadline }: PactStateMachineProps) {
+  const now = BigInt(Math.floor(Date.now() / 1000))
   const isTerminal = status >= 4 && status <= 6
   const terminalLabel = status === 4 ? 'Settled & Cleared' : status === 5 ? 'Cancelled by Maker' : 'Expired & Refunded'
   const isDisputed = status === 3
+  const isExpiredOffer = status === 0 && offerExpiry !== undefined && now > offerExpiry
+  const isExpiredDisputeWindow = (status === 1 || status === 2) && disputeDeadline !== undefined && now > disputeDeadline
 
   return (
     <section aria-label="Pact Lifecycle Progress" className="mb-6 border border-outline-border bg-[#0c0f12] p-4 sm:p-5">
@@ -24,9 +29,25 @@ export default function PactStateMachine({ status }: PactStateMachineProps) {
           Agreement Lifecycle Stage
         </span>
         {isTerminal ? (
-          <span className="inline-flex items-center gap-1.5 px-2 py-0.5 border border-emerald-500/40 bg-emerald-950/30 text-[10px] font-label-caps uppercase text-emerald-400 font-bold">
-            <span className="w-1.5 h-1.5 rounded-full bg-emerald-400" />
+          <span className={`inline-flex items-center gap-1.5 px-2 py-0.5 border text-[10px] font-label-caps uppercase font-bold ${
+            status === 4
+              ? 'border-emerald-500/40 bg-emerald-950/30 text-emerald-400'
+              : status === 5
+              ? 'border-zinc-700/40 bg-zinc-900/30 text-zinc-400'
+              : 'border-rose-500/40 bg-rose-950/30 text-rose-400'
+          }`}>
+            <span className={`w-1.5 h-1.5 rounded-full ${status === 4 ? 'bg-emerald-400' : status === 5 ? 'bg-zinc-400' : 'bg-rose-400'}`} />
             {terminalLabel}
+          </span>
+        ) : isExpiredOffer ? (
+          <span className="inline-flex items-center gap-1.5 px-2 py-0.5 border border-rose-500/40 bg-rose-950/30 text-[10px] font-label-caps uppercase text-rose-400 font-bold">
+            <span className="w-1.5 h-1.5 rounded-full bg-rose-400 live-dot" />
+            Offer Expired (Awaiting Refund)
+          </span>
+        ) : isExpiredDisputeWindow ? (
+          <span className="inline-flex items-center gap-1.5 px-2 py-0.5 border border-rose-500/40 bg-rose-950/30 text-[10px] font-label-caps uppercase text-rose-400 font-bold">
+            <span className="w-1.5 h-1.5 rounded-full bg-rose-400 live-dot" />
+            Dispute Cutoff Passed (Settlement Due)
           </span>
         ) : isDisputed ? (
           <span className="inline-flex items-center gap-1.5 px-2 py-0.5 border border-amber-500/40 bg-amber-950/30 text-[10px] font-label-caps uppercase text-amber-400 font-bold">

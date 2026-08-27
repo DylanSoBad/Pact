@@ -29,6 +29,12 @@ function getStatusStyle(status: string) {
   if (norm === 'OFFERED') {
     return 'text-sky-400 border border-sky-500/30 bg-sky-950/20'
   }
+  if (norm === 'EXPIRED') {
+    return 'text-rose-400 border border-rose-500/40 bg-rose-950/25 font-bold'
+  }
+  if (norm === 'CANCELLED') {
+    return 'text-zinc-400 border border-zinc-700/40 bg-zinc-900/30'
+  }
   return 'text-slate-400 border border-slate-700/40 bg-slate-900/30'
 }
 

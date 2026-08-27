@@ -4,20 +4,24 @@ import { useState, useEffect, useMemo, useCallback } from 'react'
 import Link from 'next/link'
 import TapeLine from '../../components/TapeLine'
 import ActionCenter from '../../components/ActionCenter'
-import { useAccount, useChainId, usePublicClient } from 'wagmi'
+import { useAccount, useChainId, usePublicClient, useWalletClient } from 'wagmi'
 import { useModal } from 'connectkit'
+import { toast } from 'sonner'
 import { fetchPactPage, fetchReputation, PactData } from '../../lib/reads'
 import { USDC_ERC20, EURC, getPactAddress } from '../../lib/arc'
 import { PACT_ABI } from '../../lib/abi'
 import {
-  kindLabel, statusLabel, formatAmount, tokenSymbol,
+  kindLabel, statusLabel, effectiveStatusLabel, formatAmount, tokenSymbol,
   formatTimestamp, truncateAddress
 } from '../../lib/format'
+import TransactionProgress, { type TransactionStage } from '../../components/TransactionProgress'
+import { transactionErrorMessage } from '../../lib/transactionErrors'
 
 export default function MePage() {
   const { address, isConnected } = useAccount()
   const chainId = useChainId()
   const publicClient = usePublicClient()
+  const { data: walletClient } = useWalletClient()
   const protocolAddress = getPactAddress(chainId)
   const { setOpen: openModal } = useModal()
 
@@ -29,6 +33,11 @@ export default function MePage() {
   const [copiedAddr, setCopiedAddr] = useState(false)
   const [nextCursor, setNextCursor] = useState<string | null>(null)
   const [loadingMore, setLoadingMore] = useState(false)
+  const [busyToken, setBusyToken] = useState<string | null>(null)
+  const [txHash, setTxHash] = useState<`0x${string}` | null>(null)
+  const [txStage, setTxStage] = useState<TransactionStage>('idle')
+  const [txLabel, setTxLabel] = useState('')
+  const [txError, setTxError] = useState('')
 
   useEffect(() => {
     document.title = 'PACT · Portfolio & Account'
@@ -91,6 +100,47 @@ export default function MePage() {
     document.addEventListener('visibilitychange', vis)
     return () => { ok = false; clearInterval(iv); document.removeEventListener('visibilitychange', vis) }
   }, [address, loadUserData])
+
+  async function withdrawCredits(token: `0x${string}`) {
+    if (!address || !protocolAddress || !publicClient || !walletClient) {
+      toast.error('Connect an active wallet on Arc Testnet')
+      return
+    }
+    try {
+      const sym = tokenSymbol(token)
+      setBusyToken(token)
+      setTxHash(null)
+      setTxError('')
+      setTxStage('awaiting-signature')
+      setTxLabel(`Withdraw ${sym} escrow credits. Confirm this on-chain transaction in your wallet.`)
+
+      const simulation = await publicClient.simulateContract({
+        account: address,
+        address: protocolAddress,
+        abi: PACT_ABI,
+        functionName: 'withdraw',
+        args: [token],
+      })
+
+      const hash = await walletClient.writeContract(simulation.request)
+      setTxHash(hash)
+      setTxStage('confirming')
+      setTxLabel(`Withdrawal of ${sym} credits is confirming on Arc Testnet.`)
+
+      await publicClient.waitForTransactionReceipt({ hash })
+      setTxStage('success')
+      setTxLabel(`Successfully withdrawn ${sym} credits to your wallet.`)
+      toast.success(`Withdrawn ${sym} credits successfully`)
+      await loadUserData()
+    } catch (error) {
+      const message = transactionErrorMessage(error)
+      setTxStage('error')
+      setTxError(message)
+      toast.error(message)
+    } finally {
+      setBusyToken(null)
+    }
+  }
 
   const copyAddress = () => {
     if (address) {
@@ -287,13 +337,15 @@ export default function MePage() {
             </div>
             <div className="flex flex-wrap items-center gap-2">
               {claimableCredits.map(([tok, val]) => (
-                <Link
+                <button
                   key={tok}
-                  href="/p/1"
-                  className="pact-button-primary min-h-[38px] px-3 text-[10px] font-bold uppercase tracking-wider"
+                  type="button"
+                  disabled={Boolean(busyToken)}
+                  onClick={() => withdrawCredits(tok as `0x${string}`)}
+                  className="pact-button-primary min-h-[38px] px-3 text-[10px] font-bold uppercase tracking-wider disabled:opacity-50"
                 >
                   Withdraw {formatAmount(val)} {tokenSymbol(tok)}
-                </Link>
+                </button>
               ))}
             </div>
           </div>
@@ -398,7 +450,7 @@ export default function MePage() {
                     id: p.id,
                     time: formatTimestamp(p.updatedAt),
                     kind: kindLabel(p.kind),
-                    status: statusLabel(p.status),
+                    status: effectiveStatusLabel(p.status, p.offerExpiry, p.disputeDeadline),
                     amount: amt,
                     address: truncateAddress(p.maker),
                   }}
@@ -422,6 +474,18 @@ export default function MePage() {
           </div>
         )}
       </section>
+
+      <TransactionProgress
+        stage={txStage}
+        label={txLabel}
+        hash={txHash}
+        error={txError}
+        onDismiss={() => {
+          setTxStage('idle')
+          setTxError('')
+          setTxHash(null)
+        }}
+      />
     </div>
   )
 }

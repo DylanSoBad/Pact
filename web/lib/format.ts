@@ -64,6 +64,21 @@ export function formatDate(ts: bigint | number): string {
   return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) + ' ' + formatTimestamp(ts)
 }
 
+export function isOfferExpired(status: number, offerExpiry: bigint, now: bigint): boolean {
+  return status === 0 && now > offerExpiry
+}
+
+export function isDisputeWindowExpired(status: number, disputeDeadline: bigint, now: bigint): boolean {
+  return (status === 1 || status === 2) && now > disputeDeadline
+}
+
+export function effectiveStatusLabel(status: number, offerExpiry?: bigint, disputeDeadline?: bigint, now?: bigint): string {
+  const currentNow = now ?? BigInt(Math.floor(Date.now() / 1000))
+  if (status === 0 && offerExpiry && currentNow > offerExpiry) return 'EXPIRED'
+  if ((status === 1 || status === 2) && disputeDeadline && currentNow > disputeDeadline) return 'EXPIRED'
+  return statusLabel(status)
+}
+
 export function isTerminal(status: number): boolean {
   return status >= 4 // Settled, Cancelled, Expired
 }
@@ -73,3 +88,4 @@ const ZERO_ADDR = '0x0000000000000000000000000000000000000000'
 export function isZeroAddress(addr: string): boolean {
   return !addr || addr === ZERO_ADDR
 }
+

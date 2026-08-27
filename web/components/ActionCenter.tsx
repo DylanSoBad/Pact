@@ -21,69 +21,128 @@ export function actionsFor(pacts: PactData[], address: string, now: bigint): Act
     const isArbiter = pact.arbiter.toLowerCase() === account
     const soon = (deadline: bigint) => deadline > now && deadline - now <= 86_400n
 
-    if (pact.status === 0 && isTaker) {
-      return [{
-        pact,
-        title: 'Verify and accept offer',
-        detail: 'Confirm written terms and lock counterparty collateral to activate agreement.',
-        deadline: pact.offerExpiry,
-        urgent: soon(pact.offerExpiry),
-      }]
+    // 0: OFFERED
+    if (pact.status === 0) {
+      if (isTaker && now <= pact.offerExpiry) {
+        return [{
+          pact,
+          title: 'Verify and accept offer',
+          detail: 'Confirm written terms and lock counterparty collateral to activate agreement.',
+          deadline: pact.offerExpiry,
+          urgent: soon(pact.offerExpiry),
+        }]
+      }
+      if (isMaker && now > pact.offerExpiry) {
+        return [{
+          pact,
+          title: 'Expire unaccepted offer',
+          detail: 'Offer expired without acceptance. Claim maker collateral refund to pull-payment credits.',
+          deadline: pact.offerExpiry,
+          urgent: true,
+        }]
+      }
+      if (!isMaker && now > pact.offerExpiry) {
+        return [{
+          pact,
+          title: 'Offer expired',
+          detail: 'Acceptance window closed. Permissionless settlement available to return funds to maker.',
+          deadline: pact.offerExpiry,
+          urgent: false,
+        }]
+      }
     }
-    if (pact.status === 0 && isMaker && now > pact.offerExpiry) {
-      return [{
-        pact,
-        title: 'Expire unaccepted offer',
-        detail: 'Offer expired without acceptance. Claim maker collateral refund.',
-        deadline: pact.offerExpiry,
-        urgent: true,
-      }]
+
+    // 1: ACTIVE
+    if (pact.status === 1) {
+      if (isTaker && now <= pact.performanceDeadline) {
+        return [{
+          pact,
+          title: 'Submit fulfillment proof',
+          detail: 'Anchor delivery or milestone proof before performance window closes.',
+          deadline: pact.performanceDeadline,
+          urgent: soon(pact.performanceDeadline),
+        }]
+      }
+      if (isMaker && now <= pact.disputeDeadline) {
+        const pastPerf = now > pact.performanceDeadline
+        return [{
+          pact,
+          title: pastPerf ? 'Review missed performance cutoff' : 'Review active commitment',
+          detail: pastPerf
+            ? 'Performance window elapsed without proof. Open dispute before cutoff or release collateral.'
+            : 'Release collateral to settle, or open dispute before cutoff.',
+          deadline: pact.disputeDeadline,
+          urgent: soon(pact.disputeDeadline),
+        }]
+      }
+      if (now > pact.disputeDeadline) {
+        return [{
+          pact,
+          title: isMaker ? 'Claim full collateral refund (Deadline settlement)' : 'Dispute window closed',
+          detail: isMaker
+            ? 'Dispute window closed with no proof submitted. Settle pact to claim 100% collateral refund.'
+            : 'Performance and dispute window elapsed without delivery proof. Funds revert to maker.',
+          deadline: pact.disputeDeadline,
+          urgent: true,
+        }]
+      }
     }
-    if (pact.status === 1 && isTaker && now <= pact.performanceDeadline) {
-      return [{
-        pact,
-        title: 'Submit fulfillment proof',
-        detail: 'Anchor delivery or milestone proof before performance window closes.',
-        deadline: pact.performanceDeadline,
-        urgent: soon(pact.performanceDeadline),
-      }]
+
+    // 2: PROOF SUBMITTED
+    if (pact.status === 2) {
+      if (isMaker && now <= pact.disputeDeadline) {
+        return [{
+          pact,
+          title: 'Review proof and settle',
+          detail: 'Proof submitted by counterparty. Release collateral to settle or open dispute before cutoff.',
+          deadline: pact.disputeDeadline,
+          urgent: soon(pact.disputeDeadline),
+        }]
+      }
+      if (isTaker && now <= pact.disputeDeadline) {
+        return [{
+          pact,
+          title: 'Proof submitted (Awaiting review)',
+          detail: 'Proof anchored on-chain. Maker has until dispute cutoff to release collateral or dispute.',
+          deadline: pact.disputeDeadline,
+          urgent: soon(pact.disputeDeadline),
+        }]
+      }
+      if (now > pact.disputeDeadline) {
+        return [{
+          pact,
+          title: isTaker ? 'Claim collateral & payout (Deadline settlement)' : 'Execute final settlement',
+          detail: isTaker
+            ? 'Dispute window closed with proof unchallenged. Settle pact to claim 100% collateral and payment.'
+            : 'Dispute window closed with proof unchallenged. Finalize settlement to release funds to counterparty.',
+          deadline: pact.disputeDeadline,
+          urgent: true,
+        }]
+      }
     }
-    if ((pact.status === 1 || pact.status === 2) && isMaker && now <= pact.disputeDeadline) {
-      return [{
-        pact,
-        title: pact.status === 2 ? 'Review proof and settle' : 'Review active commitment',
-        detail: 'Release collateral to settle, or open dispute before cutoff.',
-        deadline: pact.disputeDeadline,
-        urgent: soon(pact.disputeDeadline),
-      }]
+
+    // 3: DISPUTED
+    if (pact.status === 3) {
+      if (isArbiter) {
+        return [{
+          pact,
+          title: 'Review contested pact',
+          detail: 'Both parties bonded. Arbiter ruling or timeout action is required.',
+          deadline: pact.disputeDeadline,
+          urgent: true,
+        }]
+      }
+      if (isMaker || isTaker) {
+        return [{
+          pact,
+          title: 'Respond to active dispute',
+          detail: 'Dispute active. Review response deadlines, counter-bonds, and ruling status.',
+          deadline: pact.disputeDeadline,
+          urgent: true,
+        }]
+      }
     }
-    if ((pact.status === 1 || pact.status === 2) && (isMaker || isTaker) && now > pact.disputeDeadline) {
-      return [{
-        pact,
-        title: 'Execute deadline settlement',
-        detail: 'Dispute window closed. Settle and release funds.',
-        deadline: pact.disputeDeadline,
-        urgent: true,
-      }]
-    }
-    if (pact.status === 3 && isArbiter) {
-      return [{
-        pact,
-        title: 'Review contested pact',
-        detail: 'Both parties bonded. Arbiter ruling or timeout action is required.',
-        deadline: pact.disputeDeadline,
-        urgent: true,
-      }]
-    }
-    if (pact.status === 3 && (isMaker || isTaker)) {
-      return [{
-        pact,
-        title: 'Respond to active dispute',
-        detail: 'Dispute active. Review response deadlines, counter-bonds, and ruling status.',
-        deadline: pact.disputeDeadline,
-        urgent: true,
-      }]
-    }
+
     return []
   }).sort((a, b) => (a.deadline < b.deadline ? -1 : a.deadline > b.deadline ? 1 : a.pact.id - b.pact.id))
 }

@@ -22,8 +22,25 @@ describe('Action Center decisions', () => {
     expect(actionsFor([pact(0)], taker, 100n)[0]?.title).toBe('Verify and accept offer')
   })
 
-  it('shows deadline settlement after the dispute window', () => {
-    expect(actionsFor([pact(2)], maker, 401n)[0]?.title).toBe('Execute deadline settlement')
+  it('prevents counterparty from accepting an expired offer and prompts maker to expire it', () => {
+    // Past offerExpiry (200n)
+    const takerActions = actionsFor([pact(0)], taker, 201n)
+    expect(takerActions[0]?.title).toBe('Offer expired')
+
+    const makerActions = actionsFor([pact(0)], maker, 201n)
+    expect(makerActions[0]?.title).toBe('Expire unaccepted offer')
+  })
+
+  it('shows claim payout to taker when proof was submitted and dispute window elapsed', () => {
+    expect(actionsFor([pact(2)], taker, 401n)[0]?.title).toBe('Claim collateral & payout (Deadline settlement)')
+  })
+
+  it('shows execute final settlement to maker when proof was submitted and dispute window elapsed', () => {
+    expect(actionsFor([pact(2)], maker, 401n)[0]?.title).toBe('Execute final settlement')
+  })
+
+  it('shows claim full collateral refund to maker when no proof was submitted and dispute window elapsed', () => {
+    expect(actionsFor([pact(1)], maker, 401n)[0]?.title).toBe('Claim full collateral refund (Deadline settlement)')
   })
 
   it('routes a disputed pact to its arbiter', () => {

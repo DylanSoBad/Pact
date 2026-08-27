@@ -32,6 +32,7 @@ struct Pact {
     uint128 amountTaker;
     uint128 collateralMaker;
     uint128 collateralTaker;
+    uint128 notionalUSDC;
     uint128 bondAmount;
     uint128 arbiterFeeCap;
     uint64 offerExpiry;
