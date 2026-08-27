@@ -439,28 +439,46 @@ export default function PactDetailPage({ params }: { params: Promise<{ id: strin
               Committed Deadlines & Cutoffs
             </h2>
           </div>
-          {!isTerminal(pact.status) && (
-            <Countdown deadlineTs={pact.status === 0 ? pact.offerExpiry : pact.disputeDeadline} />
-          )}
         </div>
 
         <div className="grid gap-3 sm:grid-cols-3 font-code-hash text-[12px]">
-          <div className="p-3 border border-outline-hairline bg-[#07080a]">
-            <span className="text-[10px] font-label-caps uppercase text-text-muted block">Offer Expiry</span>
-            <span className="text-white font-bold block mt-1">{formatDate(pact.offerExpiry)}</span>
-            <span className="text-[10px] text-text-dim mt-0.5 block">Acceptance deadline</span>
+          <div className="p-3 border border-outline-hairline bg-[#07080a] flex flex-col justify-between">
+            <div>
+              <span className="text-[10px] font-label-caps uppercase text-text-muted block">Offer Expiry</span>
+              <span className="text-white font-bold block mt-1">{formatDate(pact.offerExpiry)}</span>
+              <span className="text-[10px] text-text-dim mt-0.5 block">Acceptance deadline</span>
+            </div>
+            {pact.status === 0 && (
+              <div className="mt-2 pt-2 border-t border-outline-hairline/40">
+                <Countdown deadlineTs={pact.offerExpiry} compact showLabel={false} />
+              </div>
+            )}
           </div>
 
-          <div className="p-3 border border-outline-hairline bg-[#07080a]">
-            <span className="text-[10px] font-label-caps uppercase text-text-muted block">Performance Deadline</span>
-            <span className="text-white font-bold block mt-1">{formatDate(pact.performanceDeadline)}</span>
-            <span className="text-[10px] text-text-dim mt-0.5 block">Delivery / work proof window</span>
+          <div className="p-3 border border-outline-hairline bg-[#07080a] flex flex-col justify-between">
+            <div>
+              <span className="text-[10px] font-label-caps uppercase text-text-muted block">Performance Deadline</span>
+              <span className="text-white font-bold block mt-1">{formatDate(pact.performanceDeadline)}</span>
+              <span className="text-[10px] text-text-dim mt-0.5 block">Delivery / work proof window</span>
+            </div>
+            {pact.status === 1 && (
+              <div className="mt-2 pt-2 border-t border-outline-hairline/40">
+                <Countdown deadlineTs={pact.performanceDeadline} compact showLabel={false} />
+              </div>
+            )}
           </div>
 
-          <div className="p-3 border border-outline-hairline bg-[#07080a]">
-            <span className="text-[10px] font-label-caps uppercase text-text-muted block">Dispute Window Cutoff</span>
-            <span className="text-white font-bold block mt-1">{formatDate(pact.disputeDeadline)}</span>
-            <span className="text-[10px] text-text-dim mt-0.5 block">Final settlement cutoff</span>
+          <div className="p-3 border border-outline-hairline bg-[#07080a] flex flex-col justify-between">
+            <div>
+              <span className="text-[10px] font-label-caps uppercase text-text-muted block">Dispute Window Cutoff</span>
+              <span className="text-white font-bold block mt-1">{formatDate(pact.disputeDeadline)}</span>
+              <span className="text-[10px] text-text-dim mt-0.5 block">Final settlement cutoff</span>
+            </div>
+            {(pact.status === 1 || pact.status === 2 || pact.status === 3) && (
+              <div className="mt-2 pt-2 border-t border-outline-hairline/40">
+                <Countdown deadlineTs={pact.disputeDeadline} compact showLabel={false} />
+              </div>
+            )}
           </div>
         </div>
       </section>
@@ -503,15 +521,21 @@ export default function PactDetailPage({ params }: { params: Promise<{ id: strin
         </div>
       </section>
 
-      {/* Active Dispute Banner (if disputed) */}
+      {/* Active Dispute Information Box */}
       {dispute && (
-        <section className="border border-amber-500/60 bg-amber-950/20 p-5 animate-enter">
-          <div className="flex items-center gap-2 mb-3">
-            <span className="material-symbols-outlined text-amber-400 text-[20px]">gavel</span>
-            <h2 className="font-headline-mono text-[14px] font-bold uppercase tracking-wider text-amber-300">
-              Dispute Active & Bonded
-            </h2>
+        <section aria-label="Contested Dispute Details" className="border border-amber-500/40 bg-[#0c0f12] p-5 space-y-3 animate-enter">
+          <div className="flex items-center justify-between pb-3 border-b border-outline-hairline">
+            <div className="flex items-center gap-2">
+              <span className="material-symbols-outlined text-amber-400 text-[18px]">gavel</span>
+              <h2 className="font-headline-mono text-[13px] font-bold uppercase tracking-wider text-white">
+                Contested Dispute Status
+              </h2>
+            </div>
+            <span className="px-2 py-0.5 border border-amber-500/40 bg-amber-950/20 text-amber-400 text-[10px] font-bold uppercase font-label-caps">
+              DISPUTED
+            </span>
           </div>
+
           <div className="grid gap-3 sm:grid-cols-2 text-[12px] font-code-hash text-text-muted">
             <div className="p-3 bg-[#07080a] border border-outline-hairline">
               <span className="text-[10px] uppercase text-text-dim block">Dispute Opener</span>
@@ -521,13 +545,27 @@ export default function PactDetailPage({ params }: { params: Promise<{ id: strin
               <span className="text-[10px] uppercase text-text-dim block">Claim Type</span>
               <span className="text-amber-400 font-bold">{dispute.claim === 1 ? 'Maker Claim (Refund All)' : 'Taker Claim (Release All)'}</span>
             </div>
-            <div className="p-3 bg-[#07080a] border border-outline-hairline">
-              <span className="text-[10px] uppercase text-text-dim block">Response Deadline</span>
-              <span className="text-white">{formatDate(dispute.responseDeadline)}</span>
+            <div className="p-3 bg-[#07080a] border border-outline-hairline flex flex-col justify-between">
+              <div>
+                <span className="text-[10px] uppercase text-text-dim block">Response Deadline</span>
+                <span className="text-white block mt-0.5">{formatDate(dispute.responseDeadline)}</span>
+              </div>
+              {dispute.arbiterDeadline === 0n && (
+                <div className="mt-2 pt-2 border-t border-outline-hairline/40">
+                  <Countdown deadlineTs={dispute.responseDeadline} compact showLabel={false} />
+                </div>
+              )}
             </div>
-            <div className="p-3 bg-[#07080a] border border-outline-hairline">
-              <span className="text-[10px] uppercase text-text-dim block">Arbiter Ruling Deadline</span>
-              <span className="text-white">{dispute.arbiterDeadline ? formatDate(dispute.arbiterDeadline) : 'Awaiting Counterparty Bond'}</span>
+            <div className="p-3 bg-[#07080a] border border-outline-hairline flex flex-col justify-between">
+              <div>
+                <span className="text-[10px] uppercase text-text-dim block">Arbiter Ruling Deadline</span>
+                <span className="text-white block mt-0.5">{dispute.arbiterDeadline ? formatDate(dispute.arbiterDeadline) : 'Awaiting Counterparty Bond'}</span>
+              </div>
+              {dispute.arbiterDeadline > 0n && (
+                <div className="mt-2 pt-2 border-t border-outline-hairline/40">
+                  <Countdown deadlineTs={dispute.arbiterDeadline} compact showLabel={false} />
+                </div>
+              )}
             </div>
           </div>
         </section>

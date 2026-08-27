@@ -1,24 +1,29 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState } from 'react'
 import { useBlockNumber } from 'wagmi'
 import { arcTestnet } from '../lib/arc'
 import { truncateAddress } from '../lib/format'
-
 import { getPactAddress } from '../lib/arc'
+import { useCurrentTime } from '../hooks/useCurrentTime'
 
 const PACT_ADDRESS = getPactAddress()
 
-export default function TrustStrip({ lastUpdated, rpcError, onRetry }: { lastUpdated?: number; rpcError?: boolean; onRetry?: () => void }) {
+export default function TrustStrip({
+  lastUpdated,
+  rpcError,
+  onRetry,
+}: {
+  lastUpdated?: number
+  rpcError?: boolean
+  onRetry?: () => void
+}) {
   const { data: blockNumber, isError: blockError } = useBlockNumber({ watch: true, chainId: arcTestnet.id })
-  const [secondsAgo, setSecondsAgo] = useState(0)
+  const currentTime = useCurrentTime()
   const [copied, setCopied] = useState(false)
 
-  useEffect(() => {
-    setSecondsAgo(0)
-    const t = setInterval(() => setSecondsAgo(p => p + 1), 1000)
-    return () => clearInterval(t)
-  }, [lastUpdated, blockNumber])
+  const updateRefTime = lastUpdated ? Math.floor(lastUpdated / 1000) : currentTime
+  const secondsAgo = Math.max(0, currentTime - updateRefTime)
 
   const handleCopy = () => {
     if (PACT_ADDRESS) {
@@ -32,24 +37,38 @@ export default function TrustStrip({ lastUpdated, rpcError, onRetry }: { lastUpd
   const configured = Boolean(PACT_ADDRESS)
 
   return (
-    <div className="flex items-center gap-3 text-[12px] text-zinc-600 mb-8 font-mono">
-      <span className={`w-[8px] h-[8px] ${hasError ? 'bg-amber-500' : 'bg-[#c8f542] animate-pulse-soft'}`} />
-      <span className="uppercase tracking-widest">{arcTestnet.name}</span>
+    <div className="flex items-center gap-3 text-[12px] text-zinc-500 mb-6 font-code-hash border-b border-outline-hairline/40 pb-3">
+      <span
+        className={`w-2 h-2 rounded-full ${hasError ? 'bg-amber-500' : 'bg-primary-fixed live-dot'}`}
+        aria-hidden="true"
+      />
+      <span className="font-label-caps uppercase tracking-wider text-text-muted font-bold">
+        {arcTestnet.name}
+      </span>
       <span className="text-zinc-700">·</span>
-      <span>{arcTestnet.id}</span>
+      <span className="text-text-dim">Chain ID {arcTestnet.id}</span>
       {configured && (
         <>
           <span className="text-zinc-700">·</span>
-          <button onClick={handleCopy} className="text-zinc-500 hover:text-zinc-300 transition-colors cursor-pointer">
-            {copied ? 'copied' : truncateAddress(PACT_ADDRESS!)}
+          <button
+            type="button"
+            onClick={handleCopy}
+            title="Click to copy PACT contract address"
+            className="text-zinc-400 hover:text-white transition-colors cursor-pointer"
+          >
+            Contract: {copied ? <span className="text-primary-fixed font-bold">Copied!</span> : truncateAddress(PACT_ADDRESS!)}
           </button>
         </>
       )}
-      <span className="ml-auto text-zinc-700">
+      <span className="ml-auto text-zinc-500 text-[11px]">
         {hasError ? (
-          <button onClick={onRetry} className="text-amber-500 hover:text-amber-400 cursor-pointer">reconnect</button>
+          <button type="button" onClick={onRetry} className="text-amber-400 hover:text-amber-300 underline cursor-pointer">
+            Reconnect RPC
+          </button>
         ) : (
-          `${secondsAgo}s ago`
+          <span>
+            {blockNumber ? `Block #${blockNumber.toString()} · ` : ''}Synced {secondsAgo}s ago
+          </span>
         )}
       </span>
     </div>

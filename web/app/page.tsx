@@ -216,9 +216,9 @@ function TapeDashboard() {
             title={sseConnected ? 'Real-time SSE Stream Connected' : 'Polling RPC Fallback'}
             aria-hidden="true"
           />
-          <span>Arc Block:</span>
-          <span className="text-white font-bold">{wagmiBlockNumber ? wagmiBlockNumber.toString() : '—'}</span>
-          <span className="text-text-dim">({secondsAgo}s ago)</span>
+          <span className="text-text-dim">Arc Testnet:</span>
+          <span className="text-white font-bold">#{wagmiBlockNumber ? wagmiBlockNumber.toString() : '—'}</span>
+          <span className="text-text-dim">· Updated {secondsAgo}s ago</span>
         </div>
       </div>
 
@@ -267,6 +267,14 @@ function TapeDashboard() {
                 ? `${formatAmount(p.amountMaker)} ${tokenSymbol(p.tokenMaker)} ↔ ${formatAmount(p.amountTaker)} ${tokenSymbol(p.tokenTaker)}`
                 : `${formatAmount(p.amountMaker)} ${tokenSymbol(p.tokenMaker)}`
 
+              const activeDeadline = p.status === 0
+                ? p.offerExpiry
+                : p.status === 1
+                ? p.performanceDeadline
+                : p.status === 2 || p.status === 3
+                ? p.disputeDeadline
+                : undefined
+
               return (
                 <TapeLine
                   key={p.id}
@@ -277,6 +285,7 @@ function TapeDashboard() {
                     status: effectiveStatusLabel(p.status, p.offerExpiry, p.disputeDeadline),
                     amount: amt,
                     address: truncateAddress(p.maker),
+                    deadlineTs: activeDeadline,
                   }}
                 />
               )

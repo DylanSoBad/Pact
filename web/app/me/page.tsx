@@ -443,6 +443,14 @@ export default function MePage() {
                 ? `${formatAmount(p.amountMaker)} ${tokenSymbol(p.tokenMaker)} ↔ ${formatAmount(p.amountTaker)} ${tokenSymbol(p.tokenTaker)}`
                 : `${formatAmount(p.amountMaker)} ${tokenSymbol(p.tokenMaker)}`
 
+              const activeDeadline = p.status === 0
+                ? p.offerExpiry
+                : p.status === 1
+                ? p.performanceDeadline
+                : p.status === 2 || p.status === 3
+                ? p.disputeDeadline
+                : undefined
+
               return (
                 <TapeLine
                   key={p.id}
@@ -453,6 +461,7 @@ export default function MePage() {
                     status: effectiveStatusLabel(p.status, p.offerExpiry, p.disputeDeadline),
                     amount: amt,
                     address: truncateAddress(p.maker),
+                    deadlineTs: activeDeadline,
                   }}
                 />
               )

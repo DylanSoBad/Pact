@@ -1,6 +1,8 @@
 'use client'
 
 import Link from 'next/link'
+import { useCurrentTime } from '../hooks/useCurrentTime'
+import { getDeadlineStatus } from '../lib/countdown'
 
 export interface TapeLinePactProps {
   id: number
@@ -10,6 +12,8 @@ export interface TapeLinePactProps {
   amount: string
   address: string
   blurSize?: boolean
+  deadlineTs?: bigint | number
+  deadlineLabel?: string
 }
 
 function getStatusStyle(status: string) {
@@ -39,10 +43,18 @@ function getStatusStyle(status: string) {
 }
 
 export default function TapeLine({ pact }: { pact: TapeLinePactProps }) {
+  const currentTime = useCurrentTime()
   const normStatus = pact.status.toUpperCase()
   const isTerminal = ['SETTLED', 'EXPIRED', 'CANCELLED'].includes(normStatus)
   const isSettled = normStatus === 'SETTLED'
   const isDisputed = normStatus === 'DISPUTED'
+
+  const deadlineStatus = pact.deadlineTs && !isTerminal
+    ? getDeadlineStatus(pact.deadlineTs, currentTime)
+    : null
+
+  const isUrgent = deadlineStatus?.isUrgent || false
+  const isPast = deadlineStatus?.isExpired || normStatus === 'EXPIRED'
 
   const amountColor = isSettled
     ? 'text-emerald-400 font-bold'
@@ -52,22 +64,40 @@ export default function TapeLine({ pact }: { pact: TapeLinePactProps }) {
     ? 'text-text-dim line-through opacity-60'
     : 'text-on-surface font-bold'
 
+  // Row ambient border when closing soon or expired
+  const rowHighlight = isUrgent
+    ? 'border-orange-500/40 bg-orange-950/10 hover:bg-orange-950/20'
+    : isPast && !isSettled
+    ? 'border-rose-500/30 bg-rose-950/5 hover:bg-rose-950/15'
+    : 'border-outline-hairline/60 bg-transparent hover:bg-surface-container/60'
+
   return (
     <Link
       href={`/p/${pact.id.toString()}`}
-      aria-label={`Pact #${pact.id}, kind ${pact.kind}, amount ${pact.amount}, status ${pact.status}`}
-      className="tape-row block border-b border-outline-hairline/60 bg-transparent transition-colors hover:bg-surface-container/60 focus-visible:ring-2 focus-visible:ring-primary-fixed"
+      aria-label={`Pact #${pact.id}, kind ${pact.kind}, amount ${pact.amount}, status ${pact.status}${deadlineStatus ? `, deadline ${deadlineStatus.compactFormatted}` : ''}`}
+      className={`tape-row block border-b transition-colors focus-visible:ring-2 focus-visible:ring-primary-fixed ${rowHighlight}`}
     >
       {/* Desktop 5-Column Monospace Row (>= md) */}
       <div className="hidden md:grid grid-cols-12 gap-4 px-4 py-3 items-center font-code-hash text-[12px]">
-        {/* Col 1: Time & ID (3 cols) */}
-        <div className="col-span-3 flex items-center gap-3">
-          <span className="font-headline-mono text-[13px] font-bold text-white tracking-wider">
+        {/* Col 1: Time, Countdown & ID (3 cols) */}
+        <div className="col-span-3 flex items-center gap-2.5">
+          <span className="font-headline-mono text-[13px] font-bold text-white tracking-wider shrink-0">
             #{String(pact.id).padStart(4, '0')}
           </span>
-          <span className="text-[11px] text-text-dim">
-            {pact.time}
-          </span>
+
+          {deadlineStatus ? (
+            <span
+              className={`inline-flex items-center gap-1 px-1.5 py-0.5 text-[10px] font-bold tabular-nums rounded-sm ${deadlineStatus.badgeStyle}`}
+              title={deadlineStatus.ariaLabel}
+            >
+              <span aria-hidden="true">{deadlineStatus.isExpired ? '⌛' : deadlineStatus.isUrgent ? '🔥' : '⏱'}</span>
+              <span>{deadlineStatus.compactFormatted}</span>
+            </span>
+          ) : (
+            <span className="text-[11px] text-text-dim truncate">
+              {pact.time}
+            </span>
+          )}
         </div>
 
         {/* Col 2: Agreement Kind (2 cols) */}
@@ -102,18 +132,24 @@ export default function TapeLine({ pact }: { pact: TapeLinePactProps }) {
       {/* Mobile Structured 2-Row Card (< md) */}
       <div className="md:hidden flex flex-col gap-2 p-3 font-code-hash">
         <div className="flex items-center justify-between gap-2">
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 flex-wrap">
             <span className="font-headline-mono text-[14px] font-bold text-white">
               #{String(pact.id).padStart(4, '0')}
             </span>
             <span className="px-1.5 py-0.5 border border-outline-border bg-[#0c0f12] text-[9px] font-label-caps uppercase tracking-wider text-text-muted">
               {pact.kind}
             </span>
-            <span className="text-[10px] text-text-dim">
-              {pact.time}
-            </span>
+            {deadlineStatus ? (
+              <span className={`inline-flex items-center gap-1 px-1.5 py-0.5 text-[9px] font-bold tabular-nums ${deadlineStatus.badgeStyle}`}>
+                <span>{deadlineStatus.compactFormatted}</span>
+              </span>
+            ) : (
+              <span className="text-[10px] text-text-dim">
+                {pact.time}
+              </span>
+            )}
           </div>
-          <div className="text-right">
+          <div className="text-right shrink-0">
             <span className={`${amountColor} text-[13px]`}>
               {pact.amount}
             </span>
@@ -124,7 +160,7 @@ export default function TapeLine({ pact }: { pact: TapeLinePactProps }) {
           <span className={`px-2 py-0.5 text-[9px] font-label-caps uppercase tracking-wider ${getStatusStyle(pact.status)}`}>
             {pact.status}
           </span>
-          <span className="text-[11px] text-text-dim">
+          <span className="text-[11px] text-text-dim truncate max-w-[180px]">
             Maker: <span className="text-text-muted">{pact.address}</span>
           </span>
         </div>

@@ -1,54 +1,57 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useCurrentTime } from '../hooks/useCurrentTime'
+import { getDeadlineStatus } from '../lib/countdown'
 
-export default function Countdown({ deadlineTs }: { deadlineTs: bigint }) {
-  const [timeLeft, setTimeLeft] = useState('')
-  const [isPast, setIsPast] = useState(false)
-  const [isUrgent, setIsUrgent] = useState(false)
+interface CountdownProps {
+  deadlineTs: bigint | number
+  compact?: boolean
+  showIcon?: boolean
+  showLabel?: boolean
+  className?: string
+}
 
-  useEffect(() => {
-    const update = () => {
-      const now = Math.floor(Date.now() / 1000)
-      const diff = Number(deadlineTs) - now
-
-      if (diff <= 0) {
-        setTimeLeft('EXPIRED / READY TO SETTLE')
-        setIsPast(true)
-        setIsUrgent(false)
-        return
-      }
-
-      setIsPast(false)
-      setIsUrgent(diff <= 86400) // Under 24h
-
-      const days = Math.floor(diff / 86400)
-      const h = Math.floor((diff % 86400) / 3600)
-      const m = Math.floor((diff % 3600) / 60)
-      const s = diff % 60
-
-      const dStr = days > 0 ? `${days}d ` : ''
-      const hStr = h > 0 || days > 0 ? `${h}h ` : ''
-      setTimeLeft(`${dStr}${hStr}${m}m ${s}s`)
-    }
-
-    update()
-    const int = setInterval(update, 1000)
-    return () => clearInterval(int)
-  }, [deadlineTs])
+/**
+ * Standardized 4-Tier Countdown Component
+ *
+ * Visual tiers:
+ * - > 7 days: Emerald Green (text-emerald-400)
+ * - 1 to 7 days: Amber Yellow (text-amber-300)
+ * - < 24 hours: Urgent Orange (text-orange-400 with pulsing indicator)
+ * - Expired: Rose Red (text-rose-400)
+ */
+export default function Countdown({
+  deadlineTs,
+  compact = false,
+  showIcon = true,
+  showLabel = true,
+  className = '',
+}: CountdownProps) {
+  const currentTime = useCurrentTime()
+  const status = getDeadlineStatus(deadlineTs, currentTime)
 
   return (
-    <div className="flex items-center gap-2 font-code-hash text-[12px]">
-      <span className="text-text-muted">Countdown:</span>
-      <span className={`font-bold tabular-nums ${
-        isPast
-          ? 'text-rose-400'
-          : isUrgent
-          ? 'text-amber-400'
-          : 'text-primary-fixed'
-      }`}>
-        {timeLeft}
-      </span>
+    <div
+      className={`inline-flex items-center gap-1.5 font-code-hash text-[12px] ${className}`}
+      aria-label={status.ariaLabel}
+      title={status.ariaLabel}
+    >
+      {showLabel && (
+        <span className="text-text-muted text-[11px] font-label-caps uppercase tracking-wider">
+          {status.isExpired ? 'Status:' : 'Time Left:'}
+        </span>
+      )}
+
+      <div className={`inline-flex items-center gap-1 px-2 py-0.5 text-[11px] font-bold tabular-nums transition-colors ${status.badgeStyle}`}>
+        {showIcon && (
+          <span className="text-[12px] leading-none" aria-hidden="true">
+            {status.isExpired ? '⌛' : status.isUrgent ? '🔥' : '⏱'}
+          </span>
+        )}
+        <span>
+          {compact ? status.compactFormatted : status.fullFormatted}
+        </span>
+      </div>
     </div>
   )
 }

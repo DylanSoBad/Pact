@@ -147,69 +147,77 @@ export function actionsFor(pacts: PactData[], address: string, now: bigint): Act
   }).sort((a, b) => (a.deadline < b.deadline ? -1 : a.deadline > b.deadline ? 1 : a.pact.id - b.pact.id))
 }
 
-export default function ActionCenter({ pacts, address }: { pacts: PactData[]; address: string }) {
-  const now = BigInt(Math.floor(Date.now() / 1000))
-  const actions = actionsFor(pacts, address, now)
+import { useCurrentTime } from '../hooks/useCurrentTime'
+import { getDeadlineStatus } from '../lib/countdown'
+
+export default function ActionCenter({ pacts, address }: { pacts: PactData[]; address?: string }) {
+  const currentTime = useCurrentTime()
+  const actions = actionsFor(pacts, address ?? '', BigInt(currentTime))
 
   return (
-    <section aria-labelledby="action-center-title" className="mb-6 border border-primary-fixed/30 bg-[#0c0f12] p-4 sm:p-5">
-      <div className="flex items-center justify-between gap-3 mb-4 pb-3 border-b border-outline-hairline">
-        <div className="flex items-center gap-2.5">
-          <span className="material-symbols-outlined text-[20px] text-primary-fixed" aria-hidden="true">
-            task_alt
-          </span>
-          <div>
-            <h2 id="action-center-title" className="font-headline-mono text-[14px] font-bold uppercase tracking-wider text-white">
-              Action Center
-            </h2>
-            <p className="text-[11px] text-text-muted">
-              Commitments requiring signature, proof verification, or settlement from this wallet.
-            </p>
-          </div>
+    <section aria-label="Action Center" className="border border-outline-border bg-[#0c0f12] p-5 animate-enter">
+      <div className="flex items-center justify-between pb-3 border-b border-outline-hairline mb-4">
+        <div className="flex items-center gap-2">
+          <span className="material-symbols-outlined text-[18px] text-primary-fixed">pending_actions</span>
+          <h2 className="font-headline-mono text-[13px] font-bold uppercase tracking-wider text-white">
+            Action Center
+          </h2>
         </div>
-        <span className="inline-flex items-center px-2.5 py-1 border border-outline-border bg-[#12161b] font-label-caps text-[10px] font-bold uppercase tracking-wider text-primary-fixed">
-          {actions.length} {actions.length === 1 ? 'Action' : 'Actions'}
+        <span className="text-[11px] font-code-hash text-text-dim">
+          {actions.length} {actions.length === 1 ? 'Action Required' : 'Actions Required'}
         </span>
       </div>
 
       {actions.length === 0 ? (
-        <div className="p-4 border border-outline-hairline bg-[#07080a] text-[12px] text-text-muted flex items-center gap-2 font-code-hash">
-          <span className="text-emerald-400">✓</span>
-          <span>No pending actions required from this wallet right now. All commitments are up to date.</span>
+        <div className="p-4 border border-outline-hairline bg-[#07080a] text-center font-code-hash text-[12px] text-text-dim">
+          No pending actions required. You are fully up-to-date across all active pacts.
         </div>
       ) : (
         <div className="grid gap-3 sm:grid-cols-2">
-          {actions.map((action) => (
-            <Link
-              key={`${action.pact.id}-${action.title}`}
-              href={`/p/${action.pact.id}`}
-              className="group flex flex-col justify-between border border-outline-border bg-[#07080a] p-4 transition-colors hover:border-primary-fixed focus-visible:ring-2 focus-visible:ring-primary-fixed"
-            >
-              <div>
-                <div className="flex items-start justify-between gap-2">
-                  <span className="font-headline-mono text-[13px] font-bold text-white group-hover:text-primary-fixed transition-colors">
-                    {action.title}
+          {actions.map((action) => {
+            const deadlineStatus = getDeadlineStatus(action.deadline, currentTime)
+            const isCardUrgent = action.urgent || deadlineStatus.isUrgent
+            const isCardPast = deadlineStatus.isExpired
+
+            return (
+              <Link
+                key={`${action.pact.id}-${action.title}`}
+                href={`/p/${action.pact.id}`}
+                className={`group flex flex-col justify-between border p-4 transition-colors focus-visible:ring-2 focus-visible:ring-primary-fixed ${
+                  isCardUrgent
+                    ? 'border-orange-500/40 bg-orange-950/15 hover:border-orange-400'
+                    : isCardPast
+                    ? 'border-rose-500/40 bg-rose-950/15 hover:border-rose-400'
+                    : 'border-outline-border bg-[#07080a] hover:border-primary-fixed'
+                }`}
+              >
+                <div>
+                  <div className="flex items-start justify-between gap-2">
+                    <span className="font-headline-mono text-[13px] font-bold text-white group-hover:text-primary-fixed transition-colors">
+                      {action.title}
+                    </span>
+                    <span className={`px-2 py-0.5 font-label-caps text-[9px] uppercase tracking-wider font-bold shrink-0 ${deadlineStatus.badgeStyle}`}>
+                      {isCardPast ? 'EXPIRED' : isCardUrgent ? 'URGENT' : 'PENDING'}
+                    </span>
+                  </div>
+                  <p className="mt-2 text-[12px] leading-5 text-text-muted font-body-sans">
+                    <strong className="text-white font-code-hash">#{String(action.pact.id).padStart(4, '0')}</strong> · {action.detail}
+                  </p>
+                </div>
+                <div className="mt-3 pt-2 border-t border-outline-hairline/60 flex items-center justify-between text-[11px] font-code-hash text-text-dim flex-wrap gap-2">
+                  <span className="flex items-center gap-1.5">
+                    <span className={`font-bold tabular-nums ${deadlineStatus.textColor}`}>
+                      {isCardPast ? '⌛ EXPIRED' : `⏱ ${deadlineStatus.compactFormatted}`}
+                    </span>
+                    <span className="text-text-dim">· Cutoff: {formatDate(action.deadline)}</span>
                   </span>
-                  <span className={`px-2 py-0.5 font-label-caps text-[9px] uppercase tracking-wider font-bold shrink-0 ${
-                    action.urgent
-                      ? 'border border-status-error/40 bg-status-error/10 text-status-error'
-                      : 'border border-primary-fixed/40 bg-primary-fixed/10 text-primary-fixed'
-                  }`}>
-                    {action.urgent ? 'URGENT' : 'PENDING'}
+                  <span className="text-primary-fixed group-hover:translate-x-0.5 transition-transform font-bold shrink-0">
+                    Open Pact →
                   </span>
                 </div>
-                <p className="mt-2 text-[12px] leading-5 text-text-muted font-body-sans">
-                  <strong className="text-white font-code-hash">#{String(action.pact.id).padStart(4, '0')}</strong> · {action.detail}
-                </p>
-              </div>
-              <div className="mt-3 pt-2 border-t border-outline-hairline/60 flex items-center justify-between text-[11px] font-code-hash text-text-dim">
-                <span>Cutoff: {formatDate(action.deadline)}</span>
-                <span className="text-primary-fixed group-hover:translate-x-0.5 transition-transform font-bold">
-                  Open Pact →
-                </span>
-              </div>
-            </Link>
-          ))}
+              </Link>
+            )
+          })}
         </div>
       )}
     </section>

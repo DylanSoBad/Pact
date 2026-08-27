@@ -1,5 +1,7 @@
 'use client'
 
+import { useCurrentTime } from '../hooks/useCurrentTime'
+
 export interface PactStateMachineProps {
   status: number
   offerExpiry?: bigint
@@ -15,7 +17,8 @@ const STEPS = [
 ]
 
 export default function PactStateMachine({ status, offerExpiry, disputeDeadline }: PactStateMachineProps) {
-  const now = BigInt(Math.floor(Date.now() / 1000))
+  const currentTime = useCurrentTime()
+  const now = BigInt(currentTime)
   const isTerminal = status >= 4 && status <= 6
   const terminalLabel = status === 4 ? 'Settled & Cleared' : status === 5 ? 'Cancelled by Maker' : 'Expired & Refunded'
   const isDisputed = status === 3
