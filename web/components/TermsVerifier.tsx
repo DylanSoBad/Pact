@@ -141,15 +141,15 @@ export default function TermsVerifier({
               <span className="text-[10px] uppercase text-text-dim block">Bound Parties</span>
               <div className="flex items-center justify-between">
                 <span className="text-text-dim">Maker:</span>
-                <AddressDisplay address={canonicalTerms.maker} showCopy={false} showExplorerLink={false} />
+                <AddressDisplay address={canonicalTerms.maker} showCopy={false} showExplorer={false} />
               </div>
               <div className="flex items-center justify-between">
                 <span className="text-text-dim">Counterparty:</span>
-                <AddressDisplay address={canonicalTerms.taker} showCopy={false} showExplorerLink={false} />
+                <AddressDisplay address={canonicalTerms.taker} showCopy={false} showExplorer={false} />
               </div>
               <div className="flex items-center justify-between">
                 <span className="text-text-dim">Arbiter:</span>
-                <AddressDisplay address={canonicalTerms.arbiter} showCopy={false} showExplorerLink={false} />
+                <AddressDisplay address={canonicalTerms.arbiter} showCopy={false} showExplorer={false} />
               </div>
             </div>
 
