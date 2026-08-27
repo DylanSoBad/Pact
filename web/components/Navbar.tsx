@@ -4,6 +4,7 @@ import Link from 'next/link'
 import Image from 'next/image'
 import { usePathname } from 'next/navigation'
 import ConnectButton from './ConnectButton'
+import NotificationCenter from './NotificationCenter'
 import { CIRCLE_FAUCET_URL } from '../lib/arc'
 
 export default function Navbar() {
@@ -57,7 +58,7 @@ export default function Navbar() {
           </nav>
         </div>
 
-        {/* Right: Actions & Wallet */}
+        {/* Right: Actions, Notification Center & Wallet */}
         <div className="flex items-center gap-2 sm:gap-3">
           <a
             href={CIRCLE_FAUCET_URL}
@@ -69,6 +70,9 @@ export default function Navbar() {
             <span className="material-symbols-outlined text-[16px] text-primary-fixed" aria-hidden="true">water_drop</span>
             <span className="hidden sm:inline">Get test USDC</span>
           </a>
+
+          {/* Notification Center */}
+          <NotificationCenter />
 
           <ConnectButton />
 
