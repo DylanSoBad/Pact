@@ -41,6 +41,8 @@ interface IPactV2 {
     event AllUnpaused(address indexed by);
     event PauseGuardianChanged(address indexed oldGuardian, address indexed newGuardian);
 
+    function computeDisputeBond(uint128 notionalUSDC) external pure returns (uint128);
+
     function createPact(
         Kind kind,
         address taker,

@@ -7,17 +7,21 @@ import {SafeERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol
 import {ReentrancyGuard} from "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
 import {IPactV2} from "./interfaces/IPactV2.sol";
 import {Dispute, Kind, Pact, Status, Winner} from "./typesV2.sol";
-import {IERC20Metadata} from "@openzeppelin/contracts/token/ERC20/extensions/IERC20Metadata.sol";
 
 /// @title PACT V2
-/// @notice Bilateral escrow with explicit acceptance, pull payments and bounded arbitration.
-/// @dev V2 implements parallel architecture with dynamic bonds and 72h challenge windows.
+/// @notice Bilateral escrow with explicit acceptance, pull payments and multi-tier dispute bond economics.
+/// @dev V2 implements progressive tiered dispute bonds (0.50 USDC micro floor, 5% standard, 2% enterprise capped at 2,500 USDC).
 contract PactV2 is IPactV2, ReentrancyGuard {
     using SafeERC20 for IERC20;
 
     uint256 public constant BPS = 10_000;
-    uint256 public constant DISPUTE_BOND_BPS = 500;
-    uint256 public constant MIN_DISPUTE_BOND = 1_000_000; // 1 USDC, 6 decimals
+    uint256 public constant STANDARD_BOND_BPS = 500; // 5.00%
+    uint256 public constant ENTERPRISE_BOND_BPS = 200; // 2.00%
+    uint256 public constant MICRO_TIER_FLOOR = 500_000; // 0.50 USDC (6 decimals)
+    uint256 public constant STANDARD_TIER_CUTOFF = 20_000_000; // 20 USDC
+    uint256 public constant ENTERPRISE_TIER_CUTOFF = 10_000_000_000; // 10,000 USDC
+    uint256 public constant ENTERPRISE_TIER_BASE = 500_000_000; // 500 USDC
+    uint256 public constant MAX_DISPUTE_BOND = 2_500_000_000; // 2,500 USDC
     uint64 public constant RESPONSE_WINDOW = 3 days;
     uint64 public constant ARBITER_TIMEOUT = 14 days;
     uint64 public constant MAX_ALL_PAUSE = 7 days;
@@ -106,6 +110,32 @@ contract PactV2 is IPactV2, ReentrancyGuard {
         allowedToken[usdc] = true;
         allowedToken[eurc] = true;
         allowedToken[usyc] = true;
+    }
+
+    /// @notice Computes the exact dispute bond required in 6-decimal USDC under PACT V2 multi-tier curve.
+    function computeDisputeBond(uint128 notionalUSDC) public pure returns (uint128) {
+        if (notionalUSDC == 0) return 0;
+        uint256 notional = uint256(notionalUSDC);
+        uint256 bond;
+
+        if (notional < STANDARD_TIER_CUTOFF) {
+            // Micro Tier: < $20 USDC
+            uint256 calculated = _ceilDiv(notional * STANDARD_BOND_BPS, BPS);
+            uint256 floored = calculated < MICRO_TIER_FLOOR ? MICRO_TIER_FLOOR : calculated;
+            bond = floored > notional ? notional : floored;
+        } else if (notional <= ENTERPRISE_TIER_CUTOFF) {
+            // Standard Tier: $20 - $10,000 USDC (Flat 5%)
+            bond = _ceilDiv(notional * STANDARD_BOND_BPS, BPS);
+        } else {
+            // Enterprise Tier: > $10,000 USDC ($500 base + 2% marginal excess, capped at $2,500)
+            uint256 excess = notional - ENTERPRISE_TIER_CUTOFF;
+            uint256 marginal = _ceilDiv(excess * ENTERPRISE_BOND_BPS, BPS);
+            uint256 tiered = ENTERPRISE_TIER_BASE + marginal;
+            bond = tiered > MAX_DISPUTE_BOND ? MAX_DISPUTE_BOND : tiered;
+        }
+
+        if (bond > type(uint128).max) revert FeeExceedsCap();
+        return uint128(bond);
     }
 
     function createPact(
@@ -215,19 +245,8 @@ contract PactV2 is IPactV2, ReentrancyGuard {
         }
         if (termsDocumentHash == bytes32(0)) revert InvalidHash();
 
-        uint256 tokenDecimals = 6;
-        try IERC20Metadata(tokenMaker).decimals() returns (uint8 decimals) {
-            tokenDecimals = decimals;
-        } catch {}
-        
-        uint256 minBond = 10 ** tokenDecimals;
-        
-        // Remove notionalUSDC. Bond is provided directly as `notionalUSDC` parameter to avoid changing signature too much,
-        // but it is treated as `bondAmount` in tokenMaker.
-        // Or if we replace notionalUSDC with bondAmount in parameters:
-        uint256 computedBond = notionalUSDC; 
-        if (computedBond < minBond) computedBond = minBond;
-        if (computedBond > type(uint128).max || arbiterFeeCap > computedBond) revert FeeExceedsCap();
+        uint128 computedBond = computeDisputeBond(notionalUSDC);
+        if (arbiterFeeCap > computedBond) revert FeeExceedsCap();
 
         bytes32 canonicalTermsHash = keccak256(
             abi.encode(
@@ -263,7 +282,7 @@ contract PactV2 is IPactV2, ReentrancyGuard {
         pact.collateralMaker = amountMaker;
         pact.collateralTaker = 0;
         pact.notionalUSDC = notionalUSDC;
-        pact.bondAmount = uint128(computedBond);
+        pact.bondAmount = computedBond;
         pact.arbiterFeeCap = arbiterFeeCap;
         pact.offerExpiry = offerExpiry;
         pact.performanceDeadline = performanceDeadline;
@@ -287,7 +306,7 @@ contract PactV2 is IPactV2, ReentrancyGuard {
             amountMaker,
             amountTaker,
             notionalUSDC,
-            uint128(computedBond),
+            computedBond,
             arbiterFeeCap,
             offerExpiry,
             performanceDeadline,
@@ -310,8 +329,12 @@ contract PactV2 is IPactV2, ReentrancyGuard {
         bytes32 s
     ) external nonReentrant whenIntakeOpen {
         Pact storage pact = _requirePact(id);
-        if (pact.tokenTaker != USDC) revert InvalidToken();
-        try IERC20Permit(pact.tokenTaker).permit(msg.sender, address(this), pact.amountTaker, permitDeadline, v, r, s) {} catch {}
+        if (pact.amountTaker > 0) {
+            if (pact.tokenTaker != USDC) revert InvalidToken();
+            try IERC20Permit(pact.tokenTaker).permit(
+                msg.sender, address(this), pact.amountTaker, permitDeadline, v, r, s
+            ) {} catch {}
+        }
         _acceptPact(id, expectedTermsHash);
     }
 
@@ -321,20 +344,28 @@ contract PactV2 is IPactV2, ReentrancyGuard {
         if (msg.sender != pact.taker) revert InvalidParty();
         if (block.timestamp > pact.offerExpiry) revert TooLate();
         if (expectedTermsHash != pact.termsHash) revert TermsHashMismatch();
+
+        pact.status = Status.Active;
+        pact.collateralTaker = pact.amountTaker;
+        pact.updatedAt = uint64(block.timestamp);
+
         if (pact.amountTaker != 0) {
             _pullExact(pact.tokenTaker, msg.sender, pact.amountTaker);
-            pact.collateralTaker = pact.amountTaker;
         }
-        pact.status = Status.Active;
-        pact.updatedAt = uint64(block.timestamp);
         emit PactAccepted(id, msg.sender);
     }
 
     function cancelPact(uint256 id) external nonReentrant {
         Pact storage pact = _requirePact(id);
         _requireStatus(pact, Status.Offered);
-        if (msg.sender != pact.maker) revert InvalidParty();
-        _finishWithWinner(id, pact, Winner.Maker, Status.Cancelled);
+        if (msg.sender != pact.maker) revert Unauthorized();
+
+        uint128 collateral = pact.collateralMaker;
+        pact.collateralMaker = 0;
+        pact.status = Status.Cancelled;
+        pact.updatedAt = uint64(block.timestamp);
+
+        _credit(id, pact.maker, pact.tokenMaker, collateral);
         emit PactCancelled(id);
     }
 
@@ -342,38 +373,40 @@ contract PactV2 is IPactV2, ReentrancyGuard {
         Pact storage pact = _requirePact(id);
         _requireStatus(pact, Status.Offered);
         if (block.timestamp <= pact.offerExpiry) revert TooEarly();
-        _finishWithWinner(id, pact, Winner.Maker, Status.Expired);
+
+        uint128 collateral = pact.collateralMaker;
+        pact.collateralMaker = 0;
+        pact.status = Status.Expired;
+        pact.updatedAt = uint64(block.timestamp);
+
+        _credit(id, pact.maker, pact.tokenMaker, collateral);
         emit PactExpired(id, Winner.Maker);
     }
 
-    function submitProof(uint256 id, bytes32 proofHash) external {
+    function submitProof(uint256 id, bytes32 proofHash) external nonReentrant {
+        if (proofHash == bytes32(0)) revert InvalidHash();
         Pact storage pact = _requirePact(id);
         _requireStatus(pact, Status.Active);
-        if (msg.sender != pact.taker) revert InvalidParty();
+        if (msg.sender != pact.taker) revert Unauthorized();
         if (block.timestamp > pact.performanceDeadline) revert TooLate();
-        if (proofHash == bytes32(0)) revert InvalidHash();
+
         pact.proofHash = proofHash;
         pact.status = Status.ProofSubmitted;
         pact.updatedAt = uint64(block.timestamp);
-        
-        uint64 minDisputeDeadline = uint64(block.timestamp + 72 hours);
-        if (pact.disputeDeadline < minDisputeDeadline) {
-            pact.disputeDeadline = minDisputeDeadline;
-        }
-        
+
         emit ProofSubmitted(id, msg.sender, proofHash);
     }
 
     function release(uint256 id) external nonReentrant whenOperational {
         Pact storage pact = _requirePact(id);
         if (pact.status != Status.Active && pact.status != Status.ProofSubmitted) revert InvalidStatus(pact.status);
-        if (msg.sender != pact.maker) revert InvalidParty();
+        if (msg.sender != pact.maker) revert Unauthorized();
+
         _finishWithWinner(id, pact, Winner.Taker, Status.Settled);
         _recordSettlement(pact);
         emit PactReleased(id, msg.sender);
     }
 
-    /// @notice Escape hatch that remains callable during every pause mode.
     function refundAfterDeadline(uint256 id) external nonReentrant {
         Pact storage pact = _requirePact(id);
         if (pact.status == Status.Offered) {
@@ -384,8 +417,9 @@ contract PactV2 is IPactV2, ReentrancyGuard {
         }
         if (pact.status != Status.Active && pact.status != Status.ProofSubmitted) revert InvalidStatus(pact.status);
         if (block.timestamp <= pact.disputeDeadline) revert TooEarly();
+
         Winner winner = pact.status == Status.ProofSubmitted ? Winner.Taker : Winner.Maker;
-        _finishWithWinner(id, pact, winner, Status.Expired);
+        _finishWithWinner(id, pact, winner, Status.Settled);
         _recordSettlement(pact);
         emit PactExpired(id, winner);
     }
@@ -399,7 +433,7 @@ contract PactV2 is IPactV2, ReentrancyGuard {
         nonReentrant
     {
         Pact storage pact = _requirePact(id);
-        try IERC20Permit(pact.tokenMaker).permit(msg.sender, address(this), pact.bondAmount, permitDeadline, v, r, s) {} catch {}
+        try IERC20Permit(USDC).permit(msg.sender, address(this), pact.bondAmount, permitDeadline, v, r, s) {} catch {}
         _openDispute(id);
     }
 
@@ -409,7 +443,7 @@ contract PactV2 is IPactV2, ReentrancyGuard {
         if (msg.sender != pact.maker && msg.sender != pact.taker) revert InvalidParty();
         if (block.timestamp > pact.disputeDeadline) revert TooLate();
 
-        _pullExact(pact.tokenMaker, msg.sender, pact.bondAmount);
+        _pullExact(USDC, msg.sender, pact.bondAmount);
         Dispute storage dispute = _disputes[id];
         dispute.opener = msg.sender;
         dispute.claim = msg.sender == pact.maker ? Winner.Maker : Winner.Taker;
@@ -431,7 +465,7 @@ contract PactV2 is IPactV2, ReentrancyGuard {
         nonReentrant
     {
         Pact storage pact = _requirePact(id);
-        try IERC20Permit(pact.tokenMaker).permit(msg.sender, address(this), pact.bondAmount, permitDeadline, v, r, s) {} catch {}
+        try IERC20Permit(USDC).permit(msg.sender, address(this), pact.bondAmount, permitDeadline, v, r, s) {} catch {}
         _respondDispute(id);
     }
 
@@ -444,7 +478,7 @@ contract PactV2 is IPactV2, ReentrancyGuard {
         if (block.timestamp > dispute.responseDeadline) revert TooLate();
         if (dispute.arbiterDeadline != 0) revert InvalidStatus(pact.status);
 
-        _pullExact(pact.tokenMaker, msg.sender, pact.bondAmount);
+        _pullExact(USDC, msg.sender, pact.bondAmount);
         if (msg.sender == pact.maker) dispute.makerBond = pact.bondAmount;
         else dispute.takerBond = pact.bondAmount;
         dispute.arbiterDeadline = uint64(block.timestamp + ARBITER_TIMEOUT);
@@ -480,7 +514,7 @@ contract PactV2 is IPactV2, ReentrancyGuard {
         _finishWithWinner(id, pact, winner, Status.Settled);
         _recordSettlement(pact);
         _recordDisputeLoss(pact, winner);
-        if (feeClaimed != 0) _credit(id, pact.arbiter, pact.tokenMaker, feeClaimed);
+        if (feeClaimed != 0) _credit(id, pact.arbiter, USDC, feeClaimed);
         emit DisputeResolved(id, winner, feeClaimed, false);
     }
 
@@ -490,15 +524,7 @@ contract PactV2 is IPactV2, ReentrancyGuard {
         Dispute storage dispute = _disputes[id];
         if (dispute.arbiterDeadline == 0 || block.timestamp <= dispute.arbiterDeadline) revert TooEarly();
         _refundBonds(id, pact, dispute);
-        
-        // Return original collateral to each party
-        uint128 makerCollateral = pact.collateralMaker;
-        uint128 takerCollateral = pact.collateralTaker;
-        pact.collateralMaker = 0;
-        pact.collateralTaker = 0;
-        _credit(id, pact.maker, pact.tokenMaker, makerCollateral);
-        if (takerCollateral != 0) _credit(id, pact.taker, pact.tokenTaker, takerCollateral);
-        
+        _splitCollateral(id, pact);
         pact.status = Status.Settled;
         pact.updatedAt = uint64(block.timestamp);
         
@@ -613,7 +639,7 @@ contract PactV2 is IPactV2, ReentrancyGuard {
         dispute.makerBond = 0;
         dispute.takerBond = 0;
         address recipient = winner == Winner.Maker ? pact.maker : pact.taker;
-        _credit(id, recipient, pact.tokenMaker, totalBonds - arbiterFee);
+        _credit(id, recipient, USDC, totalBonds - arbiterFee);
     }
 
     function _refundBonds(uint256 id, Pact storage pact, Dispute storage dispute) internal {
@@ -621,8 +647,8 @@ contract PactV2 is IPactV2, ReentrancyGuard {
         uint128 takerBond = dispute.takerBond;
         dispute.makerBond = 0;
         dispute.takerBond = 0;
-        _credit(id, pact.maker, pact.tokenMaker, makerBond);
-        _credit(id, pact.taker, pact.tokenMaker, takerBond);
+        _credit(id, pact.maker, USDC, makerBond);
+        _credit(id, pact.taker, USDC, takerBond);
     }
 
     function _splitCollateral(uint256 id, Pact storage pact) internal {

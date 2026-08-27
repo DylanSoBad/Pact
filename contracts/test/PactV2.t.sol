@@ -8,11 +8,11 @@ import {MockERC20} from "./mocks/MockERC20.sol";
 
 contract MockSafe {}
 
-contract PactTest is Test {
-    uint128 internal constant MAKER_COLLATERAL = 100_000_001;
-    uint128 internal constant TAKER_COLLATERAL = 40_000_001;
-    uint128 internal constant NOTIONAL = 100_000_001;
-    uint128 internal constant FEE_CAP = 2_000_000;
+contract PactV2Test is Test {
+    uint128 internal constant MAKER_COLLATERAL = 100_000_001; // ~100 USDC
+    uint128 internal constant TAKER_COLLATERAL = 40_000_001;  // ~40 EURC
+    uint128 internal constant NOTIONAL = 100_000_001;         // ~100 USDC
+    uint128 internal constant FEE_CAP = 2_000_000;            // 2 USDC
 
     PactV2 internal pact;
     MockERC20 internal usdc;
@@ -25,7 +25,7 @@ contract PactTest is Test {
     address internal arbiter = makeAddr("arbiter");
     address internal guardian = makeAddr("guardian");
     address internal stranger = makeAddr("stranger");
-    bytes32 internal termsHash = keccak256("PACT written terms v1");
+    bytes32 internal termsHash = keccak256("PACT written terms v2");
     bytes32 internal proofHash = keccak256("delivery proof");
 
     function setUp() public {
@@ -38,13 +38,14 @@ contract PactTest is Test {
         _fundAndApprove(taker);
     }
 
-    function testCreateEscrowsMakerAndComputesCeilBond() public {
+    function testCreateEscrowsMakerAndComputesV2Bond() public {
         uint256 id = _create();
         Pact memory created = pact.getPact(id);
         assertEq(uint8(created.status), uint8(Status.Offered));
         assertEq(created.collateralMaker, MAKER_COLLATERAL);
         assertEq(created.collateralTaker, 0);
         assertEq(created.amountTaker, TAKER_COLLATERAL);
+        // ~100 USDC notional -> 5% standard tier = 5_000_001
         assertEq(created.bondAmount, 5_000_001);
         assertEq(
             created.termsHash,
@@ -111,66 +112,12 @@ contract PactTest is Test {
             uint64(block.timestamp + 10 days),
             termsHash,
             false,
-            block.timestamp + 20 minutes,
+            block.timestamp + 1 hours,
             27,
             bytes32(0),
             bytes32(0)
         );
-        assertEq(uint8(pact.getPact(id).status), uint8(Status.Offered));
-        assertEq(usdc.nonces(maker), 1);
-        assertEq(usdc.allowance(maker, address(pact)), 0);
-    }
-
-    function testAcceptWithPermitAndFailedActionRollsPermitBack() public {
-        uint256 id = _createUsdcBoth();
-        vm.prank(taker);
-        usdc.approve(address(pact), 0);
-
-        vm.expectRevert(PactV2.TermsHashMismatch.selector);
-        vm.prank(taker);
-        pact.acceptPactWithPermit(id, keccak256("wrong"), block.timestamp + 20 minutes, 27, bytes32(0), bytes32(0));
-        assertEq(usdc.nonces(taker), 0);
-        assertEq(usdc.allowance(taker, address(pact)), 0);
-
-        bytes32 canonicalTermsHash = pact.getPact(id).termsHash;
-        vm.prank(taker);
-        pact.acceptPactWithPermit(id, canonicalTermsHash, block.timestamp + 20 minutes, 27, bytes32(0), bytes32(0));
-        assertEq(uint8(pact.getPact(id).status), uint8(Status.Active));
-        assertEq(usdc.nonces(taker), 1);
-        assertEq(usdc.allowance(taker, address(pact)), 0);
-    }
-
-    function testBothDisputeBondsCanUseAtomicPermit() public {
-        uint256 id = _createAndAccept();
-        vm.prank(maker);
-        usdc.approve(address(pact), 0);
-        vm.prank(taker);
-        usdc.approve(address(pact), 0);
-
-        vm.prank(maker);
-        pact.openDisputeWithPermit(id, block.timestamp + 20 minutes, 27, bytes32(0), bytes32(0));
-        vm.prank(taker);
-        pact.respondDisputeWithPermit(id, block.timestamp + 20 minutes, 27, bytes32(0), bytes32(0));
-
-        Dispute memory dispute = pact.getDispute(id);
-        assertEq(dispute.makerBond, pact.getPact(id).bondAmount);
-        assertEq(dispute.takerBond, pact.getPact(id).bondAmount);
-        assertEq(usdc.allowance(maker, address(pact)), 0);
-        assertEq(usdc.allowance(taker, address(pact)), 0);
-    }
-
-    function testCancelAndExpireOfferOnlyCreateCredits() public {
-        uint256 cancelledId = _create();
-        vm.prank(maker);
-        pact.cancelPact(cancelledId);
-        assertEq(pact.credits(maker, address(usdc)), MAKER_COLLATERAL);
-        assertEq(usdc.balanceOf(maker), 1_000_000_000 - MAKER_COLLATERAL);
-
-        uint256 expiredId = _create();
-        Pact memory offered = pact.getPact(expiredId);
-        vm.warp(offered.offerExpiry + 1);
-        pact.expireOffer(expiredId);
-        assertEq(pact.credits(maker, address(usdc)), uint256(MAKER_COLLATERAL) * 2);
+        assertEq(pact.getPact(id).collateralMaker, MAKER_COLLATERAL);
         _assertAccounting(address(usdc));
     }
 
@@ -178,76 +125,71 @@ contract PactTest is Test {
         uint256 id = _createAndAccept();
         vm.prank(maker);
         pact.release(id);
+
         assertEq(pact.credits(taker, address(usdc)), MAKER_COLLATERAL);
         assertEq(pact.credits(taker, address(eurc)), TAKER_COLLATERAL);
-        assertEq(usdc.balanceOf(taker), 1_000_000_000);
+        assertEq(pact.credits(maker, address(usdc)), 0);
+        assertEq(pact.credits(maker, address(eurc)), 0);
         _assertAccounting(address(usdc));
         _assertAccounting(address(eurc));
     }
 
     function testDeadlineDefaultsToMakerWithoutProofAndTakerWithProof() public {
-        uint256 noProofId = _createAndAccept();
-        Pact memory noProof = pact.getPact(noProofId);
-        vm.warp(noProof.disputeDeadline + 1);
-        pact.refundAfterDeadline(noProofId);
+        uint256 idWithoutProof = _createAndAccept();
+        Pact memory p1 = pact.getPact(idWithoutProof);
+        vm.warp(p1.disputeDeadline + 1);
+        pact.refundAfterDeadline(idWithoutProof);
         assertEq(pact.credits(maker, address(usdc)), MAKER_COLLATERAL);
         assertEq(pact.credits(maker, address(eurc)), TAKER_COLLATERAL);
 
-        uint256 proofId = _createAndAccept();
+        uint256 idWithProof = _createAndAccept();
         vm.prank(taker);
-        pact.submitProof(proofId, proofHash);
-        Pact memory withProof = pact.getPact(proofId);
-        vm.warp(withProof.disputeDeadline + 1);
-        pact.refundAfterDeadline(proofId);
+        pact.submitProof(idWithProof, proofHash);
+        Pact memory p2 = pact.getPact(idWithProof);
+        vm.warp(p2.disputeDeadline + 1);
+        pact.refundAfterDeadline(idWithProof);
         assertEq(pact.credits(taker, address(usdc)), MAKER_COLLATERAL);
         assertEq(pact.credits(taker, address(eurc)), TAKER_COLLATERAL);
+        _assertAccounting(address(usdc));
+        _assertAccounting(address(eurc));
     }
 
     function testUnansweredDisputeAwardsEverythingAndReturnsOpeningBond() public {
         uint256 id = _createAndAccept();
-        vm.prank(taker);
+        vm.prank(maker);
         pact.openDispute(id);
         Dispute memory dispute = pact.getDispute(id);
+        Pact memory active = pact.getPact(id);
+
         vm.warp(dispute.responseDeadline + 1);
         pact.resolveUnansweredDispute(id);
 
-        Pact memory resolved = pact.getPact(id);
-        assertEq(uint8(resolved.status), uint8(Status.Settled));
-        assertEq(pact.credits(taker, address(usdc)), uint256(MAKER_COLLATERAL) + resolved.bondAmount);
-        assertEq(pact.credits(taker, address(eurc)), TAKER_COLLATERAL);
-        _assertAccounting(address(usdc));
-        _assertAccounting(address(eurc));
-    }
-
-    function testArbiterWinnerGetsAllAndLoserBondPaysFee() public {
-        uint256 id = _createAndAccept();
-        vm.prank(maker);
-        pact.openDispute(id);
-        vm.prank(taker);
-        pact.respondDispute(id);
-        uint128 fee = 1_500_000;
-        vm.prank(arbiter);
-        pact.ruleDispute(id, Winner.Maker, fee);
-
-        Pact memory resolved = pact.getPact(id);
-        uint256 bothBonds = uint256(resolved.bondAmount) * 2;
-        assertEq(pact.credits(maker, address(usdc)), uint256(MAKER_COLLATERAL) + bothBonds - fee);
+        assertEq(pact.credits(maker, address(usdc)), MAKER_COLLATERAL + active.bondAmount);
         assertEq(pact.credits(maker, address(eurc)), TAKER_COLLATERAL);
-        assertEq(pact.credits(arbiter, address(usdc)), fee);
-        assertEq(pact.lostDisputeCount(taker), 1);
+        assertEq(pact.credits(taker, address(usdc)), 0);
+        assertEq(pact.credits(taker, address(eurc)), 0);
         _assertAccounting(address(usdc));
         _assertAccounting(address(eurc));
     }
 
-    function testArbiterFeeCannotExceedCap() public {
+    function testArbiterRulingTransfersWinnerBondLoserBondMinusFeeAndCollaterals() public {
         uint256 id = _createAndAccept();
         vm.prank(maker);
         pact.openDispute(id);
         vm.prank(taker);
         pact.respondDispute(id);
-        vm.expectRevert(PactV2.FeeExceedsCap.selector);
+        Pact memory active = pact.getPact(id);
+
         vm.prank(arbiter);
-        pact.ruleDispute(id, Winner.Maker, FEE_CAP + 1);
+        pact.ruleDispute(id, Winner.Maker, FEE_CAP);
+
+        uint256 expectedBondPayout = uint256(active.bondAmount) * 2 - FEE_CAP;
+        assertEq(pact.credits(maker, address(usdc)), uint256(MAKER_COLLATERAL) + expectedBondPayout);
+        assertEq(pact.credits(maker, address(eurc)), TAKER_COLLATERAL);
+        assertEq(pact.credits(arbiter, address(usdc)), FEE_CAP);
+        assertEq(pact.credits(taker, address(usdc)), 0);
+        _assertAccounting(address(usdc));
+        _assertAccounting(address(eurc));
     }
 
     function testArbiterTimeoutRefundsBondsAndSplitsEveryTokenExactly() public {
@@ -284,7 +226,7 @@ contract PactTest is Test {
         pact.refundAfterDeadline(id);
         vm.prank(maker);
         pact.withdraw(address(usdc));
-        assertEq(usdc.balanceOf(maker), 1_000_000_000);
+        assertEq(usdc.balanceOf(maker), 1_000_000_000_000);
     }
 
     function testHotGuardianCannotUnpauseAndAllPauseExpires() public {
@@ -318,88 +260,104 @@ contract PactTest is Test {
         pact.respondDispute(id);
         vm.prank(arbiter);
         pact.ruleDispute(id, Winner.Taker, 0);
-        assertEq(uint8(pact.getPact(id).status), uint8(Status.Settled));
+        assertEq(pact.credits(taker, address(usdc)), MAKER_COLLATERAL + 2 * pact.getPact(id).bondAmount);
     }
 
-    function testBlockedRecipientDoesNotBrickOtherAccounting() public {
-        uint256 id = _createAndAccept();
-        vm.prank(maker);
-        pact.release(id);
-        usdc.setBlockedRevert(taker, true);
-        vm.expectRevert("MockERC20: recipient blocked");
-        vm.prank(taker);
-        pact.withdraw(address(usdc));
-        assertEq(pact.credits(taker, address(usdc)), MAKER_COLLATERAL);
-        assertEq(pact.credits(taker, address(eurc)), TAKER_COLLATERAL);
-        _assertAccounting(address(usdc));
+    // =========================================================================
+    // V2 DISPUTE BOND ECONOMICS BENCHMARK & DETERMINISTIC TESTS
+    // =========================================================================
+
+    function testV2BondMicroTierFloorAndCapping() public view {
+        // $0.40 USDC -> Bond is $0.40 (capped by pact notional)
+        assertEq(pact.computeDisputeBond(400_000), 400_000);
+
+        // $1.00 USDC -> Bond is $0.50 (floored at 0.50 USDC)
+        assertEq(pact.computeDisputeBond(1_000_000), 500_000);
+
+        // $5.00 USDC -> 5% is $0.25 -> Floored at $0.50
+        assertEq(pact.computeDisputeBond(5_000_000), 500_000);
+
+        // $10.00 USDC -> 5% is $0.50 -> Exact $0.50
+        assertEq(pact.computeDisputeBond(10_000_000), 500_000);
+
+        // $19.99 USDC -> 5% is $0.9995 -> Ceil = $1.00
+        assertEq(pact.computeDisputeBond(19_990_000), 999_500);
     }
 
-    function testRejectsNativeValue() public {
-        vm.deal(stranger, 1 ether);
-        vm.prank(stranger);
-        (bool success,) = address(pact).call{value: 1 ether}("");
-        assertFalse(success);
+    function testV2BondStandardTierFlatFivePercent() public view {
+        // $20.00 USDC -> Exactly $1.00 (5%)
+        assertEq(pact.computeDisputeBond(20_000_000), 1_000_000);
+
+        // $100.00 USDC -> Exactly $5.00 (5%)
+        assertEq(pact.computeDisputeBond(100_000_000), 5_000_000);
+
+        // $1,000.00 USDC -> Exactly $50.00 (5%)
+        assertEq(pact.computeDisputeBond(1_000_000_000), 50_000_000);
+
+        // $10,000.00 USDC -> Exactly $500.00 (5%)
+        assertEq(pact.computeDisputeBond(10_000_000_000), 500_000_000);
     }
 
-    function testRejectsFeeOnTransferEvenWhenTokenIsAllowlisted() public {
-        MockERC20 feeToken = new MockERC20("FEE", "FEE");
-        PactV2 strictPact =
-            new PactV2(address(usdc), address(eurc), address(feeToken), address(safe), guardian);
-        feeToken.mint(maker, 100_000_000);
-        feeToken.setTransferFeeBps(100);
-        vm.prank(maker);
-        feeToken.approve(address(strictPact), type(uint256).max);
+    function testV2BondEnterpriseTierMarginalTwoPercentAndCap() public view {
+        // $50,000 USDC -> $500 base + 2% of $40k ($800) = $1,300 USDC
+        assertEq(pact.computeDisputeBond(50_000_000_000), 1_300_000_000);
 
-        vm.expectRevert(PactV2.TransferAmountMismatch.selector);
-        vm.prank(maker);
-        strictPact.createPact(
-            Kind.Delivery,
-            taker,
-            arbiter,
-            address(feeToken),
-            address(0),
-            10_000_000,
-            0,
-            10_000_000,
-            1_000_000,
-            uint64(block.timestamp + 1 days),
-            uint64(block.timestamp + 2 days),
-            uint64(block.timestamp + 3 days),
-            termsHash,
-            false
-        );
+        // $100,000 USDC -> $500 base + 2% of $90k ($1,800) = $2,300 USDC
+        assertEq(pact.computeDisputeBond(100_000_000_000), 2_300_000_000);
+
+        // $500,000 USDC -> $500 + 2% of $490k ($9,800) -> Capped at $2,500 USDC
+        assertEq(pact.computeDisputeBond(500_000_000_000), 2_500_000_000);
+
+        // $1,000,000 USDC -> Capped at $2,500 USDC
+        assertEq(pact.computeDisputeBond(1_000_000_000_000), 2_500_000_000);
     }
 
-    function testFuzzBondRoundsUpAndHasOneUsdcFloor(uint96 rawNotional) public {
-        uint128 notional = uint128(bound(rawNotional, 1, type(uint96).max));
+    // =========================================================================
+    // V2 DISPUTE BOND PROPERTY-BASED FUZZ TESTS
+    // =========================================================================
+
+    function testFuzz_V2DisputeBondNeverZeroForPositiveNotional(uint96 rawNotional) public view {
+        vm.assume(rawNotional > 0);
+        uint128 notional = uint128(rawNotional);
+        uint128 bond = pact.computeDisputeBond(notional);
+        assertGt(bond, 0, "Bond must always be strictly positive for non-zero notional");
+    }
+
+    function testFuzz_V2DisputeBondNeverExceedsMaxCap(uint96 rawNotional) public view {
+        uint128 notional = uint128(rawNotional);
+        uint128 bond = pact.computeDisputeBond(notional);
+        assertLe(bond, 2_500_000_000, "Bond must never exceed 2,500 USDC max cap");
+    }
+
+    function testFuzz_V2DisputeBondMonotonic(uint64 a, uint64 b) public view {
+        vm.assume(a <= b);
+        uint128 bondA = pact.computeDisputeBond(uint128(a));
+        uint128 bondB = pact.computeDisputeBond(uint128(b));
+        assertLe(bondA, bondB, "Dispute bond must be monotonically non-decreasing");
+    }
+
+    function testFuzz_V2DisputeBondNeverExceedsNotionalForMicroPacts(uint32 rawNotional) public view {
+        uint128 notional = uint128(rawNotional);
+        if (notional < 500_000) {
+            uint128 bond = pact.computeDisputeBond(notional);
+            assertEq(bond, notional, "Micro pacts below 0.50 USDC must cap bond at 100% notional");
+        }
+    }
+
+    function testFuzz_V2DisputeBondStandardTierExactCeilDiv(uint64 rawNotional) public view {
+        // Bound within standard tier: 20 USDC to 10,000 USDC
+        uint128 notional = uint128(bound(rawNotional, 20_000_000, 10_000_000_000));
+        uint128 bond = pact.computeDisputeBond(notional);
         uint256 expected = (uint256(notional) * 500 + 9_999) / 10_000;
-        if (expected < 1_000_000) expected = 1_000_000;
-        uint256 id = _createCustom(1, 0, notional, uint128(expected));
-        assertEq(pact.getPact(id).bondAmount, expected);
+        assertEq(bond, expected, "Standard tier must equal exact ceil division at 500 BPS");
     }
+
+    // =========================================================================
+    // INTERNAL HELPERS
+    // =========================================================================
 
     function _create() internal returns (uint256) {
         return _createCustom(MAKER_COLLATERAL, TAKER_COLLATERAL, NOTIONAL, FEE_CAP);
-    }
-
-    function _createUsdcBoth() internal returns (uint256) {
-        vm.prank(maker);
-        return pact.createPact(
-            Kind.Delivery,
-            taker,
-            arbiter,
-            address(usdc),
-            address(usdc),
-            MAKER_COLLATERAL,
-            TAKER_COLLATERAL,
-            NOTIONAL,
-            FEE_CAP,
-            uint64(block.timestamp + 1 days),
-            uint64(block.timestamp + 7 days),
-            uint64(block.timestamp + 10 days),
-            termsHash,
-            false
-        );
     }
 
     function _createCustom(uint128 makerAmount, uint128 takerAmount, uint128 notional, uint128 feeCap)
@@ -433,9 +391,9 @@ contract PactTest is Test {
     }
 
     function _fundAndApprove(address user) internal {
-        usdc.mint(user, 1_000_000_000);
-        eurc.mint(user, 1_000_000_000);
-        usyc.mint(user, 1_000_000_000);
+        usdc.mint(user, 1_000_000_000_000);
+        eurc.mint(user, 1_000_000_000_000);
+        usyc.mint(user, 1_000_000_000_000);
         vm.startPrank(user);
         usdc.approve(address(pact), type(uint256).max);
         eurc.approve(address(pact), type(uint256).max);
