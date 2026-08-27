@@ -11,12 +11,25 @@ import { CIRCLE_FAUCET_URL, EURC, USDC_ERC20, arcTestnet, getPactAddress } from 
 import { hashPactTerms, hashTerms } from '../../lib/terms'
 import { signPermit, type PermitAuthorization } from '../../lib/permit'
 import { fetchReputation } from '../../lib/reads'
-import { NEW_PACT_FIELD_ORDER, validateNewPactForm, type NewPactField } from '../../lib/newPactValidation'
+import {
+  NEW_PACT_FIELD_ORDER,
+  PARTIES_FIELDS,
+  COLLATERAL_FIELDS,
+  TERMS_DEADLINES_FIELDS,
+  ZERO_ADDRESS,
+  validateNewPactForm,
+  getStepFields,
+  getFirstInvalidFieldForStep,
+  isStepValid,
+  type NewPactField,
+  type FormStep,
+} from '../../lib/newPactValidation'
 import TokenSelect from '../../components/TokenSelect'
 import TransactionProgress, { type TransactionStage } from '../../components/TransactionProgress'
 import { transactionErrorMessage } from '../../lib/transactionErrors'
-
-const ZERO_ADDRESS = '0x0000000000000000000000000000000000000000' as const
+import RoleBadge from '../../components/RoleBadge'
+import AddressDisplay from '../../components/AddressDisplay'
+import { formatDate } from '../../lib/format'
 
 const KINDS = [
   {
@@ -57,6 +70,7 @@ export default function NewPactPage() {
   const { setOpen: openWalletModal } = useModal()
 
   const protocolAddress = getPactAddress(chainId)
+  const [currentStep, setCurrentStep] = useState<FormStep>(1)
   const [kind, setKind] = useState<number>(0)
   const [tokenMaker, setTokenMaker] = useState<`0x${string}`>(USDC_ERC20)
   const [tokenTaker, setTokenTaker] = useState<`0x${string}`>(EURC)
@@ -88,7 +102,7 @@ export default function NewPactPage() {
 
   // Auto-fetch counterparty on-chain reputation when valid address is entered
   useEffect(() => {
-    if (!isAddress(taker)) {
+    if (!isAddress(taker) || taker.toLowerCase() === ZERO_ADDRESS) {
       setReputation(null)
       return
     }
@@ -183,14 +197,44 @@ export default function NewPactPage() {
     setTouchedFields(current => ({ ...current, [field]: true }))
   }
 
+  function touchStepFields(step: FormStep) {
+    const fields = getStepFields(step)
+    setTouchedFields(current => {
+      const updated = { ...current }
+      fields.forEach(f => { updated[f] = true })
+      return updated
+    })
+  }
+
   function visibleFieldError(field: NewPactField) {
     return submitAttempted || touchedFields[field] ? fieldErrors[field] : undefined
   }
 
-  function focusFirstInvalidField() {
-    const firstInvalid = NEW_PACT_FIELD_ORDER.find(field => fieldErrors[field])
+  function focusFirstInvalidFieldInStep(step: FormStep) {
+    const firstInvalid = getFirstInvalidFieldForStep(step, fieldErrors)
     if (!firstInvalid) return
-    requestAnimationFrame(() => fieldRefs.current[firstInvalid]?.focus())
+    requestAnimationFrame(() => {
+      const el = fieldRefs.current[firstInvalid]
+      if (el) {
+        el.focus()
+        el.scrollIntoView({ behavior: 'smooth', block: 'center' })
+      }
+    })
+  }
+
+  function goToStep(targetStep: FormStep) {
+    // If going forward, validate current step
+    if (targetStep > currentStep) {
+      touchStepFields(currentStep)
+      const valid = isStepValid(currentStep, fieldErrors)
+      if (!valid) {
+        toast.error('Please resolve the highlighted errors before proceeding.')
+        focusFirstInvalidFieldInStep(currentStep)
+        return
+      }
+    }
+    setCurrentStep(targetStep)
+    window.scrollTo({ top: 0, behavior: 'smooth' })
   }
 
   const createArgs = useMemo(() => [
@@ -198,7 +242,7 @@ export default function NewPactPage() {
     taker as `0x${string}`,
     arbiter as `0x${string}`,
     tokenMaker,
-    takerAmount > 0n ? tokenTaker : ZERO_ADDRESS,
+    takerAmount > 0n ? tokenTaker : (ZERO_ADDRESS as `0x${string}`),
     makerAmount,
     takerAmount,
     notionalAmount,
@@ -240,9 +284,25 @@ export default function NewPactPage() {
       return
     }
     setSubmitAttempted(true)
-    if (validationError || !address || !protocolAddress || !publicClient || !walletClient) {
-      toast.error(validationError || 'Wallet client is not ready')
-      focusFirstInvalidField()
+    
+    // Check all fields
+    if (validationError) {
+      // Find first step with error and switch to it
+      for (const step of [1, 2, 3] as FormStep[]) {
+        if (!isStepValid(step, fieldErrors)) {
+          setCurrentStep(step)
+          touchStepFields(step)
+          toast.error(validationError)
+          focusFirstInvalidFieldInStep(step)
+          return
+        }
+      }
+      toast.error(validationError)
+      return
+    }
+
+    if (!address || !protocolAddress || !publicClient || !walletClient) {
+      toast.error('Wallet client is not ready')
       return
     }
 
@@ -333,35 +393,35 @@ export default function NewPactPage() {
   // Success Confirmation Screen
   if (phase === 'done') {
     return (
-      <div className="mx-auto max-w-[620px] py-8">
-        <div className="border border-primary-fixed/40 bg-[#0c0f12] p-6 sm:p-10 text-center animate-enter">
-          <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center bg-primary-fixed text-black font-display-mono text-2xl font-bold">
+      <div className="mx-auto max-w-[640px] py-8">
+        <div className="border border-primary-fixed/40 bg-[#0c0f12] p-6 sm:p-10 text-center animate-enter shadow-2xl">
+          <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center bg-primary-fixed text-black font-display-mono text-2xl font-bold rounded-[2px]">
             ✓
           </div>
-          <p className="pact-eyebrow mb-1">Escrow Activated</p>
+          <p className="pact-eyebrow mb-1">Escrow Activated & Anchored</p>
           <h1 className="font-display-mono text-[24px] sm:text-[28px] font-bold text-white tracking-tight">
             Pact Offer Committed
           </h1>
           <p className="mt-2 text-[13px] leading-6 text-text-muted font-body-sans max-w-md mx-auto">
-            Maker collateral has been locked in the verified PACT protocol vault. Your designated counterparty can now review written terms and accept.
+            Maker collateral has been locked in the verified PACT protocol vault. Your designated counterparty can now review terms and accept on-chain.
           </p>
 
-          <div className="mt-6 p-4 border border-outline-border bg-[#07080a] text-left font-code-hash text-[12px] space-y-2">
-            <div className="flex justify-between">
+          <div className="mt-6 p-4 border border-outline-border bg-[#07080a] text-left font-code-hash text-[12px] space-y-2.5">
+            <div className="flex justify-between items-center pb-2 border-b border-outline-hairline">
               <span className="text-text-muted">Agreement ID:</span>
-              <span className="text-white font-bold">#{createdPactId ? String(createdPactId).padStart(4, '0') : '—'}</span>
+              <span className="text-white font-bold text-[14px]">#{createdPactId ? String(createdPactId).padStart(4, '0') : '—'}</span>
             </div>
-            <div className="flex justify-between">
-              <span className="text-text-muted">Locked Collateral:</span>
+            <div className="flex justify-between items-center">
+              <span className="text-text-muted">Locked Escrow Collateral:</span>
               <span className="text-primary-fixed font-bold">{amountMaker} {TOKENS.find(t => t.value === tokenMaker)?.label}</span>
             </div>
-            <div className="flex justify-between">
-              <span className="text-text-muted">Offer Expiry:</span>
+            <div className="flex justify-between items-center">
+              <span className="text-text-muted">Offer Expiry Window:</span>
               <span className="text-white">{offerHours} hours</span>
             </div>
-            <div className="flex justify-between">
-              <span className="text-text-muted">Terms Hash:</span>
-              <span className="text-text-dim text-[10px] break-all">{canonicalTermsHash?.slice(0, 20)}…</span>
+            <div className="flex justify-between items-center pt-1 border-t border-outline-hairline/60">
+              <span className="text-text-muted">Canonical Terms Hash:</span>
+              <span className="text-primary-fixed text-[10px] break-all font-mono">{canonicalTermsHash || '—'}</span>
             </div>
           </div>
 
@@ -391,22 +451,27 @@ export default function NewPactPage() {
   }
 
   const fieldClassFor = (field: NewPactField) => `
-    w-full border bg-[#07080a] px-3.5 py-2.5 text-[13px] font-code-hash text-white outline-none transition-colors
+    w-full border bg-[#07080a] px-3.5 py-2.5 text-[13px] font-code-hash text-white outline-none transition-all
     ${visibleFieldError(field)
-      ? 'border-status-error focus:border-status-error ring-1 ring-status-error/30'
-      : 'border-outline-border hover:border-outline-variant focus:border-primary-fixed'}
+      ? 'border-status-error focus:border-status-error ring-1 ring-status-error/40 bg-rose-950/10'
+      : 'border-outline-border hover:border-outline-variant focus:border-primary-fixed focus:ring-1 focus:ring-primary-fixed/20'}
   `
   const errorId = (field: NewPactField) => `${field}-error`
   const renderFieldError = (field: NewPactField) => {
     const error = visibleFieldError(field)
     return error ? (
-      <span id={errorId(field)} className="mt-1.5 flex items-center gap-1 text-[11px] leading-4 text-status-error font-code-hash" role="alert">
-        <span className="font-bold">!</span> {error}
-      </span>
+      <div id={errorId(field)} className="mt-1.5 flex items-start gap-1.5 text-[11px] leading-4 text-status-error font-code-hash animate-enter" role="alert">
+        <span className="font-bold shrink-0 mt-0.5 text-[12px]">⚠️</span>
+        <span>{error}</span>
+      </div>
     ) : null
   }
 
   const busy = phase !== 'idle'
+
+  const step1Valid = isStepValid(1, fieldErrors)
+  const step2Valid = isStepValid(2, fieldErrors)
+  const step3Valid = isStepValid(3, fieldErrors)
 
   return (
     <div className="mx-auto w-full max-w-[880px] space-y-6">
@@ -446,409 +511,705 @@ export default function NewPactPage() {
           New Pact
         </h1>
         <p className="mt-1 font-body-sans text-[13px] text-text-muted max-w-xl">
-          Configure participants, locked collateral, deadlines, and plaintext terms. Maker collateral is escrowed immediately upon submission.
+          Create an on-chain escrow commitment. Configure parties, collateral, deadlines, and plaintext terms through the 4-step wizard.
         </p>
       </header>
 
-      {/* Form Sections */}
+      {/* Step Navigation Wizard Stepper */}
+      <nav aria-label="Form Steps" className="grid grid-cols-2 sm:grid-cols-4 gap-2 font-code-hash text-[11px]">
+        {[
+          { num: 1 as FormStep, label: '1. Parties', valid: step1Valid, fields: PARTIES_FIELDS },
+          { num: 2 as FormStep, label: '2. Collateral', valid: step2Valid, fields: COLLATERAL_FIELDS },
+          { num: 3 as FormStep, label: '3. Terms & Deadlines', valid: step3Valid, fields: TERMS_DEADLINES_FIELDS },
+          { num: 4 as FormStep, label: '4. Review & Sign', valid: step1Valid && step2Valid && step3Valid, fields: [] },
+        ].map(step => {
+          const isActive = currentStep === step.num
+          const isPassed = currentStep > step.num
+          const hasError = submitAttempted && !step.valid
+
+          return (
+            <button
+              key={step.num}
+              type="button"
+              onClick={() => goToStep(step.num)}
+              className={`p-3 border text-left transition-all flex items-center justify-between gap-2 ${
+                isActive
+                  ? 'border-primary-fixed bg-primary-fixed/10 text-primary-fixed font-bold'
+                  : isPassed
+                  ? 'border-outline-border bg-[#0c0f12] text-white hover:border-outline-variant'
+                  : 'border-outline-hairline/60 bg-[#07080a] text-text-dim hover:text-text-muted hover:border-outline-border'
+              }`}
+            >
+              <div className="flex items-center gap-1.5 truncate">
+                <span className={`flex h-4 w-4 shrink-0 items-center justify-center rounded-full text-[9px] font-bold ${
+                  isActive
+                    ? 'bg-primary-fixed text-black'
+                    : isPassed
+                    ? 'bg-emerald-500 text-black'
+                    : 'bg-[#1a2027] text-text-dim'
+                }`}>
+                  {isPassed ? '✓' : step.num}
+                </span>
+                <span className="truncate">{step.label}</span>
+              </div>
+              {hasError && (
+                <span className="text-status-error font-bold shrink-0 text-[10px]" title="Contains validation errors">
+                  !
+                </span>
+              )}
+            </button>
+          )
+        })}
+      </nav>
+
+      {/* Main Form Body */}
       <form onSubmit={e => { e.preventDefault(); submitPact() }} noValidate className="space-y-6">
         
-        {/* Step 1: Structure & Parties */}
-        <section aria-labelledby="step-1-title" className="border border-outline-border bg-[#0c0f12] p-5 animate-enter">
-          <div className="flex items-center justify-between gap-2 mb-4 pb-3 border-b border-outline-hairline">
-            <div className="flex items-center gap-2">
-              <span className="flex h-5 w-5 items-center justify-center bg-primary-fixed text-black font-display-mono text-[11px] font-bold">1</span>
-              <h2 id="step-1-title" className="font-headline-mono text-[13px] font-bold uppercase tracking-wider text-white">
-                Structure & Parties
-              </h2>
+        {/* ========================================================================= */}
+        {/* STEP 1: PARTIES & STRUCTURE */}
+        {/* ========================================================================= */}
+        {currentStep === 1 && (
+          <section aria-labelledby="step-1-title" className="border border-outline-border bg-[#0c0f12] p-5 sm:p-6 animate-enter space-y-5">
+            <div className="flex items-center justify-between gap-2 pb-3 border-b border-outline-hairline">
+              <div className="flex items-center gap-2">
+                <span className="flex h-5 w-5 items-center justify-center bg-primary-fixed text-black font-display-mono text-[11px] font-bold">1</span>
+                <h2 id="step-1-title" className="font-headline-mono text-[14px] font-bold uppercase tracking-wider text-white">
+                  Parties & Agreement Structure
+                </h2>
+              </div>
+              <span className="text-[10px] font-label-caps uppercase text-text-dim">Deal Type & Addresses</span>
             </div>
-            <span className="text-[10px] font-label-caps uppercase text-text-dim">Deal Type & Counterparties</span>
-          </div>
 
-          {/* Deal Kind Selection */}
-          <div className="mb-5 grid gap-3 sm:grid-cols-2">
-            {KINDS.map(option => (
+            {/* Maker Role Card */}
+            <div className="p-4 border border-outline-hairline bg-[#07080a] flex flex-col sm:flex-row sm:items-center justify-between gap-3 font-code-hash text-[12px]">
+              <div className="flex items-center gap-2 flex-wrap">
+                <RoleBadge role="MAKER" isCurrentUser={true} size="sm" />
+                <span className="text-text-muted">You are creating this pact as Maker (Escrow Depositor).</span>
+              </div>
+              <div className="shrink-0">
+                {address ? (
+                  <AddressDisplay address={address} showCopy={true} showExplorer={true} />
+                ) : (
+                  <span className="text-amber-400 font-bold">Wallet Disconnected</span>
+                )}
+              </div>
+            </div>
+
+            {/* Deal Kind Selection */}
+            <div>
+              <label className="block font-label-caps text-[11px] uppercase tracking-wider text-text-muted mb-2">
+                Select Agreement Model
+              </label>
+              <div className="grid gap-3 sm:grid-cols-2">
+                {KINDS.map(option => (
+                  <button
+                    key={option.value}
+                    type="button"
+                    onClick={() => setKind(option.value)}
+                    className={`p-4 text-left border transition-all cursor-pointer ${
+                      kind === option.value
+                        ? 'border-primary-fixed bg-primary-fixed/[0.08] shadow-[0_0_15px_rgba(243,232,140,0.06)]'
+                        : 'border-outline-border bg-[#07080a] hover:border-outline-variant'
+                    }`}
+                  >
+                    <div className="flex items-center justify-between">
+                      <span className="font-headline-mono text-[13px] font-bold text-white">
+                        {option.label}
+                      </span>
+                      <span className="px-1.5 py-0.5 border border-outline-border bg-[#12161b] text-[9px] font-label-caps uppercase text-text-muted">
+                        {option.tag}
+                      </span>
+                    </div>
+                    <p className="mt-2 font-body-sans text-[11px] leading-5 text-text-muted">
+                      {option.desc}
+                    </p>
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {/* Counterparty & Arbiter Address Inputs */}
+            <div className="grid gap-5 sm:grid-cols-2 pt-2 border-t border-outline-hairline/60">
+              <div>
+                <div className="flex items-center justify-between mb-1.5">
+                  <label htmlFor="input-taker" className="font-label-caps text-[11px] uppercase tracking-wider text-text-muted">
+                    Designated Counterparty Wallet <span className="text-status-error">*</span>
+                  </label>
+                  <RoleBadge role="TAKER" isCurrentUser={false} size="xs" />
+                </div>
+                <input
+                  id="input-taker"
+                  ref={el => { fieldRefs.current.taker = el }}
+                  value={taker}
+                  onChange={e => setTaker(e.target.value.trim())}
+                  onBlur={() => touchField('taker')}
+                  aria-invalid={Boolean(visibleFieldError('taker'))}
+                  aria-describedby={visibleFieldError('taker') ? errorId('taker') : undefined}
+                  placeholder="0x… (42-character Arc address)"
+                  className={fieldClassFor('taker')}
+                />
+                {renderFieldError('taker')}
+                <p className="mt-1 text-[10px] text-text-dim font-body-sans">
+                  The only address authorized to accept this agreement and deliver fulfillment proof.
+                </p>
+              </div>
+
+              <div>
+                <div className="flex items-center justify-between mb-1.5">
+                  <label htmlFor="input-arbiter" className="font-label-caps text-[11px] uppercase tracking-wider text-text-muted">
+                    Designated Arbiter Wallet <span className="text-status-error">*</span>
+                  </label>
+                  <RoleBadge role="ARBITER" isCurrentUser={false} size="xs" />
+                </div>
+                <input
+                  id="input-arbiter"
+                  ref={el => { fieldRefs.current.arbiter = el }}
+                  value={arbiter}
+                  onChange={e => setArbiter(e.target.value.trim())}
+                  onBlur={() => touchField('arbiter')}
+                  aria-invalid={Boolean(visibleFieldError('arbiter'))}
+                  aria-describedby={visibleFieldError('arbiter') ? errorId('arbiter') : undefined}
+                  placeholder="0x… (Neutral third-party mediator)"
+                  className={fieldClassFor('arbiter')}
+                />
+                {renderFieldError('arbiter')}
+                <p className="mt-1 text-[10px] text-text-dim font-body-sans">
+                  Neutral arbitrator who will adjudicate and split escrow funds if a dispute is formally opened.
+                </p>
+              </div>
+            </div>
+
+            {reputation && (
+              <div className="p-3.5 border border-outline-hairline bg-[#07080a] flex items-center justify-between text-[11px] font-code-hash text-text-muted">
+                <span>Counterparty On-Chain Track Record:</span>
+                <span className="text-white">
+                  <strong className="text-emerald-400">{reputation.cleared} settled</strong> · <strong className="text-rose-400">{reputation.slashed} disputes lost</strong>
+                </span>
+              </div>
+            )}
+
+            {/* Step 1 Actions */}
+            <div className="pt-4 border-t border-outline-hairline flex justify-end">
               <button
-                key={option.value}
                 type="button"
-                onClick={() => setKind(option.value)}
-                className={`p-4 text-left border transition-all cursor-pointer ${
-                  kind === option.value
-                    ? 'border-primary-fixed bg-primary-fixed/[0.08]'
-                    : 'border-outline-border bg-[#07080a] hover:border-outline-variant'
-                }`}
+                onClick={() => goToStep(2)}
+                className="pact-button-primary min-h-[42px] px-6 text-[12px] font-bold uppercase tracking-wider inline-flex items-center gap-1.5"
               >
-                <div className="flex items-center justify-between">
-                  <span className="font-headline-mono text-[13px] font-bold text-white">
-                    {option.label}
+                <span>Continue to Collateral & Economics</span>
+                <span>→</span>
+              </button>
+            </div>
+          </section>
+        )}
+
+        {/* ========================================================================= */}
+        {/* STEP 2: COLLATERAL & DISPUTE ECONOMICS */}
+        {/* ========================================================================= */}
+        {currentStep === 2 && (
+          <section aria-labelledby="step-2-title" className="border border-outline-border bg-[#0c0f12] p-5 sm:p-6 animate-enter space-y-5">
+            <div className="flex items-center justify-between gap-2 pb-3 border-b border-outline-hairline">
+              <div className="flex items-center gap-2">
+                <span className="flex h-5 w-5 items-center justify-center bg-primary-fixed text-black font-display-mono text-[11px] font-bold">2</span>
+                <h2 id="step-2-title" className="font-headline-mono text-[14px] font-bold uppercase tracking-wider text-white">
+                  Collateral & Dispute Economics
+                </h2>
+              </div>
+              <span className="text-[10px] font-label-caps uppercase text-text-dim">Escrow & Bond Calculations</span>
+            </div>
+
+            {/* Maker Collateral Row */}
+            <div className="grid gap-4 sm:grid-cols-2">
+              <div>
+                <TokenSelect
+                  label="Maker Collateral Token"
+                  value={tokenMaker}
+                  onChange={val => setTokenMaker(val as `0x${string}`)}
+                  tokens={TOKENS}
+                />
+              </div>
+              <div>
+                <div className="flex items-center justify-between mb-1.5">
+                  <label htmlFor="input-amount-maker" className="font-label-caps text-[11px] uppercase tracking-wider text-text-muted">
+                    Maker Collateral to Lock <span className="text-status-error">*</span>
+                  </label>
+                  {makerBalanceData !== undefined && (
+                    <button
+                      type="button"
+                      onClick={() => setAmountMaker(formatUnits(makerBalance, makerDecimals))}
+                      className="text-[10px] font-code-hash text-primary-fixed hover:underline"
+                    >
+                      MAX: {formatUnits(makerBalance, makerDecimals)}
+                    </button>
+                  )}
+                </div>
+                <input
+                  id="input-amount-maker"
+                  ref={el => { fieldRefs.current.amountMaker = el }}
+                  inputMode="decimal"
+                  value={amountMaker}
+                  onChange={e => setAmountMaker(e.target.value)}
+                  onBlur={() => touchField('amountMaker')}
+                  aria-invalid={Boolean(visibleFieldError('amountMaker'))}
+                  aria-describedby={visibleFieldError('amountMaker') ? errorId('amountMaker') : undefined}
+                  placeholder="e.g. 500.00"
+                  className={fieldClassFor('amountMaker')}
+                />
+                {renderFieldError('amountMaker')}
+              </div>
+            </div>
+
+            {/* Counterparty Collateral & Valuation */}
+            <div className="grid gap-4 sm:grid-cols-2 pt-2 border-t border-outline-hairline/60">
+              <div>
+                <TokenSelect
+                  label="Counterparty Token"
+                  value={tokenTaker}
+                  onChange={val => setTokenTaker(val as `0x${string}`)}
+                  tokens={TOKENS}
+                />
+              </div>
+              <div>
+                <label htmlFor="input-amount-taker" className="block font-label-caps text-[11px] uppercase tracking-wider text-text-muted mb-1.5">
+                  Counterparty Collateral Required (Optional)
+                </label>
+                <input
+                  id="input-amount-taker"
+                  ref={el => { fieldRefs.current.amountTaker = el }}
+                  inputMode="decimal"
+                  value={amountTaker}
+                  onChange={e => setAmountTaker(e.target.value)}
+                  onBlur={() => touchField('amountTaker')}
+                  aria-invalid={Boolean(visibleFieldError('amountTaker'))}
+                  aria-describedby={visibleFieldError('amountTaker') ? errorId('amountTaker') : undefined}
+                  placeholder="0.00 (leave empty for single-sided escrow)"
+                  className={fieldClassFor('amountTaker')}
+                />
+                {renderFieldError('amountTaker')}
+              </div>
+
+              <div>
+                <label htmlFor="input-notional-usdc" className="block font-label-caps text-[11px] uppercase tracking-wider text-text-muted mb-1.5">
+                  Notional Value in USDC <span className="text-status-error">*</span>
+                </label>
+                <input
+                  id="input-notional-usdc"
+                  ref={el => { fieldRefs.current.notionalUSDC = el }}
+                  inputMode="decimal"
+                  value={notionalUSDC}
+                  onChange={e => setNotionalUSDC(e.target.value)}
+                  onBlur={() => touchField('notionalUSDC')}
+                  aria-invalid={Boolean(visibleFieldError('notionalUSDC'))}
+                  aria-describedby={visibleFieldError('notionalUSDC') ? errorId('notionalUSDC') : undefined}
+                  placeholder="e.g. 500"
+                  className={fieldClassFor('notionalUSDC')}
+                />
+                {renderFieldError('notionalUSDC')}
+                <p className="mt-1 text-[10px] text-text-dim font-body-sans">
+                  Determines the required 5% dispute bond posted by claimants.
+                </p>
+              </div>
+
+              <div>
+                <label htmlFor="input-arbiter-fee-cap" className="block font-label-caps text-[11px] uppercase tracking-wider text-text-muted mb-1.5">
+                  Arbiter Fee Cap (USDC)
+                </label>
+                <input
+                  id="input-arbiter-fee-cap"
+                  ref={el => { fieldRefs.current.arbiterFeeCap = el }}
+                  inputMode="decimal"
+                  value={arbiterFeeCap}
+                  onChange={e => setArbiterFeeCap(e.target.value)}
+                  onBlur={() => touchField('arbiterFeeCap')}
+                  aria-invalid={Boolean(visibleFieldError('arbiterFeeCap'))}
+                  aria-describedby={visibleFieldError('arbiterFeeCap') ? errorId('arbiterFeeCap') : undefined}
+                  className={fieldClassFor('arbiterFeeCap')}
+                />
+                {renderFieldError('arbiterFeeCap')}
+                <p className="mt-1 text-[10px] text-text-dim font-body-sans">
+                  Maximum compensation deducted for arbiter from the dispute bond upon ruling.
+                </p>
+              </div>
+            </div>
+
+            {/* Calculated Bond Summary Card */}
+            <div className="p-4 border border-outline-hairline bg-[#07080a] text-[12px] font-code-hash space-y-1.5">
+              <div className="flex justify-between items-center">
+                <span className="text-text-muted">Calculated 5% Dispute Bond:</span>
+                <span className="text-primary-fixed font-bold text-[13px]">{formatUnits(calculatedBond, 6)} USDC</span>
+              </div>
+              <p className="text-[11px] leading-5 text-text-dim font-body-sans">
+                Each party must deposit this exact bond if disputing. The winning party is fully refunded; the arbiter receives fee cap from the loser&apos;s bond.
+              </p>
+            </div>
+
+            {/* Step 2 Actions */}
+            <div className="pt-4 border-t border-outline-hairline flex items-center justify-between">
+              <button
+                type="button"
+                onClick={() => goToStep(1)}
+                className="pact-button-secondary min-h-[42px] px-5 text-[11px] uppercase tracking-wider"
+              >
+                ← Back to Parties
+              </button>
+              <button
+                type="button"
+                onClick={() => goToStep(3)}
+                className="pact-button-primary min-h-[42px] px-6 text-[12px] font-bold uppercase tracking-wider inline-flex items-center gap-1.5"
+              >
+                <span>Continue to Terms & Deadlines</span>
+                <span>→</span>
+              </button>
+            </div>
+          </section>
+        )}
+
+        {/* ========================================================================= */}
+        {/* STEP 3: TERMS & DEADLINES */}
+        {/* ========================================================================= */}
+        {currentStep === 3 && (
+          <section aria-labelledby="step-3-title" className="border border-outline-border bg-[#0c0f12] p-5 sm:p-6 animate-enter space-y-5">
+            <div className="flex items-center justify-between gap-2 pb-3 border-b border-outline-hairline">
+              <div className="flex items-center gap-2">
+                <span className="flex h-5 w-5 items-center justify-center bg-primary-fixed text-black font-display-mono text-[11px] font-bold">3</span>
+                <h2 id="step-3-title" className="font-headline-mono text-[14px] font-bold uppercase tracking-wider text-white">
+                  Deadlines & Agreement Terms
+                </h2>
+              </div>
+              <span className="text-[10px] font-label-caps uppercase text-text-dim">Time Windows & Plaintext</span>
+            </div>
+
+            {/* Written Terms Textarea */}
+            <div>
+              <div className="flex items-center justify-between mb-1.5">
+                <label htmlFor="input-terms" className="font-label-caps text-[11px] uppercase tracking-wider text-text-muted">
+                  Agreement Terms & Specifications <span className="text-status-error">*</span>
+                </label>
+                <span className="text-[10px] font-code-hash text-text-dim">
+                  {terms.length} / 2000 characters
+                </span>
+              </div>
+              <textarea
+                id="input-terms"
+                ref={el => { fieldRefs.current.terms = el }}
+                value={terms}
+                onChange={e => setTerms(e.target.value)}
+                onBlur={() => touchField('terms')}
+                aria-invalid={Boolean(visibleFieldError('terms'))}
+                aria-describedby={visibleFieldError('terms') ? errorId('terms') : undefined}
+                maxLength={2000}
+                rows={6}
+                placeholder="Detail the deliverables, milestone conditions, quality standards, and fulfillment criteria..."
+                className={`${fieldClassFor('terms')} resize-y`}
+              />
+              {renderFieldError('terms')}
+              <div className="mt-1.5 flex items-center justify-between text-[10px] font-code-hash text-text-dim">
+                <span>Terms are hashed client-side using SHA-256 for privacy and zero gas overhead.</span>
+                {terms.trim() && (
+                  <span className="text-primary-fixed font-bold truncate max-w-[220px]">
+                    SHA-256: {hashTerms(terms).slice(0, 16)}…
                   </span>
-                  <span className="px-1.5 py-0.5 border border-outline-border bg-[#12161b] text-[9px] font-label-caps uppercase text-text-muted">
-                    {option.tag}
+                )}
+              </div>
+            </div>
+
+            {/* Deadlines Inputs */}
+            <div className="grid gap-4 sm:grid-cols-3 pt-2 border-t border-outline-hairline/60">
+              <div>
+                <label htmlFor="input-offer-hours" className="block font-label-caps text-[11px] uppercase tracking-wider text-text-muted mb-1.5">
+                  Offer Expiry Window (Hours) <span className="text-status-error">*</span>
+                </label>
+                <input
+                  id="input-offer-hours"
+                  ref={el => { fieldRefs.current.offerHours = el }}
+                  inputMode="numeric"
+                  value={offerHours}
+                  onChange={e => setOfferHours(e.target.value)}
+                  onBlur={() => touchField('offerHours')}
+                  aria-invalid={Boolean(visibleFieldError('offerHours'))}
+                  aria-describedby={visibleFieldError('offerHours') ? errorId('offerHours') : undefined}
+                  className={fieldClassFor('offerHours')}
+                />
+                {renderFieldError('offerHours')}
+                <p className="mt-1 text-[10px] text-text-dim font-code-hash">
+                  Cutoff: {formatDate(timestamps.offerExpiry)}
+                </p>
+              </div>
+
+              <div>
+                <label htmlFor="input-performance-days" className="block font-label-caps text-[11px] uppercase tracking-wider text-text-muted mb-1.5">
+                  Performance Window (Days) <span className="text-status-error">*</span>
+                </label>
+                <input
+                  id="input-performance-days"
+                  ref={el => { fieldRefs.current.performanceDays = el }}
+                  inputMode="numeric"
+                  value={performanceDays}
+                  onChange={e => setPerformanceDays(e.target.value)}
+                  onBlur={() => touchField('performanceDays')}
+                  aria-invalid={Boolean(visibleFieldError('performanceDays'))}
+                  aria-describedby={visibleFieldError('performanceDays') ? errorId('performanceDays') : undefined}
+                  className={fieldClassFor('performanceDays')}
+                />
+                {renderFieldError('performanceDays')}
+                <p className="mt-1 text-[10px] text-text-dim font-code-hash">
+                  Cutoff: {formatDate(timestamps.performanceDeadline)}
+                </p>
+              </div>
+
+              <div>
+                <label htmlFor="input-dispute-days" className="block font-label-caps text-[11px] uppercase tracking-wider text-text-muted mb-1.5">
+                  Dispute Window (Days) <span className="text-status-error">*</span>
+                </label>
+                <input
+                  id="input-dispute-days"
+                  ref={el => { fieldRefs.current.disputeDays = el }}
+                  inputMode="numeric"
+                  value={disputeDays}
+                  onChange={e => setDisputeDays(e.target.value)}
+                  onBlur={() => touchField('disputeDays')}
+                  aria-invalid={Boolean(visibleFieldError('disputeDays'))}
+                  aria-describedby={visibleFieldError('disputeDays') ? errorId('disputeDays') : undefined}
+                  className={fieldClassFor('disputeDays')}
+                />
+                {renderFieldError('disputeDays')}
+                <p className="mt-1 text-[10px] text-text-dim font-code-hash">
+                  Cutoff: {formatDate(timestamps.disputeDeadline)}
+                </p>
+              </div>
+            </div>
+
+            {/* Privacy Checkbox */}
+            <div className="pt-2">
+              <label className="flex items-center gap-2.5 text-[11px] font-body-sans text-text-muted cursor-pointer select-none">
+                <input
+                  type="checkbox"
+                  checked={blurSize}
+                  onChange={e => setBlurSize(e.target.checked)}
+                  className="accent-[#c8f542] h-4 w-4 rounded-[2px]"
+                />
+                <span>Blur collateral amount in public tape feed (Cosmetic UI only; on-chain ledger remains public)</span>
+              </label>
+            </div>
+
+            {/* Step 3 Actions */}
+            <div className="pt-4 border-t border-outline-hairline flex items-center justify-between">
+              <button
+                type="button"
+                onClick={() => goToStep(2)}
+                className="pact-button-secondary min-h-[42px] px-5 text-[11px] uppercase tracking-wider"
+              >
+                ← Back to Collateral
+              </button>
+              <button
+                type="button"
+                onClick={() => goToStep(4)}
+                className="pact-button-primary min-h-[42px] px-6 text-[12px] font-bold uppercase tracking-wider inline-flex items-center gap-1.5"
+              >
+                <span>Continue to Pre-Flight Review</span>
+                <span>→</span>
+              </button>
+            </div>
+          </section>
+        )}
+
+        {/* ========================================================================= */}
+        {/* STEP 4: PRE-FLIGHT REVIEW & AUTHORIZATION */}
+        {/* ========================================================================= */}
+        {currentStep === 4 && (
+          <section aria-labelledby="step-4-title" className="border border-outline-border bg-[#0c0f12] p-5 sm:p-6 animate-enter space-y-6">
+            <div className="flex items-center justify-between gap-2 pb-3 border-b border-outline-hairline">
+              <div className="flex items-center gap-2">
+                <span className="flex h-5 w-5 items-center justify-center bg-primary-fixed text-black font-display-mono text-[11px] font-bold">4</span>
+                <h2 id="step-4-title" className="font-headline-mono text-[14px] font-bold uppercase tracking-wider text-white">
+                  Pre-Flight Review & On-Chain Commit
+                </h2>
+              </div>
+              <span className="text-[10px] font-label-caps uppercase text-text-dim">Final Verification</span>
+            </div>
+
+            {/* Section A: Public On-Chain Data */}
+            <div className="space-y-3">
+              <div className="flex items-center justify-between">
+                <h3 className="text-[12px] font-headline-mono font-bold uppercase tracking-wider text-primary-fixed flex items-center gap-1.5">
+                  <span>🌐</span>
+                  <span>Public On-Chain Ledger Data</span>
+                </h3>
+                <button
+                  type="button"
+                  onClick={() => goToStep(1)}
+                  className="text-[10px] font-code-hash text-primary-fixed hover:underline"
+                >
+                  Edit Parties ✎
+                </button>
+              </div>
+
+              <div className="grid gap-3 sm:grid-cols-2 p-4 border border-outline-hairline bg-[#07080a] text-[12px] font-code-hash">
+                <div>
+                  <span className="text-[10px] font-label-caps uppercase text-text-dim block mb-1">Maker (Depositor)</span>
+                  <div className="flex items-center gap-1.5">
+                    <RoleBadge role="MAKER" isCurrentUser={true} size="xs" />
+                    {address ? (
+                      <AddressDisplay address={address} showCopy={true} showExplorer={false} />
+                    ) : (
+                      <span className="text-amber-400">Disconnected</span>
+                    )}
+                  </div>
+                </div>
+
+                <div>
+                  <span className="text-[10px] font-label-caps uppercase text-text-dim block mb-1">Counterparty (Taker)</span>
+                  <div className="flex items-center gap-1.5">
+                    <RoleBadge role="TAKER" isCurrentUser={false} size="xs" />
+                    {isAddress(taker) ? (
+                      <AddressDisplay address={taker} showCopy={true} showExplorer={false} />
+                    ) : (
+                      <span className="text-status-error">Missing / Invalid</span>
+                    )}
+                  </div>
+                </div>
+
+                <div>
+                  <span className="text-[10px] font-label-caps uppercase text-text-dim block mb-1">Designated Arbiter</span>
+                  <div className="flex items-center gap-1.5">
+                    <RoleBadge role="ARBITER" isCurrentUser={false} size="xs" />
+                    {isAddress(arbiter) ? (
+                      <AddressDisplay address={arbiter} showCopy={true} showExplorer={false} />
+                    ) : (
+                      <span className="text-status-error">Missing / Invalid</span>
+                    )}
+                  </div>
+                </div>
+
+                <div>
+                  <span className="text-[10px] font-label-caps uppercase text-text-dim block mb-1">Agreement Type</span>
+                  <span className="text-white font-bold">{KINDS.find(k => k.value === kind)?.label}</span>
+                </div>
+
+                <div className="pt-2 border-t border-outline-hairline/60">
+                  <span className="text-[10px] font-label-caps uppercase text-text-dim block mb-1">Maker Collateral to Lock</span>
+                  <span className="text-primary-fixed font-bold text-[14px]">
+                    {amountMaker || '0'} {TOKENS.find(t => t.value === tokenMaker)?.label}
                   </span>
                 </div>
-                <p className="mt-2 font-body-sans text-[11px] leading-5 text-text-muted">
-                  {option.desc}
-                </p>
-              </button>
-            ))}
-          </div>
 
-          {/* Counterparty & Arbiter Address Inputs */}
-          <div className="grid gap-4 sm:grid-cols-2">
-            <div>
-              <label htmlFor="input-taker" className="block font-label-caps text-[11px] uppercase tracking-wider text-text-muted mb-1.5">
-                Designated Counterparty Wallet <span className="text-status-error">*</span>
-              </label>
-              <input
-                id="input-taker"
-                ref={el => { fieldRefs.current.taker = el }}
-                value={taker}
-                onChange={e => setTaker(e.target.value.trim())}
-                onBlur={() => touchField('taker')}
-                aria-invalid={Boolean(visibleFieldError('taker'))}
-                aria-describedby={visibleFieldError('taker') ? errorId('taker') : undefined}
-                placeholder="0x… (42-character Arc address)"
-                className={fieldClassFor('taker')}
-              />
-              {renderFieldError('taker')}
-            </div>
+                <div className="pt-2 border-t border-outline-hairline/60">
+                  <span className="text-[10px] font-label-caps uppercase text-text-dim block mb-1">Required Taker Collateral</span>
+                  <span className="text-white font-bold text-[14px]">
+                    {amountTaker ? `${amountTaker} ${TOKENS.find(t => t.value === tokenTaker)?.label}` : 'None (0.00)'}
+                  </span>
+                </div>
 
-            <div>
-              <label htmlFor="input-arbiter" className="block font-label-caps text-[11px] uppercase tracking-wider text-text-muted mb-1.5">
-                Designated Arbiter Wallet <span className="text-status-error">*</span>
-              </label>
-              <input
-                id="input-arbiter"
-                ref={el => { fieldRefs.current.arbiter = el }}
-                value={arbiter}
-                onChange={e => setArbiter(e.target.value.trim())}
-                onBlur={() => touchField('arbiter')}
-                aria-invalid={Boolean(visibleFieldError('arbiter'))}
-                aria-describedby={visibleFieldError('arbiter') ? errorId('arbiter') : undefined}
-                placeholder="0x… (Third-party mediator)"
-                className={fieldClassFor('arbiter')}
-              />
-              {renderFieldError('arbiter')}
-            </div>
-          </div>
+                <div>
+                  <span className="text-[10px] font-label-caps uppercase text-text-dim block mb-1">5% Dispute Bond</span>
+                  <span className="text-white">{formatUnits(calculatedBond, 6)} USDC</span>
+                </div>
 
-          {reputation && (
-            <div className="mt-3 p-3 border border-outline-hairline bg-[#07080a] flex items-center justify-between text-[11px] font-code-hash text-text-muted">
-              <span>Counterparty On-Chain Track Record:</span>
-              <span className="text-white">
-                <strong className="text-emerald-400">{reputation.cleared} settled</strong> · <strong className="text-rose-400">{reputation.slashed} disputes lost</strong>
-              </span>
-            </div>
-          )}
-        </section>
+                <div>
+                  <span className="text-[10px] font-label-caps uppercase text-text-dim block mb-1">Arbiter Fee Cap</span>
+                  <span className="text-white">{arbiterFeeCap || '0'} USDC</span>
+                </div>
 
-        {/* Step 2: Collateral & Economics */}
-        <section aria-labelledby="step-2-title" className="border border-outline-border bg-[#0c0f12] p-5 animate-enter">
-          <div className="flex items-center justify-between gap-2 mb-4 pb-3 border-b border-outline-hairline">
-            <div className="flex items-center gap-2">
-              <span className="flex h-5 w-5 items-center justify-center bg-primary-fixed text-black font-display-mono text-[11px] font-bold">2</span>
-              <h2 id="step-2-title" className="font-headline-mono text-[13px] font-bold uppercase tracking-wider text-white">
-                Collateral & Dispute Economics
-              </h2>
-            </div>
-            <span className="text-[10px] font-label-caps uppercase text-text-dim">Escrow Amounts & Bond</span>
-          </div>
+                <div>
+                  <span className="text-[10px] font-label-caps uppercase text-text-dim block mb-1">Offer Expiration Date</span>
+                  <span className="text-white">{formatDate(timestamps.offerExpiry)}</span>
+                </div>
 
-          <div className="grid gap-4 sm:grid-cols-2">
-            <div>
-              <TokenSelect
-                label="Maker Token"
-                value={tokenMaker}
-                onChange={val => setTokenMaker(val as `0x${string}`)}
-                tokens={TOKENS}
-              />
-            </div>
-            <div>
-              <label htmlFor="input-amount-maker" className="block font-label-caps text-[11px] uppercase tracking-wider text-text-muted mb-1.5">
-                Maker Collateral to Lock <span className="text-status-error">*</span>
-              </label>
-              <input
-                id="input-amount-maker"
-                ref={el => { fieldRefs.current.amountMaker = el }}
-                inputMode="decimal"
-                value={amountMaker}
-                onChange={e => setAmountMaker(e.target.value)}
-                onBlur={() => touchField('amountMaker')}
-                aria-invalid={Boolean(visibleFieldError('amountMaker'))}
-                aria-describedby={visibleFieldError('amountMaker') ? errorId('amountMaker') : undefined}
-                placeholder="e.g. 500.00"
-                className={fieldClassFor('amountMaker')}
-              />
-              {renderFieldError('amountMaker')}
-            </div>
+                <div>
+                  <span className="text-[10px] font-label-caps uppercase text-text-dim block mb-1">Performance Deadline</span>
+                  <span className="text-white">{formatDate(timestamps.performanceDeadline)}</span>
+                </div>
 
-            <div>
-              <TokenSelect
-                label="Counterparty Token"
-                value={tokenTaker}
-                onChange={val => setTokenTaker(val as `0x${string}`)}
-                tokens={TOKENS}
-              />
-            </div>
-            <div>
-              <label htmlFor="input-amount-taker" className="block font-label-caps text-[11px] uppercase tracking-wider text-text-muted mb-1.5">
-                Counterparty Collateral (Optional)
-              </label>
-              <input
-                id="input-amount-taker"
-                ref={el => { fieldRefs.current.amountTaker = el }}
-                inputMode="decimal"
-                value={amountTaker}
-                onChange={e => setAmountTaker(e.target.value)}
-                onBlur={() => touchField('amountTaker')}
-                aria-invalid={Boolean(visibleFieldError('amountTaker'))}
-                aria-describedby={visibleFieldError('amountTaker') ? errorId('amountTaker') : undefined}
-                placeholder="0.00 (optional)"
-                className={fieldClassFor('amountTaker')}
-              />
-              {renderFieldError('amountTaker')}
-            </div>
-
-            <div>
-              <label htmlFor="input-notional-usdc" className="block font-label-caps text-[11px] uppercase tracking-wider text-text-muted mb-1.5">
-                Notional Value in USDC <span className="text-status-error">*</span>
-              </label>
-              <input
-                id="input-notional-usdc"
-                ref={el => { fieldRefs.current.notionalUSDC = el }}
-                inputMode="decimal"
-                value={notionalUSDC}
-                onChange={e => setNotionalUSDC(e.target.value)}
-                onBlur={() => touchField('notionalUSDC')}
-                aria-invalid={Boolean(visibleFieldError('notionalUSDC'))}
-                aria-describedby={visibleFieldError('notionalUSDC') ? errorId('notionalUSDC') : undefined}
-                placeholder="Used for 5% dispute bond"
-                className={fieldClassFor('notionalUSDC')}
-              />
-              {renderFieldError('notionalUSDC')}
-            </div>
-
-            <div>
-              <label htmlFor="input-arbiter-fee-cap" className="block font-label-caps text-[11px] uppercase tracking-wider text-text-muted mb-1.5">
-                Arbiter Fee Cap (USDC)
-              </label>
-              <input
-                id="input-arbiter-fee-cap"
-                ref={el => { fieldRefs.current.arbiterFeeCap = el }}
-                inputMode="decimal"
-                value={arbiterFeeCap}
-                onChange={e => setArbiterFeeCap(e.target.value)}
-                onBlur={() => touchField('arbiterFeeCap')}
-                aria-invalid={Boolean(visibleFieldError('arbiterFeeCap'))}
-                aria-describedby={visibleFieldError('arbiterFeeCap') ? errorId('arbiterFeeCap') : undefined}
-                className={fieldClassFor('arbiterFeeCap')}
-              />
-              {renderFieldError('arbiterFeeCap')}
-            </div>
-          </div>
-
-          <div className="mt-4 p-3 border-l-2 border-primary-fixed bg-[#07080a] text-[11px] leading-5 font-body-sans text-text-muted">
-            Dispute Bond Required: <strong className="text-primary-fixed font-code-hash">{formatUnits(calculatedBond, 6)} USDC</strong> (5% of notional value, min 1 USDC). Both parties must post this bond to initiate or contest a dispute. Winning party gets 100% bond refund.
-          </div>
-        </section>
-
-        {/* Step 3: Deadlines & Written Terms */}
-        <section aria-labelledby="step-3-title" className="border border-outline-border bg-[#0c0f12] p-5 animate-enter">
-          <div className="flex items-center justify-between gap-2 mb-4 pb-3 border-b border-outline-hairline">
-            <div className="flex items-center gap-2">
-              <span className="flex h-5 w-5 items-center justify-center bg-primary-fixed text-black font-display-mono text-[11px] font-bold">3</span>
-              <h2 id="step-3-title" className="font-headline-mono text-[13px] font-bold uppercase tracking-wider text-white">
-                Deadlines & Written Terms
-              </h2>
-            </div>
-            <span className="text-[10px] font-label-caps uppercase text-text-dim">Time Windows & Plaintext</span>
-          </div>
-
-          <div className="grid gap-4 sm:grid-cols-3">
-            <div>
-              <label htmlFor="input-offer-hours" className="block font-label-caps text-[11px] uppercase tracking-wider text-text-muted mb-1.5">
-                Offer Expiry (Hours) <span className="text-status-error">*</span>
-              </label>
-              <input
-                id="input-offer-hours"
-                ref={el => { fieldRefs.current.offerHours = el }}
-                inputMode="numeric"
-                value={offerHours}
-                onChange={e => setOfferHours(e.target.value)}
-                onBlur={() => touchField('offerHours')}
-                aria-invalid={Boolean(visibleFieldError('offerHours'))}
-                aria-describedby={visibleFieldError('offerHours') ? errorId('offerHours') : undefined}
-                className={fieldClassFor('offerHours')}
-              />
-              {renderFieldError('offerHours')}
-            </div>
-
-            <div>
-              <label htmlFor="input-performance-days" className="block font-label-caps text-[11px] uppercase tracking-wider text-text-muted mb-1.5">
-                Performance Window (Days) <span className="text-status-error">*</span>
-              </label>
-              <input
-                id="input-performance-days"
-                ref={el => { fieldRefs.current.performanceDays = el }}
-                inputMode="numeric"
-                value={performanceDays}
-                onChange={e => setPerformanceDays(e.target.value)}
-                onBlur={() => touchField('performanceDays')}
-                aria-invalid={Boolean(visibleFieldError('performanceDays'))}
-                aria-describedby={visibleFieldError('performanceDays') ? errorId('performanceDays') : undefined}
-                className={fieldClassFor('performanceDays')}
-              />
-              {renderFieldError('performanceDays')}
-            </div>
-
-            <div>
-              <label htmlFor="input-dispute-days" className="block font-label-caps text-[11px] uppercase tracking-wider text-text-muted mb-1.5">
-                Dispute Window (Days) <span className="text-status-error">*</span>
-              </label>
-              <input
-                id="input-dispute-days"
-                ref={el => { fieldRefs.current.disputeDays = el }}
-                inputMode="numeric"
-                value={disputeDays}
-                onChange={e => setDisputeDays(e.target.value)}
-                onBlur={() => touchField('disputeDays')}
-                aria-invalid={Boolean(visibleFieldError('disputeDays'))}
-                aria-describedby={visibleFieldError('disputeDays') ? errorId('disputeDays') : undefined}
-                className={fieldClassFor('disputeDays')}
-              />
-              {renderFieldError('disputeDays')}
-            </div>
-          </div>
-
-          <div className="mt-4">
-            <div className="flex items-center justify-between mb-1.5">
-              <label htmlFor="input-terms" className="font-label-caps text-[11px] uppercase tracking-wider text-text-muted">
-                Written Agreement Terms <span className="text-status-error">*</span>
-              </label>
-              <span className="text-[10px] font-code-hash text-text-dim">
-                {terms.length} / 2000 characters
-              </span>
-            </div>
-            <textarea
-              id="input-terms"
-              ref={el => { fieldRefs.current.terms = el }}
-              value={terms}
-              onChange={e => setTerms(e.target.value)}
-              onBlur={() => touchField('terms')}
-              aria-invalid={Boolean(visibleFieldError('terms'))}
-              aria-describedby={visibleFieldError('terms') ? errorId('terms') : undefined}
-              maxLength={2000}
-              rows={5}
-              placeholder="State the exact terms, delivery specification, or milestone deliverables. The plaintext is cryptographically hashed on-chain..."
-              className={`${fieldClassFor('terms')} resize-y`}
-            />
-            {renderFieldError('terms')}
-          </div>
-
-          <label className="mt-3 flex items-center gap-2 text-[11px] font-body-sans text-text-muted cursor-pointer select-none">
-            <input
-              type="checkbox"
-              checked={blurSize}
-              onChange={e => setBlurSize(e.target.checked)}
-              className="accent-[#c8f542]"
-            />
-            <span>Blur amount in public Tape feed (Cosmetic UI only; on-chain ledger remains public)</span>
-          </label>
-        </section>
-
-        {/* Step 4: Pre-Flight Review & Authorization */}
-        <section aria-labelledby="step-4-title" className="border border-outline-border bg-[#0c0f12] p-5 animate-enter">
-          <div className="flex items-center justify-between gap-2 mb-4 pb-3 border-b border-outline-hairline">
-            <div className="flex items-center gap-2">
-              <span className="flex h-5 w-5 items-center justify-center bg-primary-fixed text-black font-display-mono text-[11px] font-bold">4</span>
-              <h2 id="step-4-title" className="font-headline-mono text-[13px] font-bold uppercase tracking-wider text-white">
-                Pre-Flight Review & Sign
-              </h2>
-            </div>
-            <span className="text-[10px] font-label-caps uppercase text-text-dim">Verification Summary</span>
-          </div>
-
-          {/* Review Grid Matrix */}
-          <div className="grid gap-3 sm:grid-cols-2 p-4 border border-outline-hairline bg-[#07080a] text-[12px] font-code-hash">
-            <div>
-              <span className="text-[10px] font-label-caps uppercase tracking-wider text-text-dim block">Maker Collateral to Lock</span>
-              <span className="text-primary-fixed font-bold text-[14px]">
-                {amountMaker || '0'} {TOKENS.find(t => t.value === tokenMaker)?.label}
-              </span>
-            </div>
-            <div>
-              <span className="text-[10px] font-label-caps uppercase tracking-wider text-text-dim block">Counterparty Collateral</span>
-              <span className="text-white font-bold text-[14px]">
-                {amountTaker ? `${amountTaker} ${TOKENS.find(t => t.value === tokenTaker)?.label}` : 'None (0.00)'}
-              </span>
-            </div>
-            <div>
-              <span className="text-[10px] font-label-caps uppercase tracking-wider text-text-dim block">Timeline Structure</span>
-              <span className="text-white">
-                {offerHours}h offer / {performanceDays}d performance / +{disputeDays}d dispute
-              </span>
-            </div>
-            <div>
-              <span className="text-[10px] font-label-caps uppercase tracking-wider text-text-dim block">Dispute Bond & Arbiter Fee</span>
-              <span className="text-white">
-                {formatUnits(calculatedBond, 6)} USDC bond / {arbiterFeeCap} USDC fee cap
-              </span>
-            </div>
-            <div className="sm:col-span-2 pt-2 border-t border-outline-hairline/60">
-              <span className="text-[10px] font-label-caps uppercase tracking-wider text-text-dim block">Canonical SHA-256 Terms Hash</span>
-              <span className="text-primary-fixed text-[11px] break-all font-mono">
-                {canonicalTermsHash || 'Fill all required fields to generate canonical hash'}
-              </span>
-            </div>
-          </div>
-
-          {/* Validation Alert Box */}
-          {submitAttempted && validationError && (
-            <div role="alert" className="mt-4 border border-status-error/60 bg-status-error/10 p-3.5 text-[12px] text-status-error font-code-hash">
-              <div className="flex items-center gap-2 font-bold mb-1">
-                <span>⚠️</span>
-                <span>Please complete the required fields:</span>
+                <div className="sm:col-span-2 pt-2 border-t border-outline-hairline/60">
+                  <span className="text-[10px] font-label-caps uppercase text-text-dim block mb-1">Canonical SHA-256 Terms Hash</span>
+                  <span className="text-primary-fixed text-[11px] break-all font-mono">
+                    {canonicalTermsHash || 'Pending complete required fields'}
+                  </span>
+                </div>
               </div>
-              <ul className="list-disc pl-5 space-y-0.5 text-[11px]">
-                {NEW_PACT_FIELD_ORDER.filter(field => fieldErrors[field]).map(field => (
-                  <li key={field}>{fieldErrors[field]}</li>
-                ))}
-              </ul>
             </div>
-          )}
 
-          {/* Risk & Irreversibility Disclosure */}
-          <p className="mt-4 text-[11px] leading-5 font-body-sans text-text-dim">
-            ℹ️ <strong className="text-text-muted">Irreversible Escrow:</strong> Submitting will lock maker collateral into the verified PACT protocol vault. Once accepted by counterparty, collateral cannot be withdrawn until mutual settlement or expiration.
-          </p>
+            {/* Section B: Private Off-Chain Terms Preview */}
+            <div className="space-y-3 pt-2 border-t border-outline-hairline/60">
+              <div className="flex items-center justify-between">
+                <h3 className="text-[12px] font-headline-mono font-bold uppercase tracking-wider text-text-muted flex items-center gap-1.5">
+                  <span>📄</span>
+                  <span>Written Agreement Terms (Off-Chain Content)</span>
+                </h3>
+                <button
+                  type="button"
+                  onClick={() => goToStep(3)}
+                  className="text-[10px] font-code-hash text-primary-fixed hover:underline"
+                >
+                  Edit Terms ✎
+                </button>
+              </div>
 
-          {/* Submit Button */}
-          <button
-            type="submit"
-            disabled={busy}
-            className="pact-button-primary mt-5 min-h-[48px] w-full text-[12px] font-bold uppercase tracking-wider disabled:opacity-40 disabled:cursor-not-allowed"
-          >
-            {phase === 'approving'
-              ? 'Authorizing exact collateral…'
-              : phase === 'creating'
-              ? 'Creating pact & locking escrow…'
-              : !isConnected
-              ? 'Connect Wallet to Sign'
-              : 'Authorize & Create Pact Offer'}
-          </button>
+              <div className="p-3.5 border border-outline-hairline bg-[#07080a] max-h-40 overflow-y-auto font-body-sans text-[12px] text-text-muted leading-relaxed whitespace-pre-wrap rounded-[1px]">
+                {terms.trim() ? terms : <span className="text-status-error italic">No terms entered yet.</span>}
+              </div>
+              <p className="text-[10px] text-text-dim font-body-sans">
+                ℹ️ The text above is verified client-side. Only its 32-byte cryptographic SHA-256 hash is anchored on Arc Testnet.
+              </p>
+            </div>
 
-          <TransactionProgress
-            stage={txStage}
-            label={txLabel}
-            hash={txHash}
-            error={txError}
-            onDismiss={() => {
-              setTxStage('idle')
-              setTxError('')
-              setTxHash(null)
-            }}
-          />
-        </section>
+            {/* Form-Wide Validation Errors Alert */}
+            {submitAttempted && validationError && (
+              <div role="alert" className="border border-status-error/60 bg-status-error/10 p-4 text-[12px] text-status-error font-code-hash space-y-2 animate-enter">
+                <div className="flex items-center gap-2 font-bold">
+                  <span>⚠️</span>
+                  <span>Please resolve the following before signing:</span>
+                </div>
+                <ul className="list-disc pl-5 space-y-1 text-[11px]">
+                  {NEW_PACT_FIELD_ORDER.filter(field => fieldErrors[field]).map(field => (
+                    <li key={field}>{fieldErrors[field]}</li>
+                  ))}
+                </ul>
+              </div>
+            )}
+
+            {/* Signing Notice */}
+            <p className="text-[11px] leading-5 font-body-sans text-text-dim">
+              🔒 <strong className="text-text-muted">Direct Protocol Lock:</strong> Clicking below will prompt your wallet to authorize exact collateral and commit the pact on-chain.
+            </p>
+
+            {/* Step 4 Actions */}
+            <div className="pt-3 flex flex-col sm:flex-row items-center justify-between gap-3">
+              <button
+                type="button"
+                onClick={() => goToStep(3)}
+                className="pact-button-secondary min-h-[44px] w-full sm:w-auto px-5 text-[11px] uppercase tracking-wider"
+              >
+                ← Back to Terms
+              </button>
+
+              <button
+                type="submit"
+                disabled={busy}
+                className="pact-button-primary min-h-[48px] w-full sm:w-auto px-8 text-[12px] font-bold uppercase tracking-wider disabled:opacity-40 disabled:cursor-not-allowed shadow-[0_0_20px_rgba(243,232,140,0.15)]"
+              >
+                {phase === 'approving'
+                  ? 'Authorizing exact collateral…'
+                  : phase === 'creating'
+                  ? 'Creating pact & locking escrow…'
+                  : !isConnected
+                  ? 'Connect Wallet to Sign'
+                  : 'Authorize & Lock Collateral →'}
+              </button>
+            </div>
+
+            <TransactionProgress
+              stage={txStage}
+              label={txLabel}
+              hash={txHash}
+              error={txError}
+              onDismiss={() => {
+                setTxStage('idle')
+                setTxError('')
+                setTxHash(null)
+              }}
+            />
+          </section>
+        )}
       </form>
     </div>
   )

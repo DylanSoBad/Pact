@@ -1,24 +1,23 @@
 import { isAddress } from 'viem'
 
-const ZERO_ADDRESS = '0x0000000000000000000000000000000000000000'
+export const ZERO_ADDRESS = '0x0000000000000000000000000000000000000000'
 const DECIMAL_INPUT = /^(?:\d+|\d+\.\d{1,6}|\.\d{1,6})$/
 const POSITIVE_INTEGER = /^\d+$/
 
+export const PARTIES_FIELDS = ['taker', 'arbiter'] as const
+export const COLLATERAL_FIELDS = ['amountMaker', 'amountTaker', 'notionalUSDC', 'arbiterFeeCap'] as const
+export const TERMS_DEADLINES_FIELDS = ['terms', 'offerHours', 'performanceDays', 'disputeDays'] as const
+
 export const NEW_PACT_FIELD_ORDER = [
-  'taker',
-  'arbiter',
-  'amountMaker',
-  'amountTaker',
-  'notionalUSDC',
-  'arbiterFeeCap',
-  'offerHours',
-  'performanceDays',
-  'disputeDays',
-  'terms',
+  ...PARTIES_FIELDS,
+  ...COLLATERAL_FIELDS,
+  ...TERMS_DEADLINES_FIELDS,
 ] as const
 
 export type NewPactField = (typeof NEW_PACT_FIELD_ORDER)[number]
 export type NewPactFieldErrors = Partial<Record<NewPactField, string>>
+
+export type FormStep = 1 | 2 | 3 | 4
 
 export type NewPactValidationInput = {
   makerAddress?: string
@@ -53,47 +52,127 @@ function isPositiveInteger(value: string): boolean {
 
 export function validateNewPactForm(input: NewPactValidationInput): NewPactFieldErrors {
   const errors: NewPactFieldErrors = {}
-  const takerValid = isAddress(input.taker) && input.taker.toLowerCase() !== ZERO_ADDRESS
-  const arbiterValid = isAddress(input.arbiter) && input.arbiter.toLowerCase() !== ZERO_ADDRESS
 
-  if (!takerValid) errors.taker = 'Enter a valid counterparty wallet address.'
-  if (!arbiterValid) errors.arbiter = 'Enter a valid arbiter wallet address.'
-
-  if (takerValid && input.makerAddress && input.taker.toLowerCase() === input.makerAddress.toLowerCase()) {
-    errors.taker = 'Counterparty must be different from the maker.'
-  }
-  if (arbiterValid && input.makerAddress && input.arbiter.toLowerCase() === input.makerAddress.toLowerCase()) {
-    errors.arbiter = 'Arbiter must be different from the maker.'
-  }
-  if (takerValid && arbiterValid && input.taker.toLowerCase() === input.arbiter.toLowerCase()) {
-    errors.taker = 'Counterparty and arbiter must use different addresses.'
-    errors.arbiter = 'Arbiter and counterparty must use different addresses.'
+  // 1. Counterparty (Taker) Validation
+  const trimmedTaker = input.taker.trim()
+  if (!trimmedTaker) {
+    errors.taker = 'Counterparty address is required. Enter a valid EVM address (0x...).'
+  } else if (!isAddress(trimmedTaker)) {
+    errors.taker = 'Invalid address format. Address must start with 0x followed by 40 hex characters.'
+  } else if (trimmedTaker.toLowerCase() === ZERO_ADDRESS) {
+    errors.taker = 'Zero address (0x000...0000) cannot be used as a counterparty.'
+  } else if (input.makerAddress && trimmedTaker.toLowerCase() === input.makerAddress.toLowerCase()) {
+    errors.taker = 'Counterparty cannot be your own Maker address. Enter a separate counterparty address.'
   }
 
-  if (!isDecimal(input.amountMaker) || input.makerAmount <= 0n) {
-    errors.amountMaker = 'Maker collateral must be a number greater than zero.'
+  // 2. Arbiter Validation
+  const trimmedArbiter = input.arbiter.trim()
+  if (!trimmedArbiter) {
+    errors.arbiter = 'Designated arbiter address is required. Enter a trusted mediator EVM address (0x...).'
+  } else if (!isAddress(trimmedArbiter)) {
+    errors.arbiter = 'Invalid address format. Address must start with 0x followed by 40 hex characters.'
+  } else if (trimmedArbiter.toLowerCase() === ZERO_ADDRESS) {
+    errors.arbiter = 'Zero address (0x000...0000) cannot be used as an arbiter.'
+  } else if (input.makerAddress && trimmedArbiter.toLowerCase() === input.makerAddress.toLowerCase()) {
+    errors.arbiter = 'Arbiter cannot be your own Maker address. Designate a neutral third party.'
+  } else if (
+    isAddress(trimmedTaker) &&
+    trimmedTaker.toLowerCase() !== ZERO_ADDRESS &&
+    trimmedTaker.toLowerCase() === trimmedArbiter.toLowerCase()
+  ) {
+    errors.arbiter = 'Arbiter cannot be the same address as the Counterparty.'
+    if (!errors.taker) {
+      errors.taker = 'Counterparty and Arbiter must use distinct addresses.'
+    }
+  }
+
+  // 3. Maker Collateral Validation
+  const trimmedMakerAmt = input.amountMaker.trim()
+  if (!trimmedMakerAmt) {
+    errors.amountMaker = 'Maker collateral is required. Enter an amount greater than 0.'
+  } else if (!isDecimal(trimmedMakerAmt) || input.makerAmount <= 0n) {
+    errors.amountMaker = 'Maker collateral must be a positive decimal number (e.g. 100 or 25.50).'
   } else if (input.isConnected && input.makerBalanceKnown && input.makerAmount > input.makerBalance) {
-    errors.amountMaker = 'Maker wallet does not have enough collateral.'
+    errors.amountMaker = 'Insufficient wallet balance for this collateral amount.'
   }
 
-  if (input.amountTaker.trim() && !isDecimal(input.amountTaker)) {
-    errors.amountTaker = 'Counterparty collateral must be a valid non-negative number.'
+  // 4. Counterparty (Taker) Collateral Validation
+  if (input.amountTaker.trim() && (!isDecimal(input.amountTaker) || Number(input.amountTaker) < 0)) {
+    errors.amountTaker = 'Counterparty collateral must be a valid non-negative number (0 or greater).'
   }
 
-  if (!isDecimal(input.notionalUSDC) || input.notionalAmount <= 0n) {
-    errors.notionalUSDC = 'Notional value must be a number greater than zero.'
+  // 5. Notional Valuation Validation
+  const trimmedNotional = input.notionalUSDC.trim()
+  if (!trimmedNotional) {
+    errors.notionalUSDC = 'Notional valuation is required for calculating the 5% dispute bond.'
+  } else if (!isDecimal(trimmedNotional) || input.notionalAmount <= 0n) {
+    errors.notionalUSDC = 'Notional valuation must be a positive decimal number (e.g. 1000).'
   }
 
-  if (!isDecimal(input.arbiterFeeCap)) {
+  // 6. Arbiter Fee Cap Validation
+  const trimmedFeeCap = input.arbiterFeeCap.trim()
+  if (!trimmedFeeCap || !isDecimal(trimmedFeeCap) || Number(trimmedFeeCap) < 0) {
     errors.arbiterFeeCap = 'Arbiter fee cap must be a valid non-negative number.'
   } else if (input.feeCapAmount > input.calculatedBond) {
-    errors.arbiterFeeCap = 'Arbiter fee cap cannot exceed the dispute bond.'
+    errors.arbiterFeeCap = 'Arbiter fee cap cannot exceed the 5% dispute bond amount.'
   }
 
-  if (!isPositiveInteger(input.offerHours)) errors.offerHours = 'Offer expiry must be a positive whole number.'
-  if (!isPositiveInteger(input.performanceDays)) errors.performanceDays = 'Performance window must be a positive whole number.'
-  if (!isPositiveInteger(input.disputeDays)) errors.disputeDays = 'Dispute window must be a positive whole number.'
-  if (!input.terms.trim()) errors.terms = 'Written agreement terms are required.'
+  // 7. Deadlines & Window Ordering Validation
+  const trimmedOffer = input.offerHours.trim()
+  if (!trimmedOffer || !isPositiveInteger(trimmedOffer)) {
+    errors.offerHours = 'Offer expiry window must be a positive whole number of hours (min 1).'
+  } else {
+    const hours = Number(trimmedOffer)
+    if (hours < 1 || hours > 720) {
+      errors.offerHours = 'Offer expiry must be between 1 hour and 720 hours (30 days).'
+    }
+  }
+
+  const trimmedPerf = input.performanceDays.trim()
+  if (!trimmedPerf || !isPositiveInteger(trimmedPerf)) {
+    errors.performanceDays = 'Performance window must be a positive whole number of days (min 1).'
+  } else {
+    const days = Number(trimmedPerf)
+    if (days < 1 || days > 365) {
+      errors.performanceDays = 'Performance window must be between 1 and 365 days.'
+    }
+  }
+
+  const trimmedDispute = input.disputeDays.trim()
+  if (!trimmedDispute || !isPositiveInteger(trimmedDispute)) {
+    errors.disputeDays = 'Dispute review window must be a positive whole number of days (min 1).'
+  } else {
+    const days = Number(trimmedDispute)
+    if (days < 1 || days > 90) {
+      errors.disputeDays = 'Dispute review window must be between 1 and 90 days.'
+    }
+  }
+
+  // 8. Written Terms Validation
+  if (!input.terms.trim()) {
+    errors.terms = 'Written agreement terms are required to anchor the pact hash.'
+  } else if (input.terms.trim().length < 10) {
+    errors.terms = 'Agreement terms are too short. Enter clear terms (at least 10 characters).'
+  }
 
   return errors
+}
+
+export function getStepFields(step: FormStep): readonly NewPactField[] {
+  switch (step) {
+    case 1: return PARTIES_FIELDS
+    case 2: return COLLATERAL_FIELDS
+    case 3: return TERMS_DEADLINES_FIELDS
+    case 4: return NEW_PACT_FIELD_ORDER
+  }
+}
+
+export function getFirstInvalidFieldForStep(step: FormStep, errors: NewPactFieldErrors): NewPactField | undefined {
+  const fields = getStepFields(step)
+  return fields.find(field => Boolean(errors[field]))
+}
+
+export function isStepValid(step: FormStep, errors: NewPactFieldErrors): boolean {
+  const fields = getStepFields(step)
+  return !fields.some(field => Boolean(errors[field]))
 }

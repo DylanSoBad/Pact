@@ -52,6 +52,6 @@ test('portfolio command center renders role indicators and educational info', as
 
 test('new pact form exposes designated counterparty and arbiter fields with clear role labels', async ({ page }) => {
   await page.goto('/new')
-  await expect(page.getByLabel('Designated counterparty')).toBeVisible()
-  await expect(page.getByLabel('Agreement terms')).toBeVisible()
+  await expect(page.getByLabel('Designated Counterparty Wallet')).toBeVisible()
+  await expect(page.getByLabel('Designated Arbiter Wallet')).toBeVisible()
 })

@@ -20,9 +20,9 @@ test('overview renders the tape feed and primary navigation', async ({ page }) =
 test('new pact form remains usable and labelled', async ({ page }) => {
   await page.goto('/new')
   await expect(page.getByRole('heading', { name: /new pact/i })).toBeVisible()
-  await expect(page.getByLabel('Designated counterparty')).toBeVisible()
-  await expect(page.getByLabel('Agreement terms')).toBeVisible()
-  await expect(page.getByRole('button', { name: /connect wallet|authorize & create pact/i })).toBeVisible()
+  await expect(page.getByLabel('Designated Counterparty Wallet')).toBeVisible()
+  await expect(page.getByRole('button', { name: /1\. Parties/i })).toBeVisible()
+  await expect(page.getByRole('button', { name: /Continue to Collateral/i })).toBeVisible()
 })
 
 test('mobile navbar keeps the logo', async ({ page }, testInfo) => {
