@@ -4,18 +4,23 @@ import Link from 'next/link'
 import type { PactData } from '../lib/reads'
 import { formatDate } from '../lib/format'
 
+import { evaluatePactActions, type ActionType, type ActionRole, type ActionSeverity } from '../lib/actionMatrix'
+
 export type ActionItem = {
   pact: PactData
   title: string
   detail: string
   deadline: bigint
   urgent: boolean
+  actionType?: ActionType
+  role?: ActionRole
+  severity?: ActionSeverity
 }
 
 export function actionsFor(pacts: PactData[], address: string, now: bigint): ActionItem[] {
   if (!address) return []
   const account = address.toLowerCase()
-  return pacts.flatMap(pact => {
+  return pacts.flatMap((pact): ActionItem[] => {
     const isMaker = pact.maker.toLowerCase() === account
     const isTaker = pact.taker.toLowerCase() === account
     const isArbiter = pact.arbiter.toLowerCase() === account
@@ -30,6 +35,9 @@ export function actionsFor(pacts: PactData[], address: string, now: bigint): Act
           detail: 'Confirm written terms and lock counterparty collateral to activate agreement.',
           deadline: pact.offerExpiry,
           urgent: soon(pact.offerExpiry),
+          actionType: 'ACCEPT_OFFER',
+          role: 'TAKER',
+          severity: 'primary',
         }]
       }
       if (isMaker && now > pact.offerExpiry) {
@@ -39,6 +47,9 @@ export function actionsFor(pacts: PactData[], address: string, now: bigint): Act
           detail: 'Offer expired without acceptance. Claim maker collateral refund to pull-payment credits.',
           deadline: pact.offerExpiry,
           urgent: true,
+          actionType: 'EXPIRE_OFFER',
+          role: 'MAKER',
+          severity: 'primary',
         }]
       }
       if (!isMaker && now > pact.offerExpiry) {
@@ -48,6 +59,9 @@ export function actionsFor(pacts: PactData[], address: string, now: bigint): Act
           detail: 'Acceptance window closed. Permissionless settlement available to return funds to maker.',
           deadline: pact.offerExpiry,
           urgent: false,
+          actionType: 'EXPIRE_OFFER',
+          role: 'PUBLIC',
+          severity: 'neutral',
         }]
       }
     }
@@ -61,6 +75,9 @@ export function actionsFor(pacts: PactData[], address: string, now: bigint): Act
           detail: 'Anchor delivery or milestone proof before performance window closes.',
           deadline: pact.performanceDeadline,
           urgent: soon(pact.performanceDeadline),
+          actionType: 'SUBMIT_PROOF',
+          role: 'TAKER',
+          severity: 'primary',
         }]
       }
       if (isMaker && now <= pact.disputeDeadline) {
@@ -73,6 +90,9 @@ export function actionsFor(pacts: PactData[], address: string, now: bigint): Act
             : 'Release collateral to settle, or open dispute before cutoff.',
           deadline: pact.disputeDeadline,
           urgent: soon(pact.disputeDeadline),
+          actionType: 'RELEASE_COLLATERAL',
+          role: 'MAKER',
+          severity: 'primary',
         }]
       }
       if (now > pact.disputeDeadline) {
@@ -84,6 +104,9 @@ export function actionsFor(pacts: PactData[], address: string, now: bigint): Act
             : 'Performance and dispute window elapsed without delivery proof. Funds revert to maker.',
           deadline: pact.disputeDeadline,
           urgent: true,
+          actionType: 'DEADLINE_REFUND_MAKER',
+          role: isMaker ? 'MAKER' : 'PUBLIC',
+          severity: isMaker ? 'primary' : 'neutral',
         }]
       }
     }
@@ -97,6 +120,9 @@ export function actionsFor(pacts: PactData[], address: string, now: bigint): Act
           detail: 'Proof submitted by counterparty. Release collateral to settle or open dispute before cutoff.',
           deadline: pact.disputeDeadline,
           urgent: soon(pact.disputeDeadline),
+          actionType: 'RELEASE_COLLATERAL',
+          role: 'MAKER',
+          severity: 'primary',
         }]
       }
       if (isTaker && now <= pact.disputeDeadline) {
@@ -106,6 +132,9 @@ export function actionsFor(pacts: PactData[], address: string, now: bigint): Act
           detail: 'Proof anchored on-chain. Maker has until dispute cutoff to release collateral or dispute.',
           deadline: pact.disputeDeadline,
           urgent: soon(pact.disputeDeadline),
+          actionType: 'SUBMIT_PROOF',
+          role: 'TAKER',
+          severity: 'neutral',
         }]
       }
       if (now > pact.disputeDeadline) {
@@ -117,6 +146,9 @@ export function actionsFor(pacts: PactData[], address: string, now: bigint): Act
             : 'Dispute window closed with proof unchallenged. Finalize settlement to release funds to counterparty.',
           deadline: pact.disputeDeadline,
           urgent: true,
+          actionType: 'DEADLINE_SETTLE_TAKER',
+          role: isTaker ? 'TAKER' : 'PUBLIC',
+          severity: isTaker ? 'primary' : 'neutral',
         }]
       }
     }
@@ -130,6 +162,9 @@ export function actionsFor(pacts: PactData[], address: string, now: bigint): Act
           detail: 'Both parties bonded. Arbiter ruling or timeout action is required.',
           deadline: pact.disputeDeadline,
           urgent: true,
+          actionType: 'RULE_DISPUTE_MAKER',
+          role: 'ARBITER',
+          severity: 'primary',
         }]
       }
       if (isMaker || isTaker) {
@@ -139,6 +174,9 @@ export function actionsFor(pacts: PactData[], address: string, now: bigint): Act
           detail: 'Dispute active. Review response deadlines, counter-bonds, and ruling status.',
           deadline: pact.disputeDeadline,
           urgent: true,
+          actionType: 'RESPOND_DISPUTE',
+          role: isMaker ? 'MAKER' : 'TAKER',
+          severity: 'warning',
         }]
       }
     }
@@ -193,9 +231,16 @@ export default function ActionCenter({ pacts, address }: { pacts: PactData[]; ad
               >
                 <div>
                   <div className="flex items-start justify-between gap-2">
-                    <span className="font-headline-mono text-[13px] font-bold text-white group-hover:text-primary-fixed transition-colors">
-                      {action.title}
-                    </span>
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <span className="font-headline-mono text-[13px] font-bold text-white group-hover:text-primary-fixed transition-colors">
+                        {action.title}
+                      </span>
+                      {action.role && (
+                        <span className="px-1.5 py-0.2 border border-outline-hairline bg-[#12161b] text-[9px] font-label-caps uppercase text-text-muted">
+                          {action.role}
+                        </span>
+                      )}
+                    </div>
                     <span className={`px-2 py-0.5 font-label-caps text-[9px] uppercase tracking-wider font-bold shrink-0 ${deadlineStatus.badgeStyle}`}>
                       {isCardPast ? 'EXPIRED' : isCardUrgent ? 'URGENT' : 'PENDING'}
                     </span>
@@ -211,8 +256,9 @@ export default function ActionCenter({ pacts, address }: { pacts: PactData[]; ad
                     </span>
                     <span className="text-text-dim">· Cutoff: {formatDate(action.deadline)}</span>
                   </span>
-                  <span className="text-primary-fixed group-hover:translate-x-0.5 transition-transform font-bold shrink-0">
-                    Open Pact →
+                  <span className="text-primary-fixed group-hover:translate-x-0.5 transition-transform font-bold shrink-0 inline-flex items-center gap-1">
+                    <span>Execute Action</span>
+                    <span>→</span>
                   </span>
                 </div>
               </Link>

@@ -29,6 +29,7 @@ import {
 } from '../../lib/filter'
 import TransactionProgress, { type TransactionStage } from '../../components/TransactionProgress'
 import { transactionErrorMessage } from '../../lib/transactionErrors'
+import { getPrimaryUserAction } from '../../lib/actionMatrix'
 
 export default function MePage() {
   const { address, isConnected } = useAccount()
@@ -712,6 +713,8 @@ export default function MePage() {
                 const amt = p.kind === 1
                   ? `${formatAmount(p.amountMaker)} ${tokenSymbol(p.tokenMaker)} ↔ ${formatAmount(p.amountTaker)} ${tokenSymbol(p.tokenTaker)}`
                   : `${formatAmount(p.amountMaker)} ${tokenSymbol(p.tokenMaker)}`
+                const primaryAction = getPrimaryUserAction(p, null, address, BigInt(currentTime))
+                const hasAction = Boolean(primaryAction && primaryAction.isEligible)
 
                 return (
                   <div key={p.id}>
@@ -768,7 +771,7 @@ export default function MePage() {
                       </div>
 
                       {/* Col 5: Status / Action */}
-                      <div className="col-span-2 flex flex-col items-end gap-1">
+                      <div className="col-span-2 flex flex-col items-end gap-1.5">
                         <span className={`px-2 py-0.5 text-[9px] font-label-caps uppercase font-bold ${
                           p.status === 4
                             ? 'text-emerald-400 border border-emerald-500/30 bg-emerald-950/20'
@@ -780,12 +783,23 @@ export default function MePage() {
                         }`}>
                           {effectiveStatusLabel(p.status, p.offerExpiry, p.disputeDeadline, BigInt(currentTime))}
                         </span>
-                        <Link
-                          href={`/p/${p.id}`}
-                          className="text-[11px] text-primary-fixed hover:underline font-bold"
-                        >
-                          Open Pact →
-                        </Link>
+                        {hasAction ? (
+                          <Link
+                            href={`/p/${p.id}`}
+                            className="inline-flex items-center gap-1 px-2.5 py-0.5 bg-primary-fixed text-[#090b0d] font-bold text-[10px] font-label-caps uppercase tracking-wider hover:bg-primary-hover transition-colors rounded-sm"
+                          >
+                            <span>⚡</span>
+                            <span>{primaryAction?.shortLabel}</span>
+                            <span>→</span>
+                          </Link>
+                        ) : (
+                          <Link
+                            href={`/p/${p.id}`}
+                            className="text-[11px] text-primary-fixed hover:underline font-bold"
+                          >
+                            Open Pact →
+                          </Link>
+                        )}
                       </div>
                     </div>
 
@@ -841,9 +855,13 @@ export default function MePage() {
                         </span>
                         <Link
                           href={`/p/${p.id}`}
-                          className="px-3 py-1 bg-[#12161b] border border-outline-border text-primary-fixed text-[11px] font-bold uppercase tracking-wider hover:border-primary-fixed"
+                          className={`px-3 py-1 text-[11px] font-bold uppercase tracking-wider transition-colors ${
+                            hasAction
+                              ? 'bg-primary-fixed text-[#090b0d] hover:bg-primary-hover'
+                              : 'px-3 py-1 bg-[#12161b] border border-outline-border text-primary-fixed hover:border-primary-fixed'
+                          }`}
                         >
-                          Open Pact →
+                          {hasAction ? `⚡ ${primaryAction?.shortLabel} →` : 'Open Pact →'}
                         </Link>
                       </div>
                     </div>
@@ -874,7 +892,7 @@ export default function MePage() {
         label={txLabel}
         hash={txHash}
         error={txError}
-        onClose={() => setTxStage('idle')}
+        onDismiss={() => setTxStage('idle')}
       />
     </div>
   )

@@ -4,6 +4,7 @@ import Link from 'next/link'
 import { use, useCallback, useEffect, useState } from 'react'
 import { formatUnits, isAddress } from 'viem'
 import { useAccount, useChainId, usePublicClient, useWalletClient } from 'wagmi'
+import { useModal } from 'connectkit'
 import { toast } from 'sonner'
 import { ERC20_ABI, PACT_ABI } from '../../../lib/abi'
 import { USDC_ERC20, arcTestnet, getPactAddress } from '../../../lib/arc'
@@ -14,17 +15,9 @@ import { signPermit, type PermitAuthorization } from '../../../lib/permit'
 import PactStateMachine from '../../../components/PactStateMachine'
 import Countdown from '../../../components/Countdown'
 import TransactionProgress, { type TransactionStage } from '../../../components/TransactionProgress'
+import ActionConfirmModal from '../../../components/ActionConfirmModal'
 import { transactionErrorMessage } from '../../../lib/transactionErrors'
-
-type DisputeData = {
-  opener: `0x${string}`
-  claim: number
-  makerBond: bigint
-  takerBond: bigint
-  openedAt: bigint
-  responseDeadline: bigint
-  arbiterDeadline: bigint
-}
+import { evaluatePactActions, type PactAction, type DisputeData } from '../../../lib/actionMatrix'
 
 export default function PactDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id: idParam } = use(params)
@@ -33,6 +26,7 @@ export default function PactDetailPage({ params }: { params: Promise<{ id: strin
   const chainId = useChainId()
   const publicClient = usePublicClient()
   const { data: walletClient } = useWalletClient()
+  const { setOpen: openWalletModal } = useModal()
   const protocolAddress = getPactAddress(chainId)
 
   const [pact, setPact] = useState<PactData | null>(null)
@@ -49,6 +43,11 @@ export default function PactDetailPage({ params }: { params: Promise<{ id: strin
   const [credits, setCredits] = useState<Record<string, bigint>>({})
   const [copiedId, setCopiedId] = useState(false)
 
+  // Pre-Flight Confirmation Modal State
+  const [confirmAction, setConfirmAction] = useState<PactAction | null>(null)
+  const [confirmCallback, setConfirmCallback] = useState<(() => Promise<void>) | null>(null)
+  const [isSubmittingConfirm, setIsSubmittingConfirm] = useState(false)
+
   const refresh = useCallback(async () => {
     setLoading(true)
     const current = await fetchSinglePact(id)
@@ -62,7 +61,15 @@ export default function PactDetailPage({ params }: { params: Promise<{ id: strin
           functionName: 'getDispute',
           args: [BigInt(id)],
         })
-        setDispute({ ...value, claim: Number(value.claim) })
+        setDispute({
+          opener: value.opener as `0x${string}`,
+          claim: Number(value.claim),
+          makerBond: value.makerBond,
+          takerBond: value.takerBond,
+          openedAt: value.openedAt,
+          responseDeadline: value.responseDeadline,
+          arbiterDeadline: value.arbiterDeadline,
+        })
       } catch {
         setDispute(null)
       }
@@ -178,6 +185,23 @@ export default function PactDetailPage({ params }: { params: Promise<{ id: strin
     }
   }
 
+  function requestActionConfirmation(action: PactAction, callback: () => Promise<void>) {
+    setConfirmAction(action)
+    setConfirmCallback(() => callback)
+  }
+
+  async function handleConfirmModalSubmit() {
+    if (!confirmCallback) return
+    setIsSubmittingConfirm(true)
+    try {
+      await confirmCallback()
+      setConfirmAction(null)
+      setConfirmCallback(null)
+    } finally {
+      setIsSubmittingConfirm(false)
+    }
+  }
+
   async function acceptPact() {
     if (!pact) return
     const expectedTermsHash = canonicalTermsHash(pact, protocolAddress, termsInput)
@@ -255,26 +279,29 @@ export default function PactDetailPage({ params }: { params: Promise<{ id: strin
 
   const now = BigInt(Math.floor(Date.now() / 1000))
   const normalizedAddress = address?.toLowerCase()
-  const isMaker = normalizedAddress === pact.maker.toLowerCase()
-  const isTaker = normalizedAddress === pact.taker.toLowerCase()
-  const isArbiter = normalizedAddress === pact.arbiter.toLowerCase()
-  const isRespondent = dispute && normalizedAddress === (dispute.opener.toLowerCase() === pact.maker.toLowerCase() ? pact.taker.toLowerCase() : pact.maker.toLowerCase())
+  const isMaker = Boolean(normalizedAddress && normalizedAddress === pact.maker.toLowerCase())
+  const isTaker = Boolean(normalizedAddress && normalizedAddress === pact.taker.toLowerCase())
+  const isArbiter = Boolean(normalizedAddress && normalizedAddress === pact.arbiter.toLowerCase())
+  const isRespondent = Boolean(dispute && normalizedAddress && normalizedAddress === (dispute.opener.toLowerCase() === pact.maker.toLowerCase() ? pact.taker.toLowerCase() : pact.maker.toLowerCase()))
 
-  const canAccept = isTaker && pact.status === 0 && now <= pact.offerExpiry
-  const canSubmitProof = isTaker && pact.status === 1 && now <= pact.performanceDeadline
-  const canRelease = isMaker && (pact.status === 1 || pact.status === 2)
+  const pactTerms = toCanonicalTerms(pact, protocolAddress)
+  const termsMatch = Boolean(termsInput && pactTerms && verifyPactTerms(pactTerms, termsInput, pact.termsHash as `0x${string}`))
+  const termsMismatch = Boolean(termsInput && !termsMatch)
+
   const canOpenDispute = (isMaker || isTaker) && (pact.status === 1 || pact.status === 2) && now <= pact.disputeDeadline
   const canRespond = Boolean(isRespondent && dispute && dispute.arbiterDeadline === 0n && now <= dispute.responseDeadline)
   const canRule = Boolean(isArbiter && dispute && dispute.arbiterDeadline > 0n && now <= dispute.arbiterDeadline)
   const canDefault = Boolean(dispute && dispute.arbiterDeadline === 0n && now > dispute.responseDeadline)
   const canArbiterTimeout = Boolean(dispute && dispute.arbiterDeadline > 0n && now > dispute.arbiterDeadline)
-  const canDeadlineSettle = (pact.status === 0 && now > pact.offerExpiry) || ((pact.status === 1 || pact.status === 2) && now > pact.disputeDeadline)
-  const canCancel = isMaker && pact.status === 0
   const busy = Boolean(busyLabel)
 
+  // Evaluate matrix actions for the current state
+  const availableActions = evaluatePactActions(pact, dispute, address, now, {
+    termsMatched: termsMatch,
+    hasProofInput: Boolean(proofInput.trim()),
+  })
+
   const uniqueTokens = [...new Set([pact.tokenMaker, pact.tokenTaker, USDC_ERC20].filter(token => isAddress(token)))] as `0x${string}`[]
-  const pactTerms = toCanonicalTerms(pact, protocolAddress)
-  const termsMatch = Boolean(termsInput && pactTerms && verifyPactTerms(pactTerms, termsInput, pact.termsHash as `0x${string}`))
 
   const copyPactId = () => {
     navigator.clipboard.writeText(String(id))
@@ -512,11 +539,19 @@ export default function PactDetailPage({ params }: { params: Promise<{ id: strin
             className="w-full border border-outline-border bg-[#07080a] p-3 text-[12px] font-code-hash text-white outline-none focus:border-primary-fixed resize-y"
           />
           <div className="mt-2 flex items-center justify-between text-[11px] font-code-hash">
-            <span className={termsMatch ? 'text-emerald-400 font-bold' : 'text-text-dim'}>
-              {termsMatch
-                ? '✓ Cryptographic Match: Plaintext and all on-chain economic terms match byte-for-byte.'
-                : 'Paste agreement text to confirm hash match.'}
-            </span>
+            {termsMatch ? (
+              <span className="text-emerald-400 font-bold">
+                ✓ Cryptographic Match: Plaintext and all on-chain economic terms match byte-for-byte.
+              </span>
+            ) : termsMismatch ? (
+              <span className="text-rose-400 font-bold">
+                ❌ Cryptographic Mismatch: The provided plaintext does not hash to the on-chain commitment.
+              </span>
+            ) : (
+              <span className="text-text-dim">
+                Paste agreement text to confirm cryptographic match before signing acceptance.
+              </span>
+            )}
           </div>
         </div>
       </section>
@@ -572,7 +607,7 @@ export default function PactDetailPage({ params }: { params: Promise<{ id: strin
       )}
 
       {/* Contextual Action Hub (Role & State Based CTAs) */}
-      {isConnected && !isTerminal(pact.status) && (
+      {!isTerminal(pact.status) && (
         <section aria-label="Action Execution Panel" className="border border-primary-fixed/40 bg-[#0c0f12] p-5 space-y-4 animate-enter">
           <div className="flex items-center justify-between pb-3 border-b border-outline-hairline">
             <div className="flex items-center gap-2">
@@ -584,370 +619,522 @@ export default function PactDetailPage({ params }: { params: Promise<{ id: strin
             <span className="text-[10px] font-label-caps uppercase text-text-dim">Role-Aware Triggers</span>
           </div>
 
-          {/* STATUS 0: OFFERED (Before Expiry) */}
-          {pact.status === 0 && now <= pact.offerExpiry && (
-            <div className="space-y-3">
-              {isTaker && (
-                <div className="space-y-2">
-                  <p className="text-[12px] font-body-sans text-text-muted">
-                    You are the designated counterparty. Verify terms above, then sign to lock any required collateral and activate the pact.
-                  </p>
-                  <button
-                    type="button"
-                    disabled={busy || !termsMatch}
-                    onClick={acceptPact}
-                    className="pact-button-primary w-full min-h-[48px] text-[12px] font-bold uppercase tracking-wider disabled:opacity-40"
-                  >
-                    {termsMatch ? 'Verify Terms & Accept Pact Offer' : 'Paste Matching Plaintext Terms to Enable Acceptance'}
-                  </button>
-                </div>
-              )}
-              {isMaker && (
-                <div className="space-y-2">
-                  <p className="text-[12px] font-body-sans text-text-muted">
-                    Offer is pending counterparty acceptance. You can cancel at any time before acceptance to reclaim your collateral.
-                  </p>
-                  <button
-                    type="button"
-                    disabled={busy}
-                    onClick={() => execute('cancelPact', [BigInt(id)], 'Cancel unaccepted offer')}
-                    className="pact-button-secondary w-full min-h-[44px] text-[11px] font-bold uppercase text-text-muted hover:text-white"
-                  >
-                    Cancel Offer & Credit Maker Collateral Refund
-                  </button>
-                </div>
-              )}
-              {!isMaker && !isTaker && (
-                <div className="p-3 border border-outline-hairline bg-[#07080a] text-[12px] text-text-dim font-code-hash">
-                  Offer is pending acceptance by counterparty {truncateAddress(pact.taker)} before {formatDate(pact.offerExpiry)}.
-                </div>
-              )}
-            </div>
-          )}
-
-          {/* STATUS 0: OFFERED (Expired) */}
-          {pact.status === 0 && now > pact.offerExpiry && (
-            <div className="space-y-3 p-4 border border-rose-500/40 bg-rose-950/20">
-              <div className="flex items-center gap-2">
-                <span className="material-symbols-outlined text-rose-400 text-[18px]">timer_off</span>
-                <span className="font-headline-mono text-[13px] font-bold uppercase text-rose-300">
-                  Offer Acceptance Window Expired
-                </span>
-              </div>
+          {!isConnected ? (
+            <div className="p-4 border border-outline-hairline bg-[#07080a] text-center space-y-3">
               <p className="text-[12px] font-body-sans text-text-muted">
-                The offer cutoff ({formatDate(pact.offerExpiry)}) has passed without counterparty acceptance. Locked maker collateral can be refunded to pull-payment credits.
+                Connect your Arc Network wallet to execute role-specific actions (Accept Offer, Submit Proof, Release Funds, or Open Dispute).
               </p>
-              {isMaker ? (
-                <button
-                  type="button"
-                  disabled={busy}
-                  onClick={() => execute('expireOffer', [BigInt(id)], 'Expire offer & claim refund')}
-                  className="pact-button-primary w-full min-h-[48px] text-[12px] font-bold uppercase tracking-wider"
-                >
-                  Expire Offer & Claim Collateral Refund ({formatAmount(pact.amountMaker)} {tokenSymbol(pact.tokenMaker)})
-                </button>
-              ) : isTaker ? (
-                <div className="p-3 border border-outline-hairline bg-[#07080a] text-[12px] text-rose-300 font-code-hash">
-                  Acceptance deadline has passed. This offer is no longer valid.
-                </div>
-              ) : (
-                <button
-                  type="button"
-                  disabled={busy}
-                  onClick={() => execute('expireOffer', [BigInt(id)], 'Expire offer')}
-                  className="pact-button-secondary w-full min-h-[44px] text-[11px] font-bold uppercase"
-                >
-                  Expire Offer (Public Execution)
-                </button>
-              )}
+              <button
+                type="button"
+                onClick={() => openWalletModal(true)}
+                className="pact-button-primary min-h-[40px] px-5 text-[11px] font-bold uppercase tracking-wider"
+              >
+                Connect Wallet
+              </button>
             </div>
-          )}
-
-          {/* STATUS 1: ACTIVE */}
-          {pact.status === 1 && (
-            <div className="space-y-4">
-              {/* Taker Submit Proof (before performance deadline) */}
-              {isTaker && now <= pact.performanceDeadline && (
-                <div className="space-y-2">
-                  <p className="text-[12px] font-body-sans text-text-muted">
-                    Submit delivery tracking reference, IPFS CID, or completion hash before the performance window closes ({formatDate(pact.performanceDeadline)}).
-                  </p>
-                  <div className="flex flex-col sm:flex-row gap-2">
-                    <input
-                      value={proofInput}
-                      onChange={e => setProofInput(e.target.value)}
-                      placeholder="Proof reference / tracking ID / deliverable link…"
-                      className="flex-1 border border-outline-border bg-[#07080a] px-3 py-2 text-[12px] font-code-hash text-white outline-none focus:border-primary-fixed"
-                    />
-                    <button
-                      type="button"
-                      disabled={busy || !proofInput}
-                      onClick={() => execute('submitProof', [BigInt(id), hashTerms(proofInput)], 'Submit Proof')}
-                      className="pact-button-primary min-h-[44px] px-5 text-[11px] font-bold uppercase tracking-wider shrink-0 disabled:opacity-40"
-                    >
-                      Submit Proof Hash
-                    </button>
-                  </div>
+          ) : (
+            <>
+              {/* STATUS 0: OFFERED (Before Expiry) */}
+              {pact.status === 0 && now <= pact.offerExpiry && (
+                <div className="space-y-3">
+                  {isTaker && (
+                    <div className="space-y-2">
+                      <p className="text-[12px] font-body-sans text-text-muted">
+                        You are the designated counterparty. Verify terms above, then sign to lock any required collateral and activate the pact.
+                      </p>
+                      <button
+                        type="button"
+                        disabled={busy || !termsMatch}
+                        onClick={() => {
+                          const action = availableActions.find(a => a.type === 'ACCEPT_OFFER')
+                          if (action) requestActionConfirmation(action, acceptPact)
+                          else void acceptPact()
+                        }}
+                        className="pact-button-primary w-full min-h-[48px] text-[12px] font-bold uppercase tracking-wider disabled:opacity-40"
+                      >
+                        {termsMatch ? 'Verify Terms & Accept Pact Offer' : 'Paste Matching Plaintext Terms to Enable Acceptance'}
+                      </button>
+                      {!termsMatch && (
+                        <p className="text-[11px] font-code-hash text-amber-300">
+                          ℹ️ Acceptance requires byte-for-byte verification of written terms against on-chain hash.
+                        </p>
+                      )}
+                    </div>
+                  )}
+                  {isMaker && (
+                    <div className="space-y-2">
+                      <p className="text-[12px] font-body-sans text-text-muted">
+                        Offer is pending counterparty acceptance. You can cancel at any time before acceptance to reclaim your collateral.
+                      </p>
+                      <button
+                        type="button"
+                        disabled={busy}
+                        onClick={() => {
+                          const action = availableActions.find(a => a.type === 'CANCEL_OFFER')
+                          if (action) {
+                            requestActionConfirmation(action, () => execute('cancelPact', [BigInt(id)], 'Cancel unaccepted offer'))
+                          } else {
+                            void execute('cancelPact', [BigInt(id)], 'Cancel unaccepted offer')
+                          }
+                        }}
+                        className="pact-button-secondary w-full min-h-[44px] text-[11px] font-bold uppercase text-rose-300 hover:text-rose-200 border-rose-500/30 hover:border-rose-400"
+                      >
+                        Cancel Offer & Reclaim Maker Collateral
+                      </button>
+                    </div>
+                  )}
+                  {!isMaker && !isTaker && (
+                    <div className="p-3 border border-outline-hairline bg-[#07080a] text-[12px] text-text-dim font-code-hash">
+                      Offer is pending acceptance by counterparty {truncateAddress(pact.taker)} before {formatDate(pact.offerExpiry)}.
+                    </div>
+                  )}
                 </div>
               )}
 
-              {/* Taker missed performance deadline banner */}
-              {isTaker && now > pact.performanceDeadline && now <= pact.disputeDeadline && (
-                <div className="p-3 border border-amber-500/40 bg-amber-950/20 text-[12px] font-code-hash text-amber-300">
-                  Performance window elapsed on {formatDate(pact.performanceDeadline)}. Proof can no longer be submitted.
-                </div>
-              )}
-
-              {/* Maker Release Collateral (before dispute deadline) */}
-              {isMaker && now <= pact.disputeDeadline && (
-                <div className="space-y-2">
-                  <p className="text-[12px] font-body-sans text-text-muted">
-                    {now > pact.performanceDeadline
-                      ? 'Counterparty did not submit delivery proof. You can release collateral or open a dispute before cutoff.'
-                      : 'Once satisfied with delivery, release locked escrow funds directly to the counterparty.'}
-                  </p>
-                  <button
-                    type="button"
-                    disabled={busy}
-                    onClick={() => execute('release', [BigInt(id)], 'Release collateral to counterparty')}
-                    className="pact-button-primary w-full min-h-[48px] text-[12px] font-bold uppercase tracking-wider"
-                  >
-                    Release Collateral to Counterparty
-                  </button>
-                </div>
-              )}
-
-              {/* Open Dispute (before dispute deadline) */}
-              {canOpenDispute && (
-                <div className="pt-2 border-t border-outline-hairline">
-                  <button
-                    type="button"
-                    disabled={busy}
-                    onClick={() => openOrRespondDispute('openDispute')}
-                    className="pact-button-secondary w-full min-h-[44px] text-[11px] font-bold uppercase tracking-wider text-amber-400 hover:border-amber-400"
-                  >
-                    Open Bonded Dispute ({formatAmount(pact.bondAmount)} USDC Bond)
-                  </button>
-                </div>
-              )}
-
-              {/* Active & Dispute Deadline Passed (No proof submitted) -> Reverts 100% to Maker */}
-              {now > pact.disputeDeadline && (
+              {/* STATUS 0: OFFERED (Expired) */}
+              {pact.status === 0 && now > pact.offerExpiry && (
                 <div className="space-y-3 p-4 border border-rose-500/40 bg-rose-950/20">
                   <div className="flex items-center gap-2">
-                    <span className="material-symbols-outlined text-rose-400 text-[18px]">gavel</span>
+                    <span className="material-symbols-outlined text-rose-400 text-[18px]">timer_off</span>
                     <span className="font-headline-mono text-[13px] font-bold uppercase text-rose-300">
-                      Dispute Window Closed (No Proof Submitted)
+                      Offer Acceptance Window Expired
                     </span>
                   </div>
                   <p className="text-[12px] font-body-sans text-text-muted">
-                    The dispute window elapsed without proof submission or dispute. 100% of locked collateral reverts to the Maker.
+                    The offer cutoff ({formatDate(pact.offerExpiry)}) has passed without counterparty acceptance. Locked maker collateral can be refunded to pull-payment credits.
                   </p>
                   {isMaker ? (
                     <button
                       type="button"
                       disabled={busy}
-                      onClick={() => execute('refundAfterDeadline', [BigInt(id)], 'Claim full collateral refund')}
+                      onClick={() => {
+                        const action = availableActions.find(a => a.type === 'EXPIRE_OFFER')
+                        if (action) {
+                          requestActionConfirmation(action, () => execute('expireOffer', [BigInt(id)], 'Expire offer & claim refund'))
+                        } else {
+                          void execute('expireOffer', [BigInt(id)], 'Expire offer & claim refund')
+                        }
+                      }}
                       className="pact-button-primary w-full min-h-[48px] text-[12px] font-bold uppercase tracking-wider"
                     >
-                      Claim Full Collateral Refund ({formatAmount(pact.amountMaker)} {tokenSymbol(pact.tokenMaker)})
+                      Expire Offer & Claim Collateral Refund ({formatAmount(pact.amountMaker)} {tokenSymbol(pact.tokenMaker)})
                     </button>
                   ) : isTaker ? (
-                    <div className="p-3 border border-outline-hairline bg-[#07080a] text-[12px] text-text-dim font-code-hash">
-                      Dispute cutoff passed without delivery proof. Collateral reverts to maker upon settlement.
+                    <div className="p-3 border border-outline-hairline bg-[#07080a] text-[12px] text-rose-300 font-code-hash">
+                      Acceptance deadline has passed. This offer is no longer valid.
                     </div>
                   ) : (
                     <button
                       type="button"
                       disabled={busy}
-                      onClick={() => execute('refundAfterDeadline', [BigInt(id)], 'Settle after deadline')}
+                      onClick={() => {
+                        const action = availableActions.find(a => a.type === 'EXPIRE_OFFER')
+                        if (action) {
+                          requestActionConfirmation(action, () => execute('expireOffer', [BigInt(id)], 'Expire offer'))
+                        } else {
+                          void execute('expireOffer', [BigInt(id)], 'Expire offer')
+                        }
+                      }}
                       className="pact-button-secondary w-full min-h-[44px] text-[11px] font-bold uppercase"
                     >
-                      Settle Pact (Public Execution)
+                      Expire Offer (Public Execution)
                     </button>
                   )}
                 </div>
               )}
-            </div>
-          )}
 
-          {/* STATUS 2: PROOF SUBMITTED */}
-          {pact.status === 2 && (
-            <div className="space-y-4">
-              {/* Maker Release Collateral */}
-              {isMaker && now <= pact.disputeDeadline && (
-                <div className="space-y-2">
-                  <p className="text-[12px] font-body-sans text-text-muted">
-                    Proof submitted by counterparty. Review proof and release escrow funds, or open a bonded dispute before cutoff ({formatDate(pact.disputeDeadline)}).
-                  </p>
-                  <button
-                    type="button"
-                    disabled={busy}
-                    onClick={() => execute('release', [BigInt(id)], 'Release collateral to counterparty')}
-                    className="pact-button-primary w-full min-h-[48px] text-[12px] font-bold uppercase tracking-wider"
-                  >
-                    Release Collateral to Counterparty
-                  </button>
-                </div>
-              )}
+              {/* STATUS 1: ACTIVE */}
+              {pact.status === 1 && (
+                <div className="space-y-4">
+                  {/* Taker Submit Proof (before performance deadline) */}
+                  {isTaker && now <= pact.performanceDeadline && (
+                    <div className="space-y-2">
+                      <p className="text-[12px] font-body-sans text-text-muted">
+                        Submit delivery tracking reference, IPFS CID, or completion hash before the performance window closes ({formatDate(pact.performanceDeadline)}).
+                      </p>
+                      <div className="flex flex-col sm:flex-row gap-2">
+                        <input
+                          value={proofInput}
+                          onChange={e => setProofInput(e.target.value)}
+                          placeholder="Proof reference / tracking ID / deliverable link…"
+                          className="flex-1 border border-outline-border bg-[#07080a] px-3 py-2 text-[12px] font-code-hash text-white outline-none focus:border-primary-fixed"
+                        />
+                        <button
+                          type="button"
+                          disabled={busy || !proofInput.trim()}
+                          onClick={() => {
+                            const action = availableActions.find(a => a.type === 'SUBMIT_PROOF')
+                            if (action) {
+                              requestActionConfirmation(action, () => execute('submitProof', [BigInt(id), hashTerms(proofInput.trim())], 'Submit Proof'))
+                            } else {
+                              void execute('submitProof', [BigInt(id), hashTerms(proofInput.trim())], 'Submit Proof')
+                            }
+                          }}
+                          className="pact-button-primary min-h-[44px] px-5 text-[11px] font-bold uppercase tracking-wider shrink-0 disabled:opacity-40"
+                        >
+                          Submit Proof Hash
+                        </button>
+                      </div>
+                    </div>
+                  )}
 
-              {/* Taker Awaiting Maker Review */}
-              {isTaker && now <= pact.disputeDeadline && (
-                <div className="p-3 border border-outline-hairline bg-[#07080a] text-[12px] text-text-dim font-code-hash">
-                  Proof anchored on-chain. Maker has until {formatDate(pact.disputeDeadline)} to release funds or open a dispute.
-                </div>
-              )}
+                  {/* Taker missed performance deadline banner */}
+                  {isTaker && now > pact.performanceDeadline && now <= pact.disputeDeadline && (
+                    <div className="p-3 border border-amber-500/40 bg-amber-950/20 text-[12px] font-code-hash text-amber-300">
+                      Performance window elapsed on {formatDate(pact.performanceDeadline)}. Proof can no longer be submitted.
+                    </div>
+                  )}
 
-              {/* Open Dispute (before dispute deadline) */}
-              {canOpenDispute && (
-                <div className="pt-2 border-t border-outline-hairline">
-                  <button
-                    type="button"
-                    disabled={busy}
-                    onClick={() => openOrRespondDispute('openDispute')}
-                    className="pact-button-secondary w-full min-h-[44px] text-[11px] font-bold uppercase tracking-wider text-amber-400 hover:border-amber-400"
-                  >
-                    Open Bonded Dispute ({formatAmount(pact.bondAmount)} USDC Bond)
-                  </button>
-                </div>
-              )}
+                  {/* Maker Release Collateral (before dispute deadline) */}
+                  {isMaker && now <= pact.disputeDeadline && (
+                    <div className="space-y-2">
+                      <p className="text-[12px] font-body-sans text-text-muted">
+                        {now > pact.performanceDeadline
+                          ? 'Counterparty did not submit delivery proof. You can release collateral or open a dispute before cutoff.'
+                          : 'Once satisfied with delivery, release locked escrow funds directly to the counterparty.'}
+                      </p>
+                      <button
+                        type="button"
+                        disabled={busy}
+                        onClick={() => {
+                          const action = availableActions.find(a => a.type === 'RELEASE_COLLATERAL')
+                          if (action) {
+                            requestActionConfirmation(action, () => execute('release', [BigInt(id)], 'Release collateral to counterparty'))
+                          } else {
+                            void execute('release', [BigInt(id)], 'Release collateral to counterparty')
+                          }
+                        }}
+                        className="pact-button-primary w-full min-h-[48px] text-[12px] font-bold uppercase tracking-wider"
+                      >
+                        Release Collateral to Counterparty
+                      </button>
+                    </div>
+                  )}
 
-              {/* Proof Submitted & Dispute Deadline Passed -> Releases 100% to Taker */}
-              {now > pact.disputeDeadline && (
-                <div className="space-y-3 p-4 border border-emerald-500/40 bg-emerald-950/20">
-                  <div className="flex items-center gap-2">
-                    <span className="material-symbols-outlined text-emerald-400 text-[18px]">verified</span>
-                    <span className="font-headline-mono text-[13px] font-bold uppercase text-emerald-300">
-                      Dispute Window Closed (Proof Uncontested)
-                    </span>
-                  </div>
-                  <p className="text-[12px] font-body-sans text-text-muted">
-                    The dispute window closed with proof unchallenged. Escrow funds and collateral are released 100% to the Counterparty (Taker).
-                  </p>
-                  {isTaker ? (
-                    <button
-                      type="button"
-                      disabled={busy}
-                      onClick={() => execute('refundAfterDeadline', [BigInt(id)], 'Claim payout & collateral')}
-                      className="pact-button-primary w-full min-h-[48px] text-[12px] font-bold uppercase tracking-wider"
-                    >
-                      Claim Escrow Payout & Collateral
-                    </button>
-                  ) : isMaker ? (
-                    <button
-                      type="button"
-                      disabled={busy}
-                      onClick={() => execute('refundAfterDeadline', [BigInt(id)], 'Finalize settlement')}
-                      className="pact-button-secondary w-full min-h-[44px] text-[11px] font-bold uppercase"
-                    >
-                      Finalize Settlement to Counterparty
-                    </button>
-                  ) : (
-                    <button
-                      type="button"
-                      disabled={busy}
-                      onClick={() => execute('refundAfterDeadline', [BigInt(id)], 'Settle after deadline')}
-                      className="pact-button-secondary w-full min-h-[44px] text-[11px] font-bold uppercase"
-                    >
-                      Settle Pact (Public Execution)
-                    </button>
+                  {/* Open Dispute (before dispute deadline) */}
+                  {canOpenDispute && (
+                    <div className="pt-2 border-t border-outline-hairline">
+                      <button
+                        type="button"
+                        disabled={busy}
+                        onClick={() => {
+                          const action = availableActions.find(a => a.type === 'OPEN_DISPUTE')
+                          if (action) {
+                            requestActionConfirmation(action, () => openOrRespondDispute('openDispute'))
+                          } else {
+                            void openOrRespondDispute('openDispute')
+                          }
+                        }}
+                        className="pact-button-secondary w-full min-h-[44px] text-[11px] font-bold uppercase tracking-wider text-amber-400 hover:border-amber-400"
+                      >
+                        Open Bonded Dispute ({formatAmount(pact.bondAmount)} USDC Bond)
+                      </button>
+                    </div>
+                  )}
+
+                  {/* Active & Dispute Deadline Passed (No proof submitted) -> Reverts 100% to Maker */}
+                  {now > pact.disputeDeadline && (
+                    <div className="space-y-3 p-4 border border-rose-500/40 bg-rose-950/20">
+                      <div className="flex items-center gap-2">
+                        <span className="material-symbols-outlined text-rose-400 text-[18px]">gavel</span>
+                        <span className="font-headline-mono text-[13px] font-bold uppercase text-rose-300">
+                          Dispute Window Closed (No Proof Submitted)
+                        </span>
+                      </div>
+                      <p className="text-[12px] font-body-sans text-text-muted">
+                        The dispute window elapsed without proof submission or dispute. 100% of locked collateral reverts to the Maker.
+                      </p>
+                      {isMaker ? (
+                        <button
+                          type="button"
+                          disabled={busy}
+                          onClick={() => {
+                            const action = availableActions.find(a => a.type === 'DEADLINE_REFUND_MAKER')
+                            if (action) {
+                              requestActionConfirmation(action, () => execute('refundAfterDeadline', [BigInt(id)], 'Claim full collateral refund'))
+                            } else {
+                              void execute('refundAfterDeadline', [BigInt(id)], 'Claim full collateral refund')
+                            }
+                          }}
+                          className="pact-button-primary w-full min-h-[48px] text-[12px] font-bold uppercase tracking-wider"
+                        >
+                          Claim Full Collateral Refund ({formatAmount(pact.amountMaker)} {tokenSymbol(pact.tokenMaker)})
+                        </button>
+                      ) : isTaker ? (
+                        <div className="p-3 border border-outline-hairline bg-[#07080a] text-[12px] text-text-dim font-code-hash">
+                          Dispute cutoff passed without delivery proof. Collateral reverts to maker upon settlement.
+                        </div>
+                      ) : (
+                        <button
+                          type="button"
+                          disabled={busy}
+                          onClick={() => {
+                            const action = availableActions.find(a => a.type === 'DEADLINE_REFUND_MAKER')
+                            if (action) {
+                              requestActionConfirmation(action, () => execute('refundAfterDeadline', [BigInt(id)], 'Settle after deadline'))
+                            } else {
+                              void execute('refundAfterDeadline', [BigInt(id)], 'Settle after deadline')
+                            }
+                          }}
+                          className="pact-button-secondary w-full min-h-[44px] text-[11px] font-bold uppercase"
+                        >
+                          Settle Pact (Public Execution)
+                        </button>
+                      )}
+                    </div>
                   )}
                 </div>
               )}
-            </div>
-          )}
 
-          {/* STATUS 3: DISPUTED */}
-          {pact.status === 3 && (
-            <div className="space-y-4">
-              {/* Respondent Counter-Bond (before response deadline) */}
-              {canRespond && (
-                <div className="space-y-2">
-                  <p className="text-[12px] font-body-sans text-amber-300">
-                    A dispute was opened against this pact. Post your matching bond ({formatAmount(pact.bondAmount)} USDC) before {dispute ? formatDate(dispute.responseDeadline) : ''} to contest.
-                  </p>
-                  <button
-                    type="button"
-                    disabled={busy}
-                    onClick={() => openOrRespondDispute('respondDispute')}
-                    className="pact-button-primary w-full min-h-[48px] text-[12px] font-bold uppercase tracking-wider"
-                  >
-                    Post Counter-Bond & Contest Dispute
-                  </button>
+              {/* STATUS 2: PROOF SUBMITTED */}
+              {pact.status === 2 && (
+                <div className="space-y-4">
+                  {/* Maker Release Collateral */}
+                  {isMaker && now <= pact.disputeDeadline && (
+                    <div className="space-y-2">
+                      <p className="text-[12px] font-body-sans text-text-muted">
+                        Proof submitted by counterparty. Review proof and release escrow funds, or open a bonded dispute before cutoff ({formatDate(pact.disputeDeadline)}).
+                      </p>
+                      <button
+                        type="button"
+                        disabled={busy}
+                        onClick={() => {
+                          const action = availableActions.find(a => a.type === 'RELEASE_COLLATERAL')
+                          if (action) {
+                            requestActionConfirmation(action, () => execute('release', [BigInt(id)], 'Release collateral to counterparty'))
+                          } else {
+                            void execute('release', [BigInt(id)], 'Release collateral to counterparty')
+                          }
+                        }}
+                        className="pact-button-primary w-full min-h-[48px] text-[12px] font-bold uppercase tracking-wider"
+                      >
+                        Release Collateral to Counterparty
+                      </button>
+                    </div>
+                  )}
+
+                  {/* Taker Awaiting Maker Review */}
+                  {isTaker && now <= pact.disputeDeadline && (
+                    <div className="p-3 border border-outline-hairline bg-[#07080a] text-[12px] text-text-dim font-code-hash">
+                      Proof anchored on-chain. Maker has until {formatDate(pact.disputeDeadline)} to release funds or open a dispute.
+                    </div>
+                  )}
+
+                  {/* Open Dispute (before dispute deadline) */}
+                  {canOpenDispute && (
+                    <div className="pt-2 border-t border-outline-hairline">
+                      <button
+                        type="button"
+                        disabled={busy}
+                        onClick={() => {
+                          const action = availableActions.find(a => a.type === 'OPEN_DISPUTE')
+                          if (action) {
+                            requestActionConfirmation(action, () => openOrRespondDispute('openDispute'))
+                          } else {
+                            void openOrRespondDispute('openDispute')
+                          }
+                        }}
+                        className="pact-button-secondary w-full min-h-[44px] text-[11px] font-bold uppercase tracking-wider text-amber-400 hover:border-amber-400"
+                      >
+                        Open Bonded Dispute ({formatAmount(pact.bondAmount)} USDC Bond)
+                      </button>
+                    </div>
+                  )}
+
+                  {/* Proof Submitted & Dispute Deadline Passed -> Releases 100% to Taker */}
+                  {now > pact.disputeDeadline && (
+                    <div className="space-y-3 p-4 border border-emerald-500/40 bg-emerald-950/20">
+                      <div className="flex items-center gap-2">
+                        <span className="material-symbols-outlined text-emerald-400 text-[18px]">verified</span>
+                        <span className="font-headline-mono text-[13px] font-bold uppercase text-emerald-300">
+                          Dispute Window Closed (Proof Uncontested)
+                        </span>
+                      </div>
+                      <p className="text-[12px] font-body-sans text-text-muted">
+                        The dispute window closed with proof unchallenged. Escrow funds and collateral are released 100% to the Counterparty (Taker).
+                      </p>
+                      {isTaker ? (
+                        <button
+                          type="button"
+                          disabled={busy}
+                          onClick={() => {
+                            const action = availableActions.find(a => a.type === 'DEADLINE_SETTLE_TAKER')
+                            if (action) {
+                              requestActionConfirmation(action, () => execute('refundAfterDeadline', [BigInt(id)], 'Claim payout & collateral'))
+                            } else {
+                              void execute('refundAfterDeadline', [BigInt(id)], 'Claim payout & collateral')
+                            }
+                          }}
+                          className="pact-button-primary w-full min-h-[48px] text-[12px] font-bold uppercase tracking-wider"
+                        >
+                          Claim Escrow Payout & Collateral
+                        </button>
+                      ) : isMaker ? (
+                        <button
+                          type="button"
+                          disabled={busy}
+                          onClick={() => {
+                            const action = availableActions.find(a => a.type === 'DEADLINE_SETTLE_TAKER')
+                            if (action) {
+                              requestActionConfirmation(action, () => execute('refundAfterDeadline', [BigInt(id)], 'Finalize settlement'))
+                            } else {
+                              void execute('refundAfterDeadline', [BigInt(id)], 'Finalize settlement')
+                            }
+                          }}
+                          className="pact-button-secondary w-full min-h-[44px] text-[11px] font-bold uppercase"
+                        >
+                          Finalize Settlement to Counterparty
+                        </button>
+                      ) : (
+                        <button
+                          type="button"
+                          disabled={busy}
+                          onClick={() => {
+                            const action = availableActions.find(a => a.type === 'DEADLINE_SETTLE_TAKER')
+                            if (action) {
+                              requestActionConfirmation(action, () => execute('refundAfterDeadline', [BigInt(id)], 'Settle after deadline'))
+                            } else {
+                              void execute('refundAfterDeadline', [BigInt(id)], 'Settle after deadline')
+                            }
+                          }}
+                          className="pact-button-secondary w-full min-h-[44px] text-[11px] font-bold uppercase"
+                        >
+                          Settle Pact (Public Execution)
+                        </button>
+                      )}
+                    </div>
+                  )}
                 </div>
               )}
 
-              {/* Arbiter Decision Panel (before arbiter deadline) */}
-              {canRule && (
-                <div className="space-y-3 p-4 border border-outline-hairline bg-[#07080a]">
-                  <p className="text-[12px] font-headline-mono font-bold uppercase text-white">
-                    Arbiter Decision Panel
-                  </p>
-                  <div>
-                    <label className="block text-[11px] font-label-caps uppercase text-text-muted mb-1">
-                      Arbiter Fee to Deduct (USDC, max {formatAmount(pact.arbiterFeeCap)})
-                    </label>
-                    <input
-                      value={feeInput}
-                      onChange={e => setFeeInput(e.target.value)}
-                      className="w-full border border-outline-border bg-[#0c0f12] px-3 py-2 text-[12px] font-code-hash text-white outline-none focus:border-primary-fixed"
-                    />
-                  </div>
-                  <div className="grid grid-cols-2 gap-2">
-                    <button
-                      type="button"
-                      disabled={busy}
-                      onClick={() => execute('ruleDispute', [BigInt(id), 1, parseUnitsSafe(feeInput)], 'Rule for Maker')}
-                      className="pact-button-primary min-h-[44px] text-[11px] font-bold uppercase"
-                    >
-                      Rule for Maker (Refund)
-                    </button>
-                    <button
-                      type="button"
-                      disabled={busy}
-                      onClick={() => execute('ruleDispute', [BigInt(id), 2, parseUnitsSafe(feeInput)], 'Rule for Taker')}
-                      className="pact-button-primary min-h-[44px] text-[11px] font-bold uppercase"
-                    >
-                      Rule for Taker (Release)
-                    </button>
-                  </div>
-                </div>
-              )}
+              {/* STATUS 3: DISPUTED */}
+              {pact.status === 3 && (
+                <div className="space-y-4">
+                  {/* Respondent Counter-Bond (before response deadline) */}
+                  {canRespond && (
+                    <div className="space-y-2">
+                      <p className="text-[12px] font-body-sans text-amber-300">
+                        A dispute was opened against this pact. Post your matching bond ({formatAmount(pact.bondAmount)} USDC) before {dispute ? formatDate(dispute.responseDeadline) : ''} to contest.
+                      </p>
+                      <button
+                        type="button"
+                        disabled={busy}
+                        onClick={() => {
+                          const action = availableActions.find(a => a.type === 'RESPOND_DISPUTE')
+                          if (action) {
+                            requestActionConfirmation(action, () => openOrRespondDispute('respondDispute'))
+                          } else {
+                            void openOrRespondDispute('respondDispute')
+                          }
+                        }}
+                        className="pact-button-primary w-full min-h-[48px] text-[12px] font-bold uppercase tracking-wider"
+                      >
+                        Post Counter-Bond & Contest Dispute
+                      </button>
+                    </div>
+                  )}
 
-              {/* Unanswered Dispute Default Judgment */}
-              {canDefault && (
-                <div className="space-y-2 p-4 border border-amber-500/40 bg-amber-950/20">
-                  <p className="text-[12px] font-body-sans text-amber-300">
-                    Respondent missed the 3-day counter-bond response cutoff. Dispute opener wins 100% bond refund and all collateral.
-                  </p>
-                  <button
-                    type="button"
-                    disabled={busy}
-                    onClick={() => execute('resolveUnansweredDispute', [BigInt(id)], 'Execute default judgment')}
-                    className="pact-button-primary w-full min-h-[48px] text-[12px] font-bold uppercase tracking-wider"
-                  >
-                    Execute Default Judgment (Unanswered Dispute)
-                  </button>
-                </div>
-              )}
+                  {/* Arbiter Decision Panel (before arbiter deadline) */}
+                  {canRule && (
+                    <div className="space-y-3 p-4 border border-outline-hairline bg-[#07080a]">
+                      <p className="text-[12px] font-headline-mono font-bold uppercase text-white">
+                        Arbiter Decision Panel
+                      </p>
+                      <div>
+                        <label className="block text-[11px] font-label-caps uppercase text-text-muted mb-1">
+                          Arbiter Fee to Deduct (USDC, max {formatAmount(pact.arbiterFeeCap)})
+                        </label>
+                        <input
+                          value={feeInput}
+                          onChange={e => setFeeInput(e.target.value)}
+                          className="w-full border border-outline-border bg-[#0c0f12] px-3 py-2 text-[12px] font-code-hash text-white outline-none focus:border-primary-fixed"
+                        />
+                      </div>
+                      <div className="grid grid-cols-2 gap-2">
+                        <button
+                          type="button"
+                          disabled={busy}
+                          onClick={() => {
+                            const action = availableActions.find(a => a.type === 'RULE_DISPUTE_MAKER')
+                            if (action) {
+                              requestActionConfirmation(action, () => execute('ruleDispute', [BigInt(id), 1, parseUnitsSafe(feeInput)], 'Rule for Maker'))
+                            } else {
+                              void execute('ruleDispute', [BigInt(id), 1, parseUnitsSafe(feeInput)], 'Rule for Maker')
+                            }
+                          }}
+                          className="pact-button-primary min-h-[44px] text-[11px] font-bold uppercase"
+                        >
+                          Rule for Maker (Refund)
+                        </button>
+                        <button
+                          type="button"
+                          disabled={busy}
+                          onClick={() => {
+                            const action = availableActions.find(a => a.type === 'RULE_DISPUTE_TAKER')
+                            if (action) {
+                              requestActionConfirmation(action, () => execute('ruleDispute', [BigInt(id), 2, parseUnitsSafe(feeInput)], 'Rule for Taker'))
+                            } else {
+                              void execute('ruleDispute', [BigInt(id), 2, parseUnitsSafe(feeInput)], 'Rule for Taker')
+                            }
+                          }}
+                          className="pact-button-primary min-h-[44px] text-[11px] font-bold uppercase"
+                        >
+                          Rule for Taker (Release)
+                        </button>
+                      </div>
+                    </div>
+                  )}
 
-              {/* Arbiter Timeout (14 days passed) */}
-              {canArbiterTimeout && (
-                <div className="space-y-2 p-4 border border-amber-500/40 bg-amber-950/20">
-                  <p className="text-[12px] font-body-sans text-amber-300">
-                    Designated arbiter did not issue a ruling within 14 days. Both dispute bonds are refunded 100% and collateral is split 50/50.
-                  </p>
-                  <button
-                    type="button"
-                    disabled={busy}
-                    onClick={() => execute('arbiterTimeout', [BigInt(id)], 'Execute arbiter timeout')}
-                    className="pact-button-primary w-full min-h-[48px] text-[12px] font-bold uppercase tracking-wider"
-                  >
-                    Refund Bonds & Split Collateral 50/50 (Arbiter Timeout)
-                  </button>
+                  {/* Unanswered Dispute Default Judgment */}
+                  {canDefault && (
+                    <div className="space-y-2 p-4 border border-amber-500/40 bg-amber-950/20">
+                      <p className="text-[12px] font-body-sans text-amber-300">
+                        Respondent missed the 3-day counter-bond response cutoff. Dispute opener wins 100% bond refund and all collateral.
+                      </p>
+                      <button
+                        type="button"
+                        disabled={busy}
+                        onClick={() => {
+                          const action = availableActions.find(a => a.type === 'DEFAULT_JUDGMENT')
+                          if (action) {
+                            requestActionConfirmation(action, () => execute('resolveUnansweredDispute', [BigInt(id)], 'Execute default judgment'))
+                          } else {
+                            void execute('resolveUnansweredDispute', [BigInt(id)], 'Execute default judgment')
+                          }
+                        }}
+                        className="pact-button-primary w-full min-h-[48px] text-[12px] font-bold uppercase tracking-wider"
+                      >
+                        Execute Default Judgment (Unanswered Dispute)
+                      </button>
+                    </div>
+                  )}
+
+                  {/* Arbiter Timeout (14 days passed) */}
+                  {canArbiterTimeout && (
+                    <div className="space-y-2 p-4 border border-amber-500/40 bg-amber-950/20">
+                      <p className="text-[12px] font-body-sans text-amber-300">
+                        Designated arbiter did not issue a ruling within 14 days. Both dispute bonds are refunded 100% and collateral is split 50/50.
+                      </p>
+                      <button
+                        type="button"
+                        disabled={busy}
+                        onClick={() => {
+                          const action = availableActions.find(a => a.type === 'ARBITER_TIMEOUT')
+                          if (action) {
+                            requestActionConfirmation(action, () => execute('arbiterTimeout', [BigInt(id)], 'Execute arbiter timeout'))
+                          } else {
+                            void execute('arbiterTimeout', [BigInt(id)], 'Execute arbiter timeout')
+                          }
+                        }}
+                        className="pact-button-primary w-full min-h-[48px] text-[12px] font-bold uppercase tracking-wider"
+                      >
+                        Refund Bonds & Split Collateral 50/50 (Arbiter Timeout)
+                      </button>
+                    </div>
+                  )}
                 </div>
               )}
-            </div>
+            </>
           )}
         </section>
       )}
@@ -976,7 +1163,26 @@ export default function PactDetailPage({ params }: { params: Promise<{ id: strin
               <button
                 key={token}
                 disabled={busy}
-                onClick={() => execute('withdraw', [token], `Withdraw ${tokenSymbol(token)}`)}
+                onClick={() => {
+                  const withdrawAction: PactAction = {
+                    type: 'WITHDRAW_CREDITS',
+                    label: `Withdraw ${formatAmount(credits[token])} ${tokenSymbol(token)} to Wallet`,
+                    shortLabel: `Withdraw ${tokenSymbol(token)}`,
+                    functionName: 'withdraw',
+                    role: 'PUBLIC',
+                    severity: 'primary',
+                    isDangerous: false,
+                    isEligible: true,
+                    description: `Transfer internal escrow pull-payment credits directly into your connected wallet address (${truncateAddress(address || '')}).`,
+                    financialSummary: {
+                      amount: credits[token],
+                      token: token,
+                      recipient: address || '',
+                      recipientRole: 'Connected Wallet',
+                    },
+                  }
+                  requestActionConfirmation(withdrawAction, () => execute('withdraw', [token], `Withdraw ${tokenSymbol(token)}`))
+                }}
                 className="pact-button-primary flex w-full justify-between items-center px-4 py-3 min-h-[48px]"
               >
                 <span>Withdraw {tokenSymbol(token)} to Connected Wallet</span>
@@ -986,6 +1192,19 @@ export default function PactDetailPage({ params }: { params: Promise<{ id: strin
           </div>
         </section>
       )}
+
+      {/* Pre-Flight Confirmation Modal */}
+      <ActionConfirmModal
+        isOpen={Boolean(confirmAction)}
+        pactId={id}
+        action={confirmAction}
+        isSubmitting={isSubmittingConfirm}
+        onConfirm={handleConfirmModalSubmit}
+        onCancel={() => {
+          setConfirmAction(null)
+          setConfirmCallback(null)
+        }}
+      />
 
       <TransactionProgress
         stage={txStage}

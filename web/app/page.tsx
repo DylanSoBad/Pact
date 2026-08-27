@@ -371,6 +371,7 @@ function TapeDashboard() {
                     amount: amt,
                     address: truncateAddress(p.maker),
                     deadlineTs: activeDeadline,
+                    rawPact: p,
                   }}
                 />
               )

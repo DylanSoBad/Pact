@@ -1,8 +1,11 @@
 'use client'
 
 import Link from 'next/link'
+import { useAccount } from 'wagmi'
 import { useCurrentTime } from '../hooks/useCurrentTime'
 import { getDeadlineStatus } from '../lib/countdown'
+import type { PactData } from '../lib/reads'
+import { getPrimaryUserAction } from '../lib/actionMatrix'
 
 export interface TapeLinePactProps {
   id: number
@@ -14,6 +17,7 @@ export interface TapeLinePactProps {
   blurSize?: boolean
   deadlineTs?: bigint | number
   deadlineLabel?: string
+  rawPact?: PactData
 }
 
 function getStatusStyle(status: string) {
@@ -43,6 +47,7 @@ function getStatusStyle(status: string) {
 }
 
 export default function TapeLine({ pact }: { pact: TapeLinePactProps }) {
+  const { address } = useAccount()
   const currentTime = useCurrentTime()
   const normStatus = pact.status.toUpperCase()
   const isTerminal = ['SETTLED', 'EXPIRED', 'CANCELLED'].includes(normStatus)
@@ -56,6 +61,12 @@ export default function TapeLine({ pact }: { pact: TapeLinePactProps }) {
   const isUrgent = deadlineStatus?.isUrgent || false
   const isPast = deadlineStatus?.isExpired || normStatus === 'EXPIRED'
 
+  const userAction = pact.rawPact
+    ? getPrimaryUserAction(pact.rawPact, null, address, BigInt(currentTime))
+    : null
+
+  const hasUserAction = Boolean(userAction && userAction.isEligible)
+
   const amountColor = isSettled
     ? 'text-emerald-400 font-bold'
     : isDisputed
@@ -64,8 +75,10 @@ export default function TapeLine({ pact }: { pact: TapeLinePactProps }) {
     ? 'text-text-dim line-through opacity-60'
     : 'text-on-surface font-bold'
 
-  // Row ambient border when closing soon or expired
-  const rowHighlight = isUrgent
+  // Row ambient border when action due, closing soon, or expired
+  const rowHighlight = hasUserAction
+    ? 'border-primary-fixed/50 bg-primary-fixed/[0.04] hover:bg-primary-fixed/[0.08]'
+    : isUrgent
     ? 'border-orange-500/40 bg-orange-950/10 hover:bg-orange-950/20'
     : isPast && !isSettled
     ? 'border-rose-500/30 bg-rose-950/5 hover:bg-rose-950/15'
@@ -74,7 +87,7 @@ export default function TapeLine({ pact }: { pact: TapeLinePactProps }) {
   return (
     <Link
       href={`/p/${pact.id.toString()}`}
-      aria-label={`Pact #${pact.id}, kind ${pact.kind}, amount ${pact.amount}, status ${pact.status}${deadlineStatus ? `, deadline ${deadlineStatus.compactFormatted}` : ''}`}
+      aria-label={`Pact #${pact.id}, kind ${pact.kind}, amount ${pact.amount}, status ${pact.status}${deadlineStatus ? `, deadline ${deadlineStatus.compactFormatted}` : ''}${userAction ? `, action: ${userAction.label}` : ''}`}
       className={`tape-row block border-b transition-colors focus-visible:ring-2 focus-visible:ring-primary-fixed ${rowHighlight}`}
     >
       {/* Desktop 5-Column Monospace Row (>= md) */}
@@ -96,6 +109,13 @@ export default function TapeLine({ pact }: { pact: TapeLinePactProps }) {
           ) : (
             <span className="text-[11px] text-text-dim truncate">
               {pact.time}
+            </span>
+          )}
+
+          {hasUserAction && (
+            <span className="inline-flex items-center gap-1 px-1.5 py-0.5 border border-primary-fixed/60 bg-primary-fixed/20 text-primary-fixed font-bold text-[9px] font-label-caps uppercase tracking-wider rounded-sm animate-pulse">
+              <span>⚡</span>
+              <span>{userAction?.shortLabel}</span>
             </span>
           )}
         </div>
@@ -121,11 +141,18 @@ export default function TapeLine({ pact }: { pact: TapeLinePactProps }) {
           </span>
         </div>
 
-        {/* Col 5: Counterparty Address (2 cols, right-aligned) */}
+        {/* Col 5: Counterparty Address / Action CTA (2 cols, right-aligned) */}
         <div className="col-span-2 text-right">
-          <span className="text-text-muted text-[11px] hover:text-white transition-colors">
-            {pact.address}
-          </span>
+          {hasUserAction ? (
+            <span className="text-primary-fixed font-bold text-[11px] hover:underline inline-flex items-center gap-1">
+              <span>Execute Action</span>
+              <span>→</span>
+            </span>
+          ) : (
+            <span className="text-text-muted text-[11px] hover:text-white transition-colors">
+              {pact.address}
+            </span>
+          )}
         </div>
       </div>
 
@@ -146,6 +173,11 @@ export default function TapeLine({ pact }: { pact: TapeLinePactProps }) {
             ) : (
               <span className="text-[10px] text-text-dim">
                 {pact.time}
+              </span>
+            )}
+            {hasUserAction && (
+              <span className="inline-flex items-center gap-1 px-1.5 py-0.5 border border-primary-fixed/60 bg-primary-fixed/20 text-primary-fixed font-bold text-[9px] font-label-caps uppercase">
+                ⚡ {userAction?.shortLabel}
               </span>
             )}
           </div>
