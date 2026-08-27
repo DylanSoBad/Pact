@@ -84,9 +84,12 @@ export default function PartyCard({
           {role === 'ARBITER' ? 'Mediation Cap' : 'Committed Capital'}
         </span>
         {role === 'ARBITER' ? (
-          <span className="text-text-muted font-bold">
-            {feeCap !== undefined ? `${formatAmount(feeCap)} USDC max` : '0 USDC'}
-          </span>
+          <div className="text-right">
+            <span className="text-text-muted font-bold block">
+              {feeCap !== undefined ? `${formatAmount(feeCap)} USDC max` : '0 USDC'}
+            </span>
+            <span className="text-[9px] text-text-dim block">from loser&apos;s bond only</span>
+          </div>
         ) : (
           <span className={role === 'MAKER' ? 'text-primary-fixed font-bold' : 'text-white font-bold'}>
             {collateralAmount !== undefined && collateralAmount > 0n

@@ -831,15 +831,30 @@ export default function NewPactPage() {
               </div>
             </div>
 
-            {/* Calculated Bond Summary Card */}
-            <div className="p-4 border border-outline-hairline bg-[#07080a] text-[12px] font-code-hash space-y-1.5">
+            {/* Calculated Bond & Arbiter Fee Policy Card */}
+            <div className="p-4 border border-outline-hairline bg-[#07080a] text-[12px] font-code-hash space-y-2">
               <div className="flex justify-between items-center">
-                <span className="text-text-muted">Calculated 5% Dispute Bond:</span>
+                <span className="text-text-muted">Calculated Dispute Bond:</span>
                 <span className="text-primary-fixed font-bold text-[13px]">{formatUnits(calculatedBond, 6)} USDC</span>
               </div>
-              <p className="text-[11px] leading-5 text-text-dim font-body-sans">
-                Each party must deposit this exact bond if disputing. The winning party is fully refunded; the arbiter receives fee cap from the loser&apos;s bond.
-              </p>
+              <div className="flex justify-between items-center text-[11px] pt-1 border-t border-outline-hairline/40">
+                <span className="text-text-dim">Arbiter Fee Cap:</span>
+                <span className="text-white font-mono">{arbiterFeeCap || '0'} USDC</span>
+              </div>
+              <div className="p-2.5 bg-[#0c0f12] border border-outline-hairline/60 rounded-[1px] text-[10px] leading-relaxed text-text-muted font-body-sans space-y-1">
+                <div className="text-primary-fixed font-bold uppercase tracking-wider font-headline-mono text-[10px]">
+                  🛡️ Bounded Arbiter Fee Policy
+                </div>
+                <p>
+                  • <strong>Loser Pays:</strong> The Arbiter Fee is deducted exclusively from the losing party&apos;s dispute bond if an active dispute is ruled upon.
+                </p>
+                <p>
+                  • <strong>Collateral Ring-Fenced:</strong> Escrowed collateral principal is 100% protected and awarded to the winner without deductions.
+                </p>
+                <p>
+                  • <strong>Zero-Fee Guarantee:</strong> If the contract settles normally, resolves via 3-day default, or the arbiter times out (14 days), the arbiter fee is strictly <strong>0.00 USDC</strong>.
+                </p>
+              </div>
             </div>
 
             {/* Step 2 Actions */}

@@ -154,7 +154,7 @@ export default function TermsVerifier({
             </div>
 
             {/* Committed Deadlines */}
-            <div className="p-3 bg-[#07080a] border border-outline-hairline space-y-1.5 sm:col-span-2 lg:col-span-1">
+            <div className="p-3 bg-[#07080a] border border-outline-hairline space-y-1.5">
               <span className="text-[10px] uppercase text-text-dim block">Binding Cutoffs</span>
               <div className="flex justify-between">
                 <span className="text-text-dim">Offer Cutoff:</span>
@@ -167,6 +167,23 @@ export default function TermsVerifier({
               <div className="flex justify-between">
                 <span className="text-text-dim">Dispute Cutoff:</span>
                 <span className="text-white">{formatDate(canonicalTerms.disputeDeadline)}</span>
+              </div>
+            </div>
+
+            {/* Arbiter Fee & Collateral Safeguards */}
+            <div className="p-3 bg-[#07080a] border border-outline-hairline space-y-1.5 sm:col-span-2 lg:col-span-3">
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <span className="text-[10px] uppercase text-text-dim font-bold">Arbitration & Fee Safeguards</span>
+                <span className="text-[10px] text-positive font-mono">100% Collateral Protected</span>
+              </div>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-[11px] pt-1">
+                <div>
+                  <span className="text-text-dim">Arbiter Max Fee Cap: </span>
+                  <strong className="text-white">{formatAmount(canonicalTerms.arbiterFeeCap)} USDC</strong>
+                </div>
+                <div className="text-text-dim text-[10px] leading-tight">
+                  Paid exclusively from loser&apos;s dispute bond if challenged. Principal collateral is never touched.
+                </div>
               </div>
             </div>
           </div>

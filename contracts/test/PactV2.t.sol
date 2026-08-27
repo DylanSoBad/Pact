@@ -36,6 +36,7 @@ contract PactV2Test is Test {
         pact = new PactV2(address(usdc), address(eurc), address(usyc), address(safe), guardian);
         _fundAndApprove(maker);
         _fundAndApprove(taker);
+        _fundAndApprove(arbiter);
     }
 
     function testCreateEscrowsMakerAndComputesV2Bond() public {
@@ -261,6 +262,208 @@ contract PactV2Test is Test {
         vm.prank(arbiter);
         pact.ruleDispute(id, Winner.Taker, 0);
         assertEq(pact.credits(taker, address(usdc)), MAKER_COLLATERAL + 2 * pact.getPact(id).bondAmount);
+    }
+
+    // =========================================================================
+    // V2 ARBITER FEE INVARIANT & SIMULATION TESTS (ADR-0003)
+    // =========================================================================
+
+    function testArbiterFeeCannotExceedFeeCapAtCreation() public {
+        uint128 notional = 1_000_000_000; // $1,000 USDC -> bond is $50 USDC
+        uint128 computedBond = pact.computeDisputeBond(notional);
+        assertEq(computedBond, 50_000_000);
+
+        // Fee cap > computed bond must revert
+        vm.expectRevert(PactV2.FeeExceedsCap.selector);
+        _createCustom(notional, 0, notional, computedBond + 1);
+    }
+
+    function testArbiterFeeCannotExceedFeeCapAtRuling() public {
+        uint256 id = _createAndAccept();
+        vm.prank(maker);
+        pact.openDispute(id);
+        vm.prank(taker);
+        pact.respondDispute(id);
+
+        vm.expectRevert(PactV2.FeeExceedsCap.selector);
+        vm.prank(arbiter);
+        pact.ruleDispute(id, Winner.Maker, FEE_CAP + 1);
+    }
+
+    function testSimulation_MicroPactArbitrationWithFullFee() public {
+        // $5.00 USDC micro pact, $0.50 bond, $0.50 fee cap
+        uint128 microNotional = 5_000_000; // $5 USDC
+        uint128 microBond = pact.computeDisputeBond(microNotional); // $0.50 USDC
+        assertEq(microBond, 500_000);
+
+        uint256 id = _createCustom(microNotional, 0, microNotional, microBond);
+        bytes32 canonicalTerms = pact.getPact(id).termsHash;
+        vm.prank(taker);
+        pact.acceptPact(id, canonicalTerms);
+
+        vm.prank(maker);
+        pact.openDispute(id);
+        vm.prank(taker);
+        pact.respondDispute(id);
+
+        // Arbiter claims full fee ($0.50)
+        vm.prank(arbiter);
+        pact.ruleDispute(id, Winner.Maker, microBond);
+
+        // Maker gets: $5.00 collateral + $0.50 (own bond) + ($0.50 - $0.50) = $5.50 USDC
+        assertEq(pact.credits(maker, address(usdc)), microNotional + microBond);
+        assertEq(pact.credits(arbiter, address(usdc)), microBond);
+        assertEq(pact.credits(taker, address(usdc)), 0);
+        _assertAccounting(address(usdc));
+    }
+
+    function testSimulation_MicroPactArbitrationWithPartialFee() public {
+        uint128 microNotional = 5_000_000; // $5 USDC
+        uint128 microBond = 500_000;       // $0.50 USDC
+        uint128 feeClaimed = 250_000;      // $0.25 USDC
+
+        uint256 id = _createCustom(microNotional, 0, microNotional, microBond);
+        bytes32 canonicalTerms = pact.getPact(id).termsHash;
+        vm.prank(taker);
+        pact.acceptPact(id, canonicalTerms);
+
+        vm.prank(maker);
+        pact.openDispute(id);
+        vm.prank(taker);
+        pact.respondDispute(id);
+
+        vm.prank(arbiter);
+        pact.ruleDispute(id, Winner.Maker, feeClaimed);
+
+        // Maker gets: $5.00 collateral + 2 * $0.50 bond - $0.25 fee = $5.75 USDC
+        assertEq(pact.credits(maker, address(usdc)), microNotional + 2 * microBond - feeClaimed);
+        assertEq(pact.credits(arbiter, address(usdc)), feeClaimed);
+        assertEq(pact.credits(taker, address(usdc)), 0);
+        _assertAccounting(address(usdc));
+    }
+
+    function testSimulation_StandardPactArbitration() public {
+        // $1,000 USDC pact, $50 bond, $30 fee claimed
+        uint128 notional = 1_000_000_000;
+        uint128 bond = pact.computeDisputeBond(notional); // $50 USDC
+        uint128 feeCap = 30_000_000;                      // $30 USDC
+
+        uint256 id = _createCustom(notional, notional / 2, notional, feeCap);
+        bytes32 canonicalTerms = pact.getPact(id).termsHash;
+        vm.prank(taker);
+        pact.acceptPact(id, canonicalTerms);
+
+        vm.prank(maker);
+        pact.openDispute(id);
+        vm.prank(taker);
+        pact.respondDispute(id);
+
+        vm.prank(arbiter);
+        pact.ruleDispute(id, Winner.Taker, feeCap);
+
+        // Taker gets: $1,000 USDC + $500 EURC collateral + 2 * $50 bond - $30 fee = $1,070 USDC + $500 EURC
+        assertEq(pact.credits(taker, address(usdc)), notional + 2 * bond - feeCap);
+        assertEq(pact.credits(taker, address(eurc)), notional / 2);
+        assertEq(pact.credits(arbiter, address(usdc)), feeCap);
+        assertEq(pact.credits(maker, address(usdc)), 0);
+        _assertAccounting(address(usdc));
+        _assertAccounting(address(eurc));
+    }
+
+    function testSimulation_EnterprisePactArbitration() public {
+        // $100,000 USDC pact -> bond is $2,300 USDC, fee cap is $1,500 USDC
+        uint128 notional = 100_000_000_000;
+        uint128 bond = pact.computeDisputeBond(notional); // $2,300 USDC
+        assertEq(bond, 2_300_000_000);
+        uint128 feeCap = 1_500_000_000;                   // $1,500 USDC
+
+        uint256 id = _createCustom(notional, 0, notional, feeCap);
+        bytes32 canonicalTerms = pact.getPact(id).termsHash;
+        vm.prank(taker);
+        pact.acceptPact(id, canonicalTerms);
+
+        vm.prank(maker);
+        pact.openDispute(id);
+        vm.prank(taker);
+        pact.respondDispute(id);
+
+        vm.prank(arbiter);
+        pact.ruleDispute(id, Winner.Maker, feeCap);
+
+        assertEq(pact.credits(maker, address(usdc)), notional + 2 * bond - feeCap);
+        assertEq(pact.credits(arbiter, address(usdc)), feeCap);
+        assertEq(pact.credits(taker, address(usdc)), 0);
+        _assertAccounting(address(usdc));
+    }
+
+    function testSimulation_DefaultJudgmentZeroArbiterFee() public {
+        // When respondent does not respond within 3 days, dispute resolves automatically with 0 arbiter fee
+        uint256 id = _createAndAccept();
+        Pact memory active = pact.getPact(id);
+        vm.prank(maker);
+        pact.openDispute(id);
+        Dispute memory dispute = pact.getDispute(id);
+
+        vm.warp(dispute.responseDeadline + 1);
+        pact.resolveUnansweredDispute(id);
+
+        // Maker receives full collateral + their 1 bond back. Arbiter receives $0.
+        assertEq(pact.credits(maker, address(usdc)), MAKER_COLLATERAL + active.bondAmount);
+        assertEq(pact.credits(maker, address(eurc)), TAKER_COLLATERAL);
+        assertEq(pact.credits(arbiter, address(usdc)), 0);
+        assertEq(pact.credits(taker, address(usdc)), 0);
+        _assertAccounting(address(usdc));
+        _assertAccounting(address(eurc));
+    }
+
+    function testSimulation_ArbiterTimeoutZeroFeeAndEqualSplit() public {
+        // When arbiter times out (14 days), fee is strictly $0 and both bonds are refunded 100%
+        uint256 id = _createAndAccept();
+        Pact memory active = pact.getPact(id);
+        vm.prank(maker);
+        pact.openDispute(id);
+        vm.prank(taker);
+        pact.respondDispute(id);
+        Dispute memory dispute = pact.getDispute(id);
+
+        vm.warp(dispute.arbiterDeadline + 1);
+        pact.arbiterTimeout(id);
+
+        assertEq(pact.credits(arbiter, address(usdc)), 0);
+        // Both receive their exact 1 bond back in USDC plus 50/50 split of all collaterals
+        assertEq(pact.credits(maker, address(usdc)), MAKER_COLLATERAL - (MAKER_COLLATERAL / 2) + active.bondAmount);
+        assertEq(pact.credits(taker, address(usdc)), (MAKER_COLLATERAL / 2) + active.bondAmount);
+        assertEq(pact.credits(maker, address(eurc)), TAKER_COLLATERAL - (TAKER_COLLATERAL / 2));
+        assertEq(pact.credits(taker, address(eurc)), TAKER_COLLATERAL / 2);
+        _assertAccounting(address(usdc));
+        _assertAccounting(address(eurc));
+    }
+
+    function testSimulation_ProBonoZeroFeeCap() public {
+        // When arbiter fee cap is set to $0, arbiter can only rule with $0 fee
+        uint256 id = _createCustom(MAKER_COLLATERAL, 0, NOTIONAL, 0);
+        bytes32 canonicalTerms = pact.getPact(id).termsHash;
+        vm.prank(taker);
+        pact.acceptPact(id, canonicalTerms);
+
+        vm.prank(maker);
+        pact.openDispute(id);
+        vm.prank(taker);
+        pact.respondDispute(id);
+
+        // Ruling with any fee > 0 reverts
+        vm.expectRevert(PactV2.FeeExceedsCap.selector);
+        vm.prank(arbiter);
+        pact.ruleDispute(id, Winner.Maker, 1);
+
+        // Ruling with 0 fee succeeds
+        vm.prank(arbiter);
+        pact.ruleDispute(id, Winner.Maker, 0);
+
+        uint128 bond = pact.getPact(id).bondAmount;
+        assertEq(pact.credits(maker, address(usdc)), MAKER_COLLATERAL + 2 * bond);
+        assertEq(pact.credits(arbiter, address(usdc)), 0);
+        _assertAccounting(address(usdc));
     }
 
     // =========================================================================
