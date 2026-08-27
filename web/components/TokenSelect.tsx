@@ -100,6 +100,7 @@ function TokenOption({
   const decimals = Number(decimalsData ?? 6)
   const balance = (balanceData as bigint) ?? 0n
   const fmt = Number(formatUnits(balance, decimals)).toLocaleString(undefined, { maximumFractionDigits: 4 })
+  const isStable = ['USDC', 'EURC', 'USYC'].includes(token.label)
 
   return (
     <div
@@ -119,7 +120,14 @@ function TokenOption({
           : 'text-text-muted hover:bg-[#181e25] hover:text-white'
       }`}
     >
-      <span className="font-bold">{token.label}</span>
+      <div className="flex items-center gap-2">
+        <span className="font-bold">{token.label}</span>
+        {!isStable && (
+          <span className="bg-rose-500/10 text-rose-400 border border-rose-500/20 px-1 py-0.5 text-[8px] uppercase font-bold tracking-wider rounded-sm">
+            Volatility Risk
+          </span>
+        )}
+      </div>
       <span className={isSelected ? 'text-[#090b0d] text-[11px]' : 'text-text-dim text-[11px]'}>
         Bal: {fmt}
       </span>

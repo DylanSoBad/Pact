@@ -40,6 +40,7 @@ interface IPactV2 {
     event AllPaused(address indexed by, uint64 until);
     event AllUnpaused(address indexed by);
     event PauseGuardianChanged(address indexed oldGuardian, address indexed newGuardian);
+    event TokenAllowlistChanged(address indexed token, bool allowed);
 
     function computeDisputeBond(uint128 notionalUSDC) external pure returns (uint128);
 

@@ -27,6 +27,8 @@ export const arcTestnet = defineChain({
 export const USDC_ERC20: `0x${string}` = "0x3600000000000000000000000000000000000000"; // 6 decimals
 export const EURC: `0x${string}` = "0x89B50855Aa3bE2F677cD6303Cec089B5F319D72a";       // 6 decimals
 export const USYC: `0x${string}` = "0xe9185F0c5F296Ed1797AaE4238D26CCaBEadb86C";       // allowlisted in V1
+export const WETH: `0x${string}` = "0x4200000000000000000000000000000000000006";       // 18 decimals
+export const WBTC: `0x${string}` = "0x2260FAC5E5542a773Aa44fBCfeDf7C193bc2C599";       // 8 decimals
 
 const ARC_TESTNET_PACT_ADDRESS = process.env.NEXT_PUBLIC_PACT_ADDRESS_5042002
 

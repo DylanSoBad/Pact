@@ -573,6 +573,12 @@ contract PactV2 is IPactV2, ReentrancyGuard {
         emit PauseGuardianChanged(oldGuardian, newGuardian);
     }
 
+    function setTokenAllowed(address token, bool allowed) external onlyAdmin {
+        if (token == address(0)) revert ZeroAddress();
+        allowedToken[token] = allowed;
+        emit TokenAllowlistChanged(token, allowed);
+    }
+
     function getPact(uint256 id) external view returns (Pact memory) {
         if (_pacts[id].maker == address(0)) revert PactNotFound();
         return _pacts[id];

@@ -7,7 +7,7 @@ import { useAccount, useChainId, usePublicClient, useReadContract, useSwitchChai
 import { useModal } from 'connectkit'
 import { toast } from 'sonner'
 import { ERC20_ABI, PACT_ABI } from '../../lib/abi'
-import { CIRCLE_FAUCET_URL, EURC, USDC_ERC20, arcTestnet, getPactAddress } from '../../lib/arc'
+import { CIRCLE_FAUCET_URL, EURC, USDC_ERC20, WETH, WBTC, arcTestnet, getPactAddress } from '../../lib/arc'
 import { hashPactTerms, hashTerms } from '../../lib/terms'
 import { signPermit, type PermitAuthorization } from '../../lib/permit'
 import { fetchReputation } from '../../lib/reads'
@@ -49,6 +49,8 @@ const KINDS = [
 const TOKENS = [
   { value: USDC_ERC20, label: 'USDC' },
   { value: EURC, label: 'EURC' },
+  { value: WETH, label: 'WETH' },
+  { value: WBTC, label: 'WBTC' },
 ]
 
 type TransactionPhase = 'idle' | 'approving' | 'creating' | 'done'

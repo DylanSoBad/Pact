@@ -5,6 +5,7 @@ import "forge-std/Test.sol";
 import {PactV2} from "../src/PactV2.sol";
 import {Dispute, Kind, Pact, Status, Winner} from "../src/typesV2.sol";
 import {MockERC20} from "./mocks/MockERC20.sol";
+import {MockFOTToken} from "./mocks/MockFOTToken.sol";
 
 contract MockSafe {}
 
@@ -18,6 +19,7 @@ contract PactV2Test is Test {
     MockERC20 internal usdc;
     MockERC20 internal eurc;
     MockERC20 internal usyc;
+    MockFOTToken internal fotToken;
     MockSafe internal safe;
 
     address internal maker = makeAddr("maker");
@@ -32,6 +34,7 @@ contract PactV2Test is Test {
         usdc = new MockERC20("USDC", "USDC");
         eurc = new MockERC20("EURC", "EURC");
         usyc = new MockERC20("USYC", "USYC");
+        fotToken = new MockFOTToken("FOT", "FOT");
         safe = new MockSafe();
         pact = new PactV2(address(usdc), address(eurc), address(usyc), address(safe), guardian);
         _fundAndApprove(maker);
@@ -467,6 +470,53 @@ contract PactV2Test is Test {
     }
 
     // =========================================================================
+    // V2 MULTI-TOKEN SECURITY TESTS
+    // =========================================================================
+
+    function testOnlyAdminCanAllowlistTokens() public {
+        vm.prank(stranger);
+        vm.expectRevert(PactV2.Unauthorized.selector);
+        pact.setTokenAllowed(address(fotToken), true);
+
+        vm.prank(address(safe));
+        vm.expectEmit(true, false, false, true);
+        emit IPactV2.TokenAllowlistChanged(address(fotToken), true);
+        pact.setTokenAllowed(address(fotToken), true);
+
+        assertTrue(pact.allowedToken(address(fotToken)));
+    }
+
+    function testUnapprovedTokenRevertsCreation() public {
+        MockERC20 unknownToken = new MockERC20("UNK", "UNK");
+        unknownToken.mint(maker, 1000);
+        vm.prank(maker);
+        unknownToken.approve(address(pact), 1000);
+
+        vm.prank(maker);
+        vm.expectRevert(PactV2.InvalidToken.selector);
+        pact.createPact(
+            Kind.Delivery, taker, arbiter, address(unknownToken), address(0),
+            1000, 0, NOTIONAL, FEE_CAP,
+            uint64(block.timestamp + 1 days), uint64(block.timestamp + 7 days), uint64(block.timestamp + 10 days),
+            termsHash, false
+        );
+    }
+
+    function testFeeOnTransferTokenRevertsWithMismatch() public {
+        vm.prank(address(safe));
+        pact.setTokenAllowed(address(fotToken), true);
+
+        vm.prank(maker);
+        vm.expectRevert(PactV2.TransferAmountMismatch.selector);
+        pact.createPact(
+            Kind.Delivery, taker, arbiter, address(fotToken), address(0),
+            MAKER_COLLATERAL, 0, NOTIONAL, FEE_CAP,
+            uint64(block.timestamp + 1 days), uint64(block.timestamp + 7 days), uint64(block.timestamp + 10 days),
+            termsHash, false
+        );
+    }
+
+    // =========================================================================
     // V2 DISPUTE BOND ECONOMICS BENCHMARK & DETERMINISTIC TESTS
     // =========================================================================
 
@@ -601,6 +651,8 @@ contract PactV2Test is Test {
         usdc.approve(address(pact), type(uint256).max);
         eurc.approve(address(pact), type(uint256).max);
         usyc.approve(address(pact), type(uint256).max);
+        fotToken.mint(user, 1_000_000_000_000);
+        fotToken.approve(address(pact), type(uint256).max);
         vm.stopPrank();
     }
 
