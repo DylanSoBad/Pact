@@ -26,13 +26,14 @@ export default function ConnectButton() {
   if (isWrongNetwork) {
     return (
       <button
+        type="button"
         onClick={() => switchChain({ chainId: arcTestnet.id })}
         disabled={isSwitching}
         aria-label="Switch network to Arc Testnet"
-        className="px-3 py-1.5 bg-rose-950/80 border border-rose-500/50 hover:bg-rose-900 text-rose-300 text-[11px] font-mono uppercase tracking-wider rounded-DEFAULT flex items-center gap-2 transition-colors focus-visible:ring-2 focus-visible:ring-rose-500 focus-visible:outline-none"
+        className="min-h-[38px] sm:min-h-[42px] px-3 bg-rose-950/80 border border-rose-500/60 hover:bg-rose-900 text-rose-300 text-[11px] font-code-hash uppercase tracking-wider flex items-center gap-2 transition-colors cursor-pointer"
       >
-        <span className="w-2 h-2 rounded-full bg-rose-500 animate-ping shrink-0" />
-        <span>{isSwitching ? 'SWITCHING...' : 'WRONG NETWORK · SWITCH'}</span>
+        <span className="w-2 h-2 rounded-full bg-rose-500 live-dot shrink-0" />
+        <span className="font-bold">{isSwitching ? 'SWITCHING...' : 'WRONG NETWORK · SWITCH'}</span>
       </button>
     )
   }
@@ -45,41 +46,45 @@ export default function ConnectButton() {
         if (loading) {
           return (
             <button
+              type="button"
               disabled
               aria-label="Connecting to wallet"
-              className="flex min-h-10 items-center gap-2 border border-primary-fixed/40 bg-black px-2.5 text-[11px] font-mono uppercase tracking-wider text-primary-fixed/80 @sm:px-3.5 @sm:text-[12px]"
+              className="flex min-h-[38px] sm:min-h-[42px] items-center gap-2 border border-primary-fixed/40 bg-[#0c0f12] px-3 text-[11px] font-code-hash uppercase tracking-wider text-primary-fixed"
             >
-              <div className="w-2 h-2 rounded-full bg-primary-fixed radar-pulse shrink-0" />
-              <span className="hidden @sm:inline">CONNECTING...</span><span className="@sm:hidden">WAIT</span>
+              <div className="w-2 h-2 rounded-full bg-primary-fixed live-dot shrink-0" />
+              <span className="hidden sm:inline">CONNECTING...</span>
+              <span className="sm:hidden">WAIT</span>
             </button>
           )
         }
 
         return (
           <button
+            type="button"
             onClick={show}
             aria-label={isConnected ? `Connected account: ${ensName ?? truncatedAddress}` : 'Connect Web3 Wallet'}
             aria-haspopup="dialog"
-            className={`flex min-h-10 min-w-0 items-center gap-2 border px-2.5 text-[11px] font-mono uppercase tracking-wider transition-colors focus-visible:ring-2 focus-visible:ring-primary-fixed focus-visible:outline-none @sm:px-3.5 @sm:text-[12px] ${
+            className={`flex min-h-[38px] sm:min-h-[42px] min-w-0 items-center gap-2 border px-3 text-[11px] font-code-hash uppercase tracking-wider transition-colors cursor-pointer ${
               isConnected
-                ? 'text-primary-fixed border border-primary-fixed/60 bg-surface-container-lowest hover:border-primary-fixed shadow-[0_0_10px_rgba(198,243,64,0.15)]'
-                : 'text-text-muted border border-outline-border hover:border-primary-fixed hover:text-primary-fixed bg-surface-container-lowest'
+                ? 'text-primary-fixed border-outline-border bg-[#0c0f12] hover:border-primary-fixed'
+                : 'text-white border-primary-fixed bg-primary-fixed/10 hover:bg-primary-fixed/20'
             }`}
           >
             {isConnected ? (
               <>
-                {/* Identicon dot indicator */}
-                <span className="w-2 h-2 rounded-full bg-primary-fixed shadow-[0_0_6px_#c8f542] shrink-0" />
-                <span className="hidden text-primary-fixed font-mono text-[12px] font-medium @sm:inline">
+                <span className="w-2 h-2 rounded-full bg-emerald-400 shrink-0" />
+                <span className="hidden text-primary-fixed font-code-hash text-[11px] font-bold sm:inline">
                   {Number(formattedUsdc).toFixed(1)} USDC
                 </span>
-                <span className="hidden text-zinc-600 @sm:inline">·</span>
-                <span className="max-w-[92px] truncate text-on-surface font-mono font-medium @sm:max-w-none">{ensName ?? truncatedAddress}</span>
+                <span className="hidden text-text-dim sm:inline">·</span>
+                <span className="max-w-[100px] truncate text-white font-code-hash font-bold sm:max-w-none">
+                  {ensName ?? truncatedAddress}
+                </span>
               </>
             ) : (
               <>
-                <span className="w-1.5 h-1.5 rounded-full bg-zinc-600" />
-                <span className="hidden @sm:inline">CONNECT WALLET</span><span className="@sm:hidden">WALLET</span>
+                <span className="material-symbols-outlined text-[16px] text-primary-fixed" aria-hidden="true">account_balance_wallet</span>
+                <span className="font-bold">Connect Wallet</span>
               </>
             )}
           </button>

@@ -12,94 +12,115 @@ export interface TapeLinePactProps {
   blurSize?: boolean
 }
 
+function getStatusStyle(status: string) {
+  const norm = status.toUpperCase()
+  if (norm === 'SETTLED' || norm === 'CLEARED') {
+    return 'text-emerald-400 border border-emerald-500/30 bg-emerald-950/20'
+  }
+  if (norm === 'ACTIVE' || norm === 'LIVE') {
+    return 'text-primary-fixed border border-primary-fixed/40 bg-primary-fixed/10 font-bold'
+  }
+  if (norm === 'PROOF IN' || norm === 'PROOF_SUBMITTED') {
+    return 'text-purple-300 border border-purple-500/30 bg-purple-950/20'
+  }
+  if (norm === 'DISPUTED') {
+    return 'text-amber-400 border border-amber-500/40 bg-amber-950/30 font-bold'
+  }
+  if (norm === 'OFFERED') {
+    return 'text-sky-400 border border-sky-500/30 bg-sky-950/20'
+  }
+  return 'text-slate-400 border border-slate-700/40 bg-slate-900/30'
+}
+
 export default function TapeLine({ pact }: { pact: TapeLinePactProps }) {
-  const isTerminal = ['SETTLED', 'EXPIRED', 'CANCELLED'].includes(pact.status)
-  const isActive = ['ACTIVE', 'PROOF IN', 'OFFERED', 'LIVE'].includes(pact.status)
-  const isSlashed = pact.status === 'DISPUTED'
-  const isCleared = pact.status === 'SETTLED'
-  
-  const statusColorClass = isCleared 
-    ? 'text-status-cleared' 
-    : isActive 
-    ? 'text-status-error pulse-live border border-status-error/30 rounded-sm px-1.5' 
-    : isSlashed
-    ? 'text-status-warning'
-    : 'text-text-muted'
+  const normStatus = pact.status.toUpperCase()
+  const isTerminal = ['SETTLED', 'EXPIRED', 'CANCELLED'].includes(normStatus)
+  const isSettled = normStatus === 'SETTLED'
+  const isDisputed = normStatus === 'DISPUTED'
 
-  const amountColorClass = isTerminal && !isCleared
-    ? 'text-text-dim line-through opacity-50'
-    : isCleared
-    ? 'text-primary-fixed'
-    : isActive
-    ? 'text-on-surface'
-    : 'text-text-muted'
-
-  const bgClass = isActive ? 'bg-surface-container-low/20' : 'bg-transparent'
+  const amountColor = isSettled
+    ? 'text-emerald-400 font-bold'
+    : isDisputed
+    ? 'text-amber-400 font-bold'
+    : isTerminal
+    ? 'text-text-dim line-through opacity-60'
+    : 'text-on-surface font-bold'
 
   return (
-    <Link 
-      href={`/p/${pact.id.toString()}`} 
+    <Link
+      href={`/p/${pact.id.toString()}`}
       aria-label={`Pact #${pact.id}, kind ${pact.kind}, amount ${pact.amount}, status ${pact.status}`}
-      className={`block border-b border-outline-hairline tape-row border-l-2 border-l-transparent focus-visible:ring-2 focus-visible:ring-primary-fixed focus-visible:outline-none ${bgClass}`}
+      className="tape-row block border-b border-outline-hairline/60 bg-transparent transition-colors hover:bg-surface-container/60 focus-visible:ring-2 focus-visible:ring-primary-fixed"
     >
-      {/* ─── Desktop 5-column Grid View (@md+) ─── */}
-      <div className="hidden @md:grid grid-cols-5 gap-4 px-md py-3 items-center">
-        <div className="col-span-1 flex flex-col">
-          <span className="text-text-muted font-body-mono">{pact.time}</span>
-          <span className="text-on-surface font-headline-mono">#{pact.id.toString()}</span>
+      {/* Desktop 5-Column Monospace Row (>= md) */}
+      <div className="hidden md:grid grid-cols-12 gap-4 px-4 py-3 items-center font-code-hash text-[12px]">
+        {/* Col 1: Time & ID (3 cols) */}
+        <div className="col-span-3 flex items-center gap-3">
+          <span className="font-headline-mono text-[13px] font-bold text-white tracking-wider">
+            #{String(pact.id).padStart(4, '0')}
+          </span>
+          <span className="text-[11px] text-text-dim">
+            {pact.time}
+          </span>
         </div>
-        <div className="col-span-1">
-          <span className="px-1.5 py-0.5 bg-surface-container border border-outline-hairline text-text-dim rounded-sm font-body-mono uppercase text-xs">
+
+        {/* Col 2: Agreement Kind (2 cols) */}
+        <div className="col-span-2">
+          <span className="inline-block px-2 py-0.5 border border-outline-border bg-[#0c0f12] text-[10px] font-label-caps uppercase tracking-wider text-text-muted">
             {pact.kind}
           </span>
         </div>
-        <div className="col-span-1 text-right flex items-center justify-end">
-          <span className={`${amountColorClass} font-headline-mono truncate max-w-full`} title={pact.amount}>
+
+        {/* Col 3: Collateral Amount (3 cols, right-aligned) */}
+        <div className="col-span-3 text-right">
+          <span className={`${amountColor} text-[13px] truncate block`} title={pact.amount}>
             {pact.amount}
           </span>
         </div>
-        <div className="col-span-1 flex justify-center">
-          <span className={`${statusColorClass} font-body-mono uppercase text-xs`}>
-            [{pact.status}]
+
+        {/* Col 4: Status Pill (2 cols, centered) */}
+        <div className="col-span-2 flex justify-center">
+          <span className={`px-2 py-0.5 text-[10px] font-label-caps uppercase tracking-wider ${getStatusStyle(pact.status)}`}>
+            {pact.status}
           </span>
         </div>
-        <div className="col-span-1 text-right">
-          <span className="text-text-muted font-body-mono text-xs">
+
+        {/* Col 5: Counterparty Address (2 cols, right-aligned) */}
+        <div className="col-span-2 text-right">
+          <span className="text-text-muted text-[11px] hover:text-white transition-colors">
             {pact.address}
           </span>
         </div>
       </div>
 
-      {/* ─── Mobile Spacious 2-Row Card View (< @md) ─── */}
-      <div className="@md:hidden flex flex-col gap-2 px-3 py-3 font-code-hash">
-        {/* Top Row: ID, Kind, Time -> Amount */}
+      {/* Mobile Structured 2-Row Card (< md) */}
+      <div className="md:hidden flex flex-col gap-2 p-3 font-code-hash">
         <div className="flex items-center justify-between gap-2">
           <div className="flex items-center gap-2">
-            <span className="text-on-surface font-headline-mono text-[14px]">#{pact.id.toString()}</span>
-            <span className="px-1.5 py-0.5 bg-surface-container border border-outline-hairline text-text-dim rounded-sm font-body-mono uppercase text-[10px]">
+            <span className="font-headline-mono text-[14px] font-bold text-white">
+              #{String(pact.id).padStart(4, '0')}
+            </span>
+            <span className="px-1.5 py-0.5 border border-outline-border bg-[#0c0f12] text-[9px] font-label-caps uppercase tracking-wider text-text-muted">
               {pact.kind}
             </span>
-            <span className="text-text-muted font-body-mono text-[11px]">{pact.time}</span>
+            <span className="text-[10px] text-text-dim">
+              {pact.time}
+            </span>
           </div>
           <div className="text-right">
-            <span className={`${amountColorClass} font-headline-mono text-[13px] font-bold`}>
+            <span className={`${amountColor} text-[13px]`}>
               {pact.amount}
             </span>
           </div>
         </div>
 
-        {/* Bottom Row: Status Badge -> Counterparty */}
-        <div className="flex items-center justify-between gap-2 pt-0.5">
-          <div>
-            <span className={`${statusColorClass} font-body-mono uppercase text-[10px]`}>
-              [{pact.status}]
-            </span>
-          </div>
-          <div>
-            <span className="text-text-muted font-body-mono text-[11px]">
-              {pact.address}
-            </span>
-          </div>
+        <div className="flex items-center justify-between gap-2 pt-1 border-t border-outline-hairline/30">
+          <span className={`px-2 py-0.5 text-[9px] font-label-caps uppercase tracking-wider ${getStatusStyle(pact.status)}`}>
+            {pact.status}
+          </span>
+          <span className="text-[11px] text-text-dim">
+            Maker: <span className="text-text-muted">{pact.address}</span>
+          </span>
         </div>
       </div>
     </Link>

@@ -4,40 +4,24 @@ import { useEffect, useState } from 'react'
 import { useUIStore } from '../lib/store/useUIStore'
 
 export default function AppShell({ children }: { children: React.ReactNode }) {
-  const { viewMode, setViewMode } = useUIStore()
+  const { viewMode } = useUIStore()
   const [mounted, setMounted] = useState(false)
 
-  useEffect(() => setMounted(true), [])
+  useEffect(() => {
+    setMounted(true)
+  }, [])
 
-  const activeView = mounted ? viewMode : 'desktop'
+  const isMobileSim = mounted && viewMode === 'mobile'
 
   return (
-    <>
-      <aside className="fixed bottom-20 right-3 z-[70] flex items-center border border-outline-border bg-[#0c0f12] p-1 md:bottom-5 md:right-5" aria-label="Preview layout">
-        {(['desktop', 'mobile'] as const).map(mode => {
-          const active = activeView === mode
-          return (
-            <button
-              key={mode}
-              type="button"
-              onClick={() => setViewMode(mode)}
-              aria-pressed={active}
-              className={`flex min-h-10 items-center gap-1.5 px-2.5 font-label-caps text-[10px] uppercase tracking-wider transition-colors sm:px-3 ${active ? 'bg-primary-fixed text-on-primary-fixed' : 'text-text-muted hover:text-on-surface'}`}
-            >
-              <span className="material-symbols-outlined text-[16px]" aria-hidden="true">{mode === 'desktop' ? 'desktop_windows' : 'smartphone'}</span>
-              <span className="hidden sm:inline">{mode === 'desktop' ? 'Desktop' : 'Phone'}</span>
-            </button>
-          )
-        })}
-      </aside>
-
-      <div className={`@container mx-auto flex w-full flex-col bg-background text-on-background transition-[max-width,border-color] duration-300 ${
-        activeView === 'mobile'
-          ? 'my-4 h-[calc(100dvh-2rem)] max-w-[420px] overflow-hidden border border-outline-border'
-          : 'h-dvh overflow-hidden'
-      }`}>
-        {children}
-      </div>
-    </>
+    <div
+      className={`mx-auto flex w-full min-h-screen flex-col bg-background text-on-background transition-[max-width,border-color] duration-200 ${
+        isMobileSim
+          ? 'my-4 max-w-[430px] rounded border border-outline-border shadow-2xl overflow-hidden'
+          : 'max-w-full'
+      }`}
+    >
+      {children}
+    </div>
   )
 }
