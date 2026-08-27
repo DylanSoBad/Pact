@@ -42,6 +42,7 @@ export default function MePage() {
   const [networkError, setNetworkError] = useState(false)
   const [roleFilter, setRoleFilter] = useState<PortfolioRoleFilter>('ALL')
   const [statusFilter, setStatusFilter] = useState<PortfolioStatusFilter>('ALL')
+  const [searchQuery, setSearchQuery] = useState('')
   const [copiedAddr, setCopiedAddr] = useState(false)
   const [nextCursor, setNextCursor] = useState<string | null>(null)
   const [loadingMore, setLoadingMore] = useState(false)
@@ -60,6 +61,7 @@ export default function MePage() {
       const params = new URLSearchParams(window.location.search)
       const roleParam = params.get('role')?.toUpperCase() as PortfolioRoleFilter | null
       const statusParam = params.get('status')?.toUpperCase() as PortfolioStatusFilter | null
+      const qParam = params.get('q')
 
       if (roleParam && (['ALL', 'MAKER', 'TAKER'] as PortfolioRoleFilter[]).includes(roleParam)) {
         setRoleFilter(roleParam)
@@ -67,35 +69,48 @@ export default function MePage() {
       if (statusParam && (['ALL', 'ACTION_REQUIRED', 'LIVE', 'SETTLED', 'EXPIRED', 'DISPUTED'] as PortfolioStatusFilter[]).includes(statusParam)) {
         setStatusFilter(statusParam)
       }
+      if (qParam) {
+        setSearchQuery(qParam)
+      }
     }
   }, [])
 
-  const updateUrlParams = (newRole: PortfolioRoleFilter, newStatus: PortfolioStatusFilter) => {
-    if (typeof window === 'undefined') return
-    const url = new URL(window.location.href)
-    if (newRole === 'ALL') url.searchParams.delete('role')
-    else url.searchParams.set('role', newRole)
+  const updateUrlParams = (newRole: PortfolioRoleFilter, newStatus: PortfolioStatusFilter, newSearch: string) => {
+    if (typeof window !== 'undefined') {
+      const url = new URL(window.location.href)
+      if (newRole === 'ALL') url.searchParams.delete('role')
+      else url.searchParams.set('role', newRole)
 
-    if (newStatus === 'ALL') url.searchParams.delete('status')
-    else url.searchParams.set('status', newStatus)
+      if (newStatus === 'ALL') url.searchParams.delete('status')
+      else url.searchParams.set('status', newStatus)
 
-    window.history.replaceState({}, '', url.toString())
+      if (!newSearch.trim()) url.searchParams.delete('q')
+      else url.searchParams.set('q', newSearch.trim())
+
+      window.history.replaceState({}, '', url.toString())
+    }
   }
 
   const handleSetRoleFilter = (r: PortfolioRoleFilter) => {
     setRoleFilter(r)
-    updateUrlParams(r, statusFilter)
+    updateUrlParams(r, statusFilter, searchQuery)
   }
 
   const handleSetStatusFilter = (s: PortfolioStatusFilter) => {
     setStatusFilter(s)
-    updateUrlParams(roleFilter, s)
+    updateUrlParams(roleFilter, s, searchQuery)
+  }
+
+  const handleSearchChange = (q: string) => {
+    setSearchQuery(q)
+    updateUrlParams(roleFilter, statusFilter, q)
   }
 
   const handleResetFilters = () => {
     setRoleFilter('ALL')
     setStatusFilter('ALL')
-    updateUrlParams('ALL', 'ALL')
+    setSearchQuery('')
+    updateUrlParams('ALL', 'ALL', '')
   }
 
   const loadUserData = useCallback(async (cursor: string | null = null, mode: 'replace' | 'refresh' | 'append' = 'refresh') => {
@@ -216,9 +231,10 @@ export default function MePage() {
       role: roleFilter,
       status: statusFilter,
       accountAddress: address,
-      currentNowTs: BigInt(currentTime)
+      currentNowTs: BigInt(currentTime),
+      searchQuery,
     })
-  }, [pacts, roleFilter, statusFilter, address, currentTime])
+  }, [pacts, roleFilter, statusFilter, address, currentTime, searchQuery])
 
   const roleCounts = useMemo(() => {
     if (!address) return { ALL: 0, MAKER: 0, TAKER: 0 }
@@ -475,44 +491,69 @@ export default function MePage() {
           </span>
         </div>
 
-        {/* Row 2: Status Sub-Filters */}
-        <div role="group" aria-label="Filter pacts by status" className="flex items-center gap-1.5 overflow-x-auto hide-scroll w-full pb-1 sm:pb-0">
-          {(['ALL', 'ACTION_REQUIRED', 'LIVE', 'SETTLED', 'EXPIRED', 'DISPUTED'] as PortfolioStatusFilter[]).map(st => {
-            const active = statusFilter === st
-            const count = statusCounts[st]
-            const label = st === 'ACTION_REQUIRED' ? 'ACTION DUE' : st
+        {/* Row 2: Status Sub-Filters & Quick Search */}
+        <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-2.5">
+          <div role="group" aria-label="Filter pacts by status" className="flex items-center gap-1.5 overflow-x-auto hide-scroll w-full md:w-auto pb-1 md:pb-0">
+            {(['ALL', 'ACTION_REQUIRED', 'LIVE', 'SETTLED', 'EXPIRED', 'DISPUTED'] as PortfolioStatusFilter[]).map(st => {
+              const active = statusFilter === st
+              const count = statusCounts[st]
+              const label = st === 'ACTION_REQUIRED' ? 'ACTION DUE' : st
 
-            return (
+              return (
+                <button
+                  key={st}
+                  type="button"
+                  onClick={() => handleSetStatusFilter(st)}
+                  aria-pressed={active}
+                  className={`px-2.5 py-1 font-label-caps text-[10px] uppercase tracking-wider transition-colors shrink-0 ${
+                    active
+                      ? 'border border-amber-400 bg-amber-400 text-[#090b0d] font-bold'
+                      : 'border border-outline-hairline bg-[#07080a] text-text-dim hover:text-white hover:border-outline-border'
+                  }`}
+                >
+                  {st === 'ACTION_REQUIRED' ? (
+                    <span className="flex items-center gap-1">
+                      <span className="w-1.5 h-1.5 rounded-full bg-orange-400 live-dot" />
+                      ACTION DUE ({count})
+                    </span>
+                  ) : (
+                    `${label} (${count})`
+                  )}
+                </button>
+              )
+            })}
+            {(roleFilter !== 'ALL' || statusFilter !== 'ALL' || searchQuery) && (
               <button
-                key={st}
-                type="button"
-                onClick={() => handleSetStatusFilter(st)}
-                aria-pressed={active}
-                className={`px-2.5 py-1 font-label-caps text-[10px] uppercase tracking-wider transition-colors shrink-0 ${
-                  active
-                    ? 'border border-amber-400 bg-amber-400 text-[#090b0d] font-bold'
-                    : 'border border-outline-hairline bg-[#07080a] text-text-dim hover:text-white hover:border-outline-border'
-                }`}
+                onClick={handleResetFilters}
+                className="px-2 py-1 text-[10px] text-text-dim hover:text-primary-fixed underline transition-colors shrink-0"
               >
-                {st === 'ACTION_REQUIRED' ? (
-                  <span className="flex items-center gap-1">
-                    <span className="w-1.5 h-1.5 rounded-full bg-orange-400 live-dot" />
-                    ACTION DUE ({count})
-                  </span>
-                ) : (
-                  `${label} (${count})`
-                )}
+                Reset
               </button>
-            )
-          })}
-          {(roleFilter !== 'ALL' || statusFilter !== 'ALL') && (
-            <button
-              onClick={handleResetFilters}
-              className="px-2 py-1 text-[10px] text-text-dim hover:text-primary-fixed underline transition-colors shrink-0"
-            >
-              Reset Filters
-            </button>
-          )}
+            )}
+          </div>
+
+          {/* Quick Search */}
+          <div className="relative w-full md:w-48">
+            <span className="material-symbols-outlined absolute left-2.5 top-1/2 -translate-y-1/2 text-[14px] text-text-dim">
+              search
+            </span>
+            <input
+              type="text"
+              value={searchQuery}
+              onChange={(e) => handleSearchChange(e.target.value)}
+              placeholder="Search ID or terms..."
+              className="w-full bg-[#07080a] border border-outline-border pl-8 pr-2.5 py-1 text-[11px] font-code-hash text-white placeholder:text-text-dim focus:border-primary-fixed focus:outline-none transition-colors"
+            />
+            {searchQuery && (
+              <button
+                type="button"
+                onClick={() => handleSearchChange('')}
+                className="absolute right-2 top-1/2 -translate-y-1/2 text-text-dim hover:text-white text-[10px]"
+              >
+                ✕
+              </button>
+            )}
+          </div>
         </div>
       </div>
 

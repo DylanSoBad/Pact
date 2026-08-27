@@ -24,6 +24,7 @@ import { filterOverviewPacts } from '../lib/filter'
 function TapeDashboard() {
   const { filter, setFilter, sseConnected, lastBlockTimestamp, setBlockInfo } = usePactStore()
   const [secondsAgo, setSecondsAgo] = useState(0)
+  const [searchQuery, setSearchQuery] = useState('')
   const [showOnboarding, setShowOnboarding] = useState(false)
   const currentTime = useCurrentTime()
 
@@ -35,23 +36,37 @@ function TapeDashboard() {
     if (typeof window !== 'undefined') {
       const params = new URLSearchParams(window.location.search)
       const filterParam = params.get('filter')?.toUpperCase() as FilterCategory | null
+      const qParam = params.get('q')
       if (filterParam && (['ALL', 'DELIVERY', 'JOB', 'LIVE', 'DISPUTED', 'EXPIRED'] as FilterCategory[]).includes(filterParam)) {
         setFilter(filterParam)
+      }
+      if (qParam) {
+        setSearchQuery(qParam)
       }
     }
   }, [setFilter])
 
-  const handleSetFilter = (newFilter: FilterCategory) => {
-    setFilter(newFilter)
+  const updateUrlState = (newFilter: FilterCategory, newSearch: string) => {
     if (typeof window !== 'undefined') {
       const url = new URL(window.location.href)
-      if (newFilter === 'ALL') {
-        url.searchParams.delete('filter')
-      } else {
-        url.searchParams.set('filter', newFilter)
-      }
+      if (newFilter === 'ALL') url.searchParams.delete('filter')
+      else url.searchParams.set('filter', newFilter)
+
+      if (!newSearch.trim()) url.searchParams.delete('q')
+      else url.searchParams.set('q', newSearch.trim())
+
       window.history.replaceState({}, '', url.toString())
     }
+  }
+
+  const handleSetFilter = (newFilter: FilterCategory) => {
+    setFilter(newFilter)
+    updateUrlState(newFilter, searchQuery)
+  }
+
+  const handleSearchChange = (val: string) => {
+    setSearchQuery(val)
+    updateUrlState(filter, val)
   }
 
   const dismissOnboarding = useCallback(() => {
@@ -110,8 +125,8 @@ function TapeDashboard() {
   }, [lastBlockTimestamp])
 
   const filtered = useMemo(() => {
-    return filterOverviewPacts(pacts as PactData[], filter, BigInt(currentTime))
-  }, [pacts, filter, currentTime])
+    return filterOverviewPacts(pacts as PactData[], filter, BigInt(currentTime), searchQuery)
+  }, [pacts, filter, currentTime, searchQuery])
 
   const counts = useMemo(() => {
     const list = pacts as PactData[]
@@ -200,9 +215,9 @@ function TapeDashboard() {
       </section>
 
       {/* Filter Toolbar & Live Telemetry */}
-      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 animate-enter">
+      <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-3 animate-enter">
         {/* Category Filters */}
-        <div role="group" aria-label="Filter contract categories" className="flex items-center gap-1.5 overflow-x-auto hide-scroll w-full sm:w-auto pb-1 sm:pb-0">
+        <div role="group" aria-label="Filter contract categories" className="flex items-center gap-1.5 overflow-x-auto hide-scroll w-full md:w-auto pb-1 md:pb-0">
           {(['ALL', 'DELIVERY', 'JOB', 'LIVE', 'DISPUTED', 'EXPIRED'] as FilterCategory[]).map(cat => {
             const active = filter === cat
             const count = counts[cat]
@@ -229,26 +244,53 @@ function TapeDashboard() {
               </button>
             )
           })}
-          {filter !== 'ALL' && (
+          {(filter !== 'ALL' || searchQuery) && (
             <button
-              onClick={() => handleSetFilter('ALL')}
-              className="px-2 py-1 text-[11px] text-text-dim hover:text-primary-fixed underline transition-colors"
+              onClick={() => {
+                setFilter('ALL')
+                handleSearchChange('')
+              }}
+              className="px-2 py-1 text-[11px] text-text-dim hover:text-primary-fixed underline transition-colors shrink-0"
             >
               Reset
             </button>
           )}
         </div>
 
-        {/* Real-time Block & Heartbeat */}
-        <div className="flex items-center gap-2 border border-outline-hairline bg-[#0c0f12] px-3 py-1.5 text-[11px] font-code-hash text-text-muted shrink-0">
-          <span
-            className={`w-2 h-2 rounded-full ${sseConnected ? 'bg-primary-fixed live-dot' : 'bg-amber-400'}`}
-            title={sseConnected ? 'Real-time SSE Stream Connected' : 'Polling RPC Fallback'}
-            aria-hidden="true"
-          />
-          <span className="text-text-dim">Arc Testnet:</span>
-          <span className="text-white font-bold">#{wagmiBlockNumber ? wagmiBlockNumber.toString() : '—'}</span>
-          <span className="text-text-dim">· Updated {secondsAgo}s ago</span>
+        {/* Search Input & Live Block Status */}
+        <div className="flex items-center gap-2 w-full md:w-auto justify-between md:justify-end">
+          <div className="relative flex-1 md:w-48">
+            <span className="material-symbols-outlined absolute left-2.5 top-1/2 -translate-y-1/2 text-[14px] text-text-dim">
+              search
+            </span>
+            <input
+              type="text"
+              value={searchQuery}
+              onChange={(e) => handleSearchChange(e.target.value)}
+              placeholder="Search #ID or address..."
+              className="w-full bg-[#07080a] border border-outline-border pl-8 pr-2.5 py-1 text-[11px] font-code-hash text-white placeholder:text-text-dim focus:border-primary-fixed focus:outline-none transition-colors"
+            />
+            {searchQuery && (
+              <button
+                type="button"
+                onClick={() => handleSearchChange('')}
+                className="absolute right-2 top-1/2 -translate-y-1/2 text-text-dim hover:text-white text-[10px]"
+              >
+                ✕
+              </button>
+            )}
+          </div>
+
+          <div className="flex items-center gap-2 border border-outline-hairline bg-[#0c0f12] px-3 py-1.5 text-[11px] font-code-hash text-text-muted shrink-0">
+            <span
+              className={`w-2 h-2 rounded-full ${sseConnected ? 'bg-primary-fixed live-dot' : 'bg-amber-400'}`}
+              title={sseConnected ? 'Real-time SSE Stream Connected' : 'Polling RPC Fallback'}
+              aria-hidden="true"
+            />
+            <span className="text-text-dim">Arc:</span>
+            <span className="text-white font-bold">#{wagmiBlockNumber ? wagmiBlockNumber.toString() : '—'}</span>
+            <span className="text-text-dim hidden sm:inline">· Updated {secondsAgo}s ago</span>
+          </div>
         </div>
       </div>
 

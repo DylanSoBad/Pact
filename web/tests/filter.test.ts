@@ -183,6 +183,40 @@ describe('Portfolio Multi-Dimensional Filter Logic (filterPortfolioPacts)', () =
     })
     expect(expired.map(p => p.id)).toEqual([5])
   })
+
+  it('filters by quick search query (Pact ID or Address)', () => {
+    // Search by ID "#3"
+    const searchById = filterPortfolioPacts(userPacts, {
+      role: 'ALL',
+      status: 'ALL',
+      accountAddress: ALICE,
+      currentNowTs: BASE_NOW,
+      searchQuery: '#3'
+    })
+    expect(searchById.map(p => p.id)).toEqual([3])
+
+    // Search by Address
+    const searchByAddr = filterPortfolioPacts(userPacts, {
+      role: 'ALL',
+      status: 'ALL',
+      accountAddress: ALICE,
+      currentNowTs: BASE_NOW,
+      searchQuery: BOB.slice(0, 8)
+    })
+    expect(searchByAddr.length).toBe(5)
+  })
+})
+
+describe('Overview Quick Search (filterOverviewPacts)', () => {
+  const records = [
+    createPact({ id: 101, termsHash: '0xaaa111' }),
+    createPact({ id: 102, termsHash: '0xbbb222' }),
+  ]
+
+  it('filters by ID or Terms hash substring', () => {
+    expect(filterOverviewPacts(records, 'ALL', BASE_NOW, '101').map(p => p.id)).toEqual([101])
+    expect(filterOverviewPacts(records, 'ALL', BASE_NOW, 'bbb222').map(p => p.id)).toEqual([102])
+  })
 })
 
 describe('Cursor Pagination & Deduplication Logic', () => {

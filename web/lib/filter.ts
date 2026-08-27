@@ -11,6 +11,7 @@ export interface PortfolioFilterCriteria {
   status: PortfolioStatusFilter
   accountAddress?: string
   currentNowTs?: bigint
+  searchQuery?: string
 }
 
 /**
@@ -54,12 +55,26 @@ export function requiresActionFrom(pact: PactData, address: string, nowTs: bigin
 }
 
 /**
- * Pure filter function for Overview / The Tape.
+ * Pure filter function for Overview / The Tape with search support.
  */
-export function filterOverviewPacts(pacts: PactData[], filter: OverviewFilter, nowTs?: bigint): PactData[] {
+export function filterOverviewPacts(
+  pacts: PactData[],
+  filter: OverviewFilter,
+  nowTs?: bigint,
+  searchQuery?: string
+): PactData[] {
   const now = nowTs ?? BigInt(Math.floor(Date.now() / 1000))
+  const q = searchQuery?.trim().toLowerCase() ?? ''
 
   return pacts.filter((p) => {
+    if (q) {
+      const matchId = String(p.id).includes(q.replace('#', ''))
+      const matchMaker = p.maker.toLowerCase().includes(q)
+      const matchTaker = p.taker.toLowerCase().includes(q)
+      const matchTerms = p.termsHash.toLowerCase().includes(q)
+      if (!matchId && !matchMaker && !matchTaker && !matchTerms) return false
+    }
+
     if (filter === 'ALL') return true
     if (filter === 'DELIVERY') return p.kind === 0
     if (filter === 'JOB') return p.kind === 1
@@ -76,14 +91,23 @@ export function filterOverviewPacts(pacts: PactData[], filter: OverviewFilter, n
 }
 
 /**
- * Pure filter function for Portfolio / My Pacts with combined Role and Status criteria.
+ * Pure filter function for Portfolio / My Pacts with combined Role, Status, and Search criteria.
  */
 export function filterPortfolioPacts(pacts: PactData[], criteria: PortfolioFilterCriteria): PactData[] {
-  const { role, status, accountAddress, currentNowTs } = criteria
+  const { role, status, accountAddress, currentNowTs, searchQuery } = criteria
   const now = currentNowTs ?? BigInt(Math.floor(Date.now() / 1000))
   const account = accountAddress?.toLowerCase() ?? ''
+  const q = searchQuery?.trim().toLowerCase() ?? ''
 
   return pacts.filter((p) => {
+    if (q) {
+      const matchId = String(p.id).includes(q.replace('#', ''))
+      const matchMaker = p.maker.toLowerCase().includes(q)
+      const matchTaker = p.taker.toLowerCase().includes(q)
+      const matchTerms = p.termsHash.toLowerCase().includes(q)
+      if (!matchId && !matchMaker && !matchTaker && !matchTerms) return false
+    }
+
     // 1. Role Filter
     if (role === 'MAKER' && account && p.maker.toLowerCase() !== account) return false
     if (role === 'TAKER' && account && p.taker.toLowerCase() !== account) return false
