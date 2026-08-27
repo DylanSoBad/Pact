@@ -1,9 +1,11 @@
 'use client'
 
-import { useState, useEffect, useMemo, useCallback } from 'react'
+import { useState, useEffect, useMemo, useCallback, useRef } from 'react'
 import Link from 'next/link'
 import TapeLine from '../../components/TapeLine'
 import ActionCenter from '../../components/ActionCenter'
+import TableSkeleton from '../../components/TableSkeleton'
+import NetworkStatusBanner from '../../components/NetworkStatusBanner'
 import { useAccount, useChainId, usePublicClient, useWalletClient } from 'wagmi'
 import { useModal } from 'connectkit'
 import { toast } from 'sonner'
@@ -14,6 +16,13 @@ import {
   kindLabel, statusLabel, effectiveStatusLabel, formatAmount, tokenSymbol,
   formatTimestamp, truncateAddress
 } from '../../lib/format'
+import { useCurrentTime } from '../../hooks/useCurrentTime'
+import {
+  filterPortfolioPacts,
+  type PortfolioRoleFilter,
+  type PortfolioStatusFilter,
+  requiresActionFrom
+} from '../../lib/filter'
 import TransactionProgress, { type TransactionStage } from '../../components/TransactionProgress'
 import { transactionErrorMessage } from '../../lib/transactionErrors'
 
@@ -24,12 +33,15 @@ export default function MePage() {
   const { data: walletClient } = useWalletClient()
   const protocolAddress = getPactAddress(chainId)
   const { setOpen: openModal } = useModal()
+  const currentTime = useCurrentTime()
 
   const [pacts, setPacts] = useState<PactData[]>([])
   const [reputation, setReputation] = useState<{ cleared: number; slashed: number; notional: bigint } | null>(null)
   const [credits, setCredits] = useState<Record<string, bigint>>({})
   const [loading, setLoading] = useState(true)
-  const [roleFilter, setRoleFilter] = useState<'ALL' | 'MAKER' | 'TAKER'>('ALL')
+  const [networkError, setNetworkError] = useState(false)
+  const [roleFilter, setRoleFilter] = useState<PortfolioRoleFilter>('ALL')
+  const [statusFilter, setStatusFilter] = useState<PortfolioStatusFilter>('ALL')
   const [copiedAddr, setCopiedAddr] = useState(false)
   const [nextCursor, setNextCursor] = useState<string | null>(null)
   const [loadingMore, setLoadingMore] = useState(false)
@@ -38,17 +50,64 @@ export default function MePage() {
   const [txStage, setTxStage] = useState<TransactionStage>('idle')
   const [txLabel, setTxLabel] = useState('')
   const [txError, setTxError] = useState('')
+  const inFlightRef = useRef(false)
 
   useEffect(() => {
     document.title = 'PACT · Portfolio & Account'
+
+    // Parse URL query params on mount
+    if (typeof window !== 'undefined') {
+      const params = new URLSearchParams(window.location.search)
+      const roleParam = params.get('role')?.toUpperCase() as PortfolioRoleFilter | null
+      const statusParam = params.get('status')?.toUpperCase() as PortfolioStatusFilter | null
+
+      if (roleParam && (['ALL', 'MAKER', 'TAKER'] as PortfolioRoleFilter[]).includes(roleParam)) {
+        setRoleFilter(roleParam)
+      }
+      if (statusParam && (['ALL', 'ACTION_REQUIRED', 'LIVE', 'SETTLED', 'EXPIRED', 'DISPUTED'] as PortfolioStatusFilter[]).includes(statusParam)) {
+        setStatusFilter(statusParam)
+      }
+    }
   }, [])
+
+  const updateUrlParams = (newRole: PortfolioRoleFilter, newStatus: PortfolioStatusFilter) => {
+    if (typeof window === 'undefined') return
+    const url = new URL(window.location.href)
+    if (newRole === 'ALL') url.searchParams.delete('role')
+    else url.searchParams.set('role', newRole)
+
+    if (newStatus === 'ALL') url.searchParams.delete('status')
+    else url.searchParams.set('status', newStatus)
+
+    window.history.replaceState({}, '', url.toString())
+  }
+
+  const handleSetRoleFilter = (r: PortfolioRoleFilter) => {
+    setRoleFilter(r)
+    updateUrlParams(r, statusFilter)
+  }
+
+  const handleSetStatusFilter = (s: PortfolioStatusFilter) => {
+    setStatusFilter(s)
+    updateUrlParams(roleFilter, s)
+  }
+
+  const handleResetFilters = () => {
+    setRoleFilter('ALL')
+    setStatusFilter('ALL')
+    updateUrlParams('ALL', 'ALL')
+  }
 
   const loadUserData = useCallback(async (cursor: string | null = null, mode: 'replace' | 'refresh' | 'append' = 'refresh') => {
     if (!address) {
       setLoading(false)
       return
     }
+    if (inFlightRef.current && mode === 'refresh') return
+    inFlightRef.current = true
+
     try {
+      setNetworkError(false)
       const [page, rep] = await Promise.all([
         fetchPactPage({ account: address, cursor, limit: 25 }),
         fetchReputation(address as `0x${string}`)
@@ -76,7 +135,9 @@ export default function MePage() {
       }
     } catch (err) {
       console.error('Error loading /me data:', err)
+      setNetworkError(true)
     } finally {
+      inFlightRef.current = false
       setLoading(false)
     }
   }, [address, protocolAddress, publicClient])
@@ -151,16 +212,45 @@ export default function MePage() {
   }
 
   const filteredPacts = useMemo(() => {
-    if (!address) return []
-    return pacts.filter(p => {
-      if (roleFilter === 'MAKER') return p.maker.toLowerCase() === address.toLowerCase()
-      if (roleFilter === 'TAKER') return p.taker.toLowerCase() === address.toLowerCase()
+    return filterPortfolioPacts(pacts, {
+      role: roleFilter,
+      status: statusFilter,
+      accountAddress: address,
+      currentNowTs: BigInt(currentTime)
+    })
+  }, [pacts, roleFilter, statusFilter, address, currentTime])
+
+  const roleCounts = useMemo(() => {
+    if (!address) return { ALL: 0, MAKER: 0, TAKER: 0 }
+    const account = address.toLowerCase()
+    return {
+      ALL: pacts.length,
+      MAKER: pacts.filter(p => p.maker.toLowerCase() === account).length,
+      TAKER: pacts.filter(p => p.taker.toLowerCase() === account).length,
+    }
+  }, [pacts, address])
+
+  const statusCounts = useMemo(() => {
+    const now = BigInt(currentTime)
+    const account = address?.toLowerCase() ?? ''
+    const roleRestricted = pacts.filter(p => {
+      if (roleFilter === 'MAKER') return p.maker.toLowerCase() === account
+      if (roleFilter === 'TAKER') return p.taker.toLowerCase() === account
       return true
     })
-  }, [pacts, roleFilter, address])
 
-  const makerCount = useMemo(() => pacts.filter(p => address && p.maker.toLowerCase() === address.toLowerCase()).length, [pacts, address])
-  const takerCount = useMemo(() => pacts.filter(p => address && p.taker.toLowerCase() === address.toLowerCase()).length, [pacts, address])
+    return {
+      ALL: roleRestricted.length,
+      ACTION_REQUIRED: roleRestricted.filter(p => requiresActionFrom(p, account, now)).length,
+      LIVE: roleRestricted.filter(p => p.status >= 0 && p.status <= 3).length,
+      SETTLED: roleRestricted.filter(p => p.status === 4).length,
+      EXPIRED: roleRestricted.filter(p => {
+        const eff = effectiveStatusLabel(p.status, p.offerExpiry, p.disputeDeadline, now)
+        return eff === 'EXPIRED' || p.status === 5 || p.status === 6
+      }).length,
+      DISPUTED: roleRestricted.filter(p => p.status === 3).length,
+    }
+  }, [pacts, address, roleFilter, currentTime])
 
   const hasReputation = Boolean(reputation && (reputation.cleared + reputation.slashed > 0))
   const successRate = hasReputation && reputation
@@ -199,19 +289,19 @@ export default function MePage() {
             <ul className="grid gap-2 sm:grid-cols-2 text-[12px] font-body-sans text-text-muted">
               <li className="flex items-center gap-2">
                 <span className="text-primary-fixed">✓</span>
-                <span>Track locked maker & counterparty collateral</span>
+                Monitor your created & counterparty pacts
               </li>
               <li className="flex items-center gap-2">
                 <span className="text-primary-fixed">✓</span>
-                <span>Action Center alerts for expiring deadlines</span>
+                Withdraw available escrow refund credits
               </li>
               <li className="flex items-center gap-2">
                 <span className="text-primary-fixed">✓</span>
-                <span>One-click collateral release & settlement</span>
+                Track actions required across active deals
               </li>
               <li className="flex items-center gap-2">
                 <span className="text-primary-fixed">✓</span>
-                <span>Withdraw pull-payment credit balances</span>
+                Inspect on-chain settlement reputation
               </li>
             </ul>
           </div>
@@ -223,16 +313,24 @@ export default function MePage() {
   // Connected Portfolio View
   return (
     <div className="w-full space-y-6">
-      {/* Header */}
+      {/* Portfolio Header & Wallet Identity */}
       <header className="flex flex-col sm:flex-row sm:items-end justify-between gap-4 border-b border-outline-hairline pb-5 animate-enter">
         <div>
-          <p className="pact-eyebrow mb-1">Account & Escrow Dashboard</p>
+          <p className="pact-eyebrow mb-1">Account Portfolio & Escrow Balances</p>
           <h1 className="font-display-mono text-[24px] sm:text-[30px] font-bold text-white tracking-tight">
-            Portfolio
+            My Portfolio
           </h1>
-          <p className="mt-1 font-body-sans text-[13px] text-text-muted max-w-xl">
-            Live commitments, counterparty records, and on-chain settlement track record.
-          </p>
+          <div className="mt-2 flex items-center gap-2 font-code-hash text-[12px]">
+            <span className="text-text-muted">Connected:</span>
+            <span className="text-white font-bold">{truncateAddress(address || '')}</span>
+            <button
+              type="button"
+              onClick={copyAddress}
+              className="text-text-dim hover:text-primary-fixed transition-colors text-[11px] underline"
+            >
+              {copiedAddr ? 'Copied' : 'Copy'}
+            </button>
+          </div>
         </div>
         <div className="flex items-center gap-2">
           <Link
@@ -240,114 +338,88 @@ export default function MePage() {
             className="pact-button-primary px-4 py-2 text-[11px] font-bold uppercase tracking-wider"
           >
             <span className="material-symbols-outlined text-[16px]" aria-hidden="true">add</span>
-            New Pact
+            Create New Pact
           </Link>
         </div>
       </header>
 
-      {/* Account Identity & Reputation Card */}
-      <section aria-label="Connected Account Overview" className="border border-outline-border bg-[#0c0f12] p-5 animate-enter">
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-outline-hairline">
-          <div>
-            <span className="font-label-caps text-[10px] uppercase tracking-wider text-text-muted block mb-1">
-              Connected Account
-            </span>
-            <div className="flex items-center gap-2 flex-wrap font-code-hash">
-              <span className="text-[14px] font-bold text-white">
-                {truncateAddress(address || '')}
-              </span>
-              <button
-                type="button"
-                onClick={copyAddress}
-                className="px-2 py-0.5 border border-outline-border bg-[#12161b] text-[10px] font-label-caps uppercase tracking-wider text-text-muted hover:text-white hover:border-outline-variant transition-colors"
-              >
-                {copiedAddr ? 'Copied ✓' : 'Copy'}
-              </button>
-              <a
-                href={`https://testnet.arcscan.app/address/${address}`}
-                target="_blank"
-                rel="noreferrer"
-                className="text-[11px] font-label-caps uppercase tracking-wider text-primary-fixed hover:underline flex items-center gap-0.5 ml-1"
-              >
-                ArcScan ↗
-              </a>
-            </div>
-          </div>
+      {/* Network Error Banner */}
+      {networkError && (
+        <NetworkStatusBanner onRetry={() => loadUserData(null, 'replace')} isRetrying={loading} />
+      )}
 
-          <div className="flex items-center gap-2 text-[11px] font-code-hash text-text-dim">
-            <span className="w-2 h-2 rounded-full bg-emerald-400" />
-            <span>Arc Testnet 5042002</span>
+      {/* Overview Metric Cards */}
+      <section aria-label="Account Overview" className="grid grid-cols-2 lg:grid-cols-4 gap-px bg-outline-hairline border border-outline-hairline animate-enter">
+        <div className="bg-[#0c0f12] p-4 flex flex-col justify-between min-h-[90px]">
+          <span className="font-label-caps text-[10px] uppercase tracking-wider text-text-muted">Total Pacts</span>
+          <div className="flex items-baseline justify-between mt-1">
+            <span className="font-display-mono text-[24px] font-bold text-white tabular-nums">{pacts.length}</span>
+            <span className="text-[11px] text-text-dim font-code-hash">Participated</span>
           </div>
         </div>
-
-        {/* 4 Scorecards Grid */}
-        <div className="grid grid-cols-2 lg:grid-cols-4 gap-px bg-outline-hairline border border-outline-hairline mt-4">
-          <div className="p-4 bg-[#07080a]">
-            <span className="font-label-caps text-[10px] uppercase tracking-wider text-text-muted block">
-              Cleared Deals
-            </span>
-            <span className="font-display-mono text-[22px] font-bold text-emerald-400 mt-1 block tabular-nums">
-              {reputation ? reputation.cleared : 0}
-            </span>
+        <div className="bg-[#0c0f12] p-4 flex flex-col justify-between min-h-[90px]">
+          <span className="font-label-caps text-[10px] uppercase tracking-wider text-primary-fixed">As Maker</span>
+          <div className="flex items-baseline justify-between mt-1">
+            <span className="font-display-mono text-[24px] font-bold text-primary-fixed tabular-nums">{roleCounts.MAKER}</span>
+            <span className="text-[11px] text-text-dim font-code-hash">Created</span>
           </div>
-
-          <div className="p-4 bg-[#07080a]">
-            <span className="font-label-caps text-[10px] uppercase tracking-wider text-text-muted block">
-              Slashed / Disputes Lost
-            </span>
-            <span className="font-display-mono text-[22px] font-bold text-rose-400 mt-1 block tabular-nums">
-              {reputation ? reputation.slashed : 0}
-            </span>
+        </div>
+        <div className="bg-[#0c0f12] p-4 flex flex-col justify-between min-h-[90px]">
+          <span className="font-label-caps text-[10px] uppercase tracking-wider text-sky-400">As Counterparty</span>
+          <div className="flex items-baseline justify-between mt-1">
+            <span className="font-display-mono text-[24px] font-bold text-sky-400 tabular-nums">{roleCounts.TAKER}</span>
+            <span className="text-[11px] text-text-dim font-code-hash">Accepted</span>
           </div>
-
-          <div className="p-4 bg-[#07080a]">
-            <span className="font-label-caps text-[10px] uppercase tracking-wider text-text-muted block">
-              Settled Notional
+        </div>
+        <div className="bg-[#0c0f12] p-4 flex flex-col justify-between min-h-[90px]">
+          <span className="font-label-caps text-[10px] uppercase tracking-wider text-emerald-400">Reputation</span>
+          <div className="flex items-baseline justify-between mt-1">
+            <span className="font-display-mono text-[24px] font-bold text-emerald-400 tabular-nums">
+              {successRate ? `${successRate}%` : '—'}
             </span>
-            <span className="font-display-mono text-[22px] font-bold text-white mt-1 block tabular-nums">
-              ${reputation ? formatAmount(reputation.notional) : '0.00'}
-            </span>
-          </div>
-
-          <div className="p-4 bg-[#07080a]">
-            <span className="font-label-caps text-[10px] uppercase tracking-wider text-text-muted block">
-              Reliability Score
-            </span>
-            <span className="font-display-mono text-[22px] font-bold text-primary-fixed mt-1 block tabular-nums">
-              {successRate === null ? 'NO HISTORY' : `${successRate}%`}
+            <span className="text-[11px] text-text-dim font-code-hash">
+              {reputation ? `${reputation.cleared} Cleared` : 'No history'}
             </span>
           </div>
         </div>
       </section>
 
-      {/* Claimable Credits Banner (if any) */}
+      {/* Available Escrow Credits (Pull Payment Hub) */}
       {claimableCredits.length > 0 && (
-        <section className="border border-emerald-500/40 bg-emerald-950/20 p-4 sm:p-5 animate-enter">
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-            <div>
-              <div className="flex items-center gap-2">
-                <span className="material-symbols-outlined text-emerald-400 text-[18px]">account_balance_wallet</span>
-                <h2 className="font-headline-mono text-[13px] font-bold uppercase tracking-wider text-emerald-300">
-                  Claimable Escrow Credits
-                </h2>
-              </div>
-              <p className="mt-1 text-[12px] text-text-muted font-body-sans">
-                You have pull-payment credits ready for withdrawal to your wallet.
-              </p>
+        <section aria-label="Available Escrow Credits" className="border border-emerald-500/40 bg-[#0c0f12] p-5 animate-enter">
+          <div className="flex items-center justify-between pb-3 border-b border-outline-hairline mb-4">
+            <div className="flex items-center gap-2">
+              <span className="material-symbols-outlined text-[18px] text-emerald-400">account_balance_wallet</span>
+              <h2 className="font-headline-mono text-[13px] font-bold uppercase tracking-wider text-white">
+                Available Escrow Credits
+              </h2>
             </div>
-            <div className="flex flex-wrap items-center gap-2">
-              {claimableCredits.map(([tok, val]) => (
+            <span className="px-2 py-0.5 border border-emerald-500/40 bg-emerald-950/20 text-emerald-400 text-[10px] font-bold uppercase font-label-caps">
+              Ready for Withdrawal
+            </span>
+          </div>
+          <p className="text-[12px] font-body-sans text-text-muted mb-4">
+            Refunds and dispute payouts are held safely in protocol credits to prevent reentrancy and transfer failure lockups.
+          </p>
+          <div className="grid gap-3 sm:grid-cols-2">
+            {claimableCredits.map(([tok, val]) => (
+              <div key={tok} className="p-3 border border-outline-hairline bg-[#07080a] flex items-center justify-between">
+                <div>
+                  <span className="text-[10px] font-label-caps uppercase text-text-dim block">Credit Balance</span>
+                  <span className="text-white font-display-mono text-[16px] font-bold">
+                    {formatAmount(val)} {tokenSymbol(tok)}
+                  </span>
+                </div>
                 <button
-                  key={tok}
                   type="button"
                   disabled={Boolean(busyToken)}
                   onClick={() => withdrawCredits(tok as `0x${string}`)}
                   className="pact-button-primary min-h-[38px] px-3 text-[10px] font-bold uppercase tracking-wider disabled:opacity-50"
                 >
-                  Withdraw {formatAmount(val)} {tokenSymbol(tok)}
+                  Withdraw {tokenSymbol(tok)}
                 </button>
-              ))}
-            </div>
+              </div>
+            ))}
           </div>
         </section>
       )}
@@ -355,50 +427,93 @@ export default function MePage() {
       {/* Action Center */}
       <ActionCenter pacts={pacts} address={address || ''} />
 
-      {/* Role Filter Tabs */}
-      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 animate-enter">
-        <div role="group" aria-label="Filter pacts by role" className="flex items-center gap-1.5 overflow-x-auto hide-scroll w-full sm:w-auto">
-          <button
-            type="button"
-            onClick={() => setRoleFilter('ALL')}
-            aria-pressed={roleFilter === 'ALL'}
-            className={`px-3 py-1.5 font-label-caps text-[11px] uppercase tracking-wider transition-colors shrink-0 ${
-              roleFilter === 'ALL'
-                ? 'border border-primary-fixed bg-primary-fixed text-[#090b0d] font-bold'
-                : 'border border-outline-border bg-[#0c0f12] text-text-muted hover:text-white'
-            }`}
-          >
-            ALL PACTS ({pacts.length})
-          </button>
-          <button
-            type="button"
-            onClick={() => setRoleFilter('MAKER')}
-            aria-pressed={roleFilter === 'MAKER'}
-            className={`px-3 py-1.5 font-label-caps text-[11px] uppercase tracking-wider transition-colors shrink-0 ${
-              roleFilter === 'MAKER'
-                ? 'border border-primary-fixed bg-primary-fixed text-[#090b0d] font-bold'
-                : 'border border-outline-border bg-[#0c0f12] text-text-muted hover:text-white'
-            }`}
-          >
-            AS MAKER ({makerCount})
-          </button>
-          <button
-            type="button"
-            onClick={() => setRoleFilter('TAKER')}
-            aria-pressed={roleFilter === 'TAKER'}
-            className={`px-3 py-1.5 font-label-caps text-[11px] uppercase tracking-wider transition-colors shrink-0 ${
-              roleFilter === 'TAKER'
-                ? 'border border-primary-fixed bg-primary-fixed text-[#090b0d] font-bold'
-                : 'border border-outline-border bg-[#0c0f12] text-text-muted hover:text-white'
-            }`}
-          >
-            AS COUNTERPARTY ({takerCount})
-          </button>
+      {/* Multi-Dimensional Filter Toolbar */}
+      <div className="space-y-3 animate-enter">
+        {/* Row 1: Role Filters */}
+        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
+          <div role="group" aria-label="Filter pacts by role" className="flex items-center gap-1.5 overflow-x-auto hide-scroll w-full sm:w-auto">
+            <button
+              type="button"
+              onClick={() => handleSetRoleFilter('ALL')}
+              aria-pressed={roleFilter === 'ALL'}
+              className={`px-3 py-1.5 font-label-caps text-[11px] uppercase tracking-wider transition-colors shrink-0 ${
+                roleFilter === 'ALL'
+                  ? 'border border-primary-fixed bg-primary-fixed text-[#090b0d] font-bold'
+                  : 'border border-outline-border bg-[#0c0f12] text-text-muted hover:text-white'
+              }`}
+            >
+              ALL ROLES ({roleCounts.ALL})
+            </button>
+            <button
+              type="button"
+              onClick={() => handleSetRoleFilter('MAKER')}
+              aria-pressed={roleFilter === 'MAKER'}
+              className={`px-3 py-1.5 font-label-caps text-[11px] uppercase tracking-wider transition-colors shrink-0 ${
+                roleFilter === 'MAKER'
+                  ? 'border border-primary-fixed bg-primary-fixed text-[#090b0d] font-bold'
+                  : 'border border-outline-border bg-[#0c0f12] text-text-muted hover:text-white'
+              }`}
+            >
+              AS MAKER ({roleCounts.MAKER})
+            </button>
+            <button
+              type="button"
+              onClick={() => handleSetRoleFilter('TAKER')}
+              aria-pressed={roleFilter === 'TAKER'}
+              className={`px-3 py-1.5 font-label-caps text-[11px] uppercase tracking-wider transition-colors shrink-0 ${
+                roleFilter === 'TAKER'
+                  ? 'border border-primary-fixed bg-primary-fixed text-[#090b0d] font-bold'
+                  : 'border border-outline-border bg-[#0c0f12] text-text-muted hover:text-white'
+              }`}
+            >
+              AS COUNTERPARTY ({roleCounts.TAKER})
+            </button>
+          </div>
+
+          <span className="font-code-hash text-[11px] text-text-dim shrink-0">
+            Showing {filteredPacts.length} of {pacts.length} agreements
+          </span>
         </div>
 
-        <span className="font-code-hash text-[11px] text-text-dim">
-          Showing {filteredPacts.length} of {pacts.length} agreements
-        </span>
+        {/* Row 2: Status Sub-Filters */}
+        <div role="group" aria-label="Filter pacts by status" className="flex items-center gap-1.5 overflow-x-auto hide-scroll w-full pb-1 sm:pb-0">
+          {(['ALL', 'ACTION_REQUIRED', 'LIVE', 'SETTLED', 'EXPIRED', 'DISPUTED'] as PortfolioStatusFilter[]).map(st => {
+            const active = statusFilter === st
+            const count = statusCounts[st]
+            const label = st === 'ACTION_REQUIRED' ? 'ACTION DUE' : st
+
+            return (
+              <button
+                key={st}
+                type="button"
+                onClick={() => handleSetStatusFilter(st)}
+                aria-pressed={active}
+                className={`px-2.5 py-1 font-label-caps text-[10px] uppercase tracking-wider transition-colors shrink-0 ${
+                  active
+                    ? 'border border-amber-400 bg-amber-400 text-[#090b0d] font-bold'
+                    : 'border border-outline-hairline bg-[#07080a] text-text-dim hover:text-white hover:border-outline-border'
+                }`}
+              >
+                {st === 'ACTION_REQUIRED' ? (
+                  <span className="flex items-center gap-1">
+                    <span className="w-1.5 h-1.5 rounded-full bg-orange-400 live-dot" />
+                    ACTION DUE ({count})
+                  </span>
+                ) : (
+                  `${label} (${count})`
+                )}
+              </button>
+            )
+          })}
+          {(roleFilter !== 'ALL' || statusFilter !== 'ALL') && (
+            <button
+              onClick={handleResetFilters}
+              className="px-2 py-1 text-[10px] text-text-dim hover:text-primary-fixed underline transition-colors shrink-0"
+            >
+              Reset Filters
+            </button>
+          )}
+        </div>
       </div>
 
       {/* Pacts Feed / List */}
@@ -415,27 +530,39 @@ export default function MePage() {
         {/* Rows */}
         <div className="divide-y divide-outline-hairline/40">
           {loading ? (
-            <div className="flex items-center justify-center py-20 text-[12px] text-text-muted gap-3 font-code-hash">
-              <span className="w-2.5 h-2.5 bg-primary-fixed live-dot" />
-              INDEXING ACCOUNT ON-CHAIN COMMITMENTS...
-            </div>
+            <TableSkeleton rows={6} />
           ) : filteredPacts.length === 0 ? (
             <div className="flex flex-col items-center justify-center px-6 py-16 text-center">
               <div className="mb-3 flex h-10 w-10 items-center justify-center border border-outline-border bg-[#12161b] font-display-mono text-text-muted text-lg">
                 Ø
               </div>
               <p className="font-display-mono text-[14px] font-bold uppercase tracking-wider text-white">
-                No pact agreements found for this role filter
+                {pacts.length === 0
+                  ? 'No on-chain agreements recorded for this wallet'
+                  : `No agreements found matching ${roleFilter !== 'ALL' ? `Role: ${roleFilter}` : ''} ${statusFilter !== 'ALL' ? `Status: ${statusFilter}` : ''}`}
               </p>
               <p className="mt-1.5 max-w-sm font-body-sans text-[12px] leading-5 text-text-muted">
-                Create a new agreement to lock maker collateral and send an offer to your designated counterparty.
+                {pacts.length === 0
+                  ? 'Create a new agreement to lock maker collateral and send an offer to your designated counterparty.'
+                  : 'Adjust or reset your active filters to inspect all account commitments.'}
               </p>
-              <Link
-                href="/new"
-                className="pact-button-primary mt-5 px-4 py-2 text-[11px] font-bold uppercase tracking-wider"
-              >
-                Create New Pact
-              </Link>
+              <div className="flex items-center gap-3 mt-5 flex-wrap justify-center">
+                {(roleFilter !== 'ALL' || statusFilter !== 'ALL') && (
+                  <button
+                    type="button"
+                    onClick={handleResetFilters}
+                    className="px-4 py-2 border border-outline-border bg-[#07080a] text-white hover:border-primary-fixed text-[11px] font-bold uppercase tracking-wider transition-colors"
+                  >
+                    Reset Filters ({pacts.length} Total)
+                  </button>
+                )}
+                <Link
+                  href="/new"
+                  className="pact-button-primary px-4 py-2 text-[11px] font-bold uppercase tracking-wider"
+                >
+                  Create New Pact
+                </Link>
+              </div>
             </div>
           ) : (
             filteredPacts.map(p => {
@@ -458,7 +585,7 @@ export default function MePage() {
                     id: p.id,
                     time: formatTimestamp(p.updatedAt),
                     kind: kindLabel(p.kind),
-                    status: effectiveStatusLabel(p.status, p.offerExpiry, p.disputeDeadline),
+                    status: effectiveStatusLabel(p.status, p.offerExpiry, p.disputeDeadline, BigInt(currentTime)),
                     amount: amt,
                     address: truncateAddress(p.maker),
                     deadlineTs: activeDeadline,

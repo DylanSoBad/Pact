@@ -18,15 +18,41 @@ import {
   formatTimestamp, truncateAddress
 } from '../lib/format'
 
+import { useCurrentTime } from '../hooks/useCurrentTime'
+import { filterOverviewPacts } from '../lib/filter'
+
 function TapeDashboard() {
   const { filter, setFilter, sseConnected, lastBlockTimestamp, setBlockInfo } = usePactStore()
   const [secondsAgo, setSecondsAgo] = useState(0)
   const [showOnboarding, setShowOnboarding] = useState(false)
+  const currentTime = useCurrentTime()
 
   useEffect(() => {
     if (localStorage.getItem('pact-onboarding-seen') !== 'true') setShowOnboarding(true)
     document.title = 'PACT · The Tape (Overview)'
-  }, [])
+
+    // Sync URL query state on mount
+    if (typeof window !== 'undefined') {
+      const params = new URLSearchParams(window.location.search)
+      const filterParam = params.get('filter')?.toUpperCase() as FilterCategory | null
+      if (filterParam && (['ALL', 'DELIVERY', 'JOB', 'LIVE', 'DISPUTED', 'EXPIRED'] as FilterCategory[]).includes(filterParam)) {
+        setFilter(filterParam)
+      }
+    }
+  }, [setFilter])
+
+  const handleSetFilter = (newFilter: FilterCategory) => {
+    setFilter(newFilter)
+    if (typeof window !== 'undefined') {
+      const url = new URL(window.location.href)
+      if (newFilter === 'ALL') {
+        url.searchParams.delete('filter')
+      } else {
+        url.searchParams.set('filter', newFilter)
+      }
+      window.history.replaceState({}, '', url.toString())
+    }
+  }
 
   const dismissOnboarding = useCallback(() => {
     localStorage.setItem('pact-onboarding-seen', 'true')
@@ -84,20 +110,24 @@ function TapeDashboard() {
   }, [lastBlockTimestamp])
 
   const filtered = useMemo(() => {
-    return (pacts as PactData[]).filter((p) => {
-      if (filter === 'ALL') return true
-      if (filter === 'LIVE') return p.status >= 1 && p.status <= 3
-      if (filter === 'DELIVERY') return p.kind === 0
-      if (filter === 'JOB') return p.kind === 1
-      return true
-    })
-  }, [pacts, filter])
+    return filterOverviewPacts(pacts as PactData[], filter, BigInt(currentTime))
+  }, [pacts, filter, currentTime])
 
-  const counts = useMemo(() => ({
-    ALL: pacts.length,
-    DELIVERY: pacts.filter((p: PactData) => p.kind === 0).length,
-    JOB: pacts.filter((p: PactData) => p.kind === 1).length,
-  }), [pacts])
+  const counts = useMemo(() => {
+    const list = pacts as PactData[]
+    const now = BigInt(currentTime)
+    return {
+      ALL: list.length,
+      DELIVERY: list.filter(p => p.kind === 0).length,
+      JOB: list.filter(p => p.kind === 1).length,
+      LIVE: list.filter(p => p.status >= 1 && p.status <= 3).length,
+      DISPUTED: list.filter(p => p.status === 3).length,
+      EXPIRED: list.filter(p => {
+        const eff = effectiveStatusLabel(p.status, p.offerExpiry, p.disputeDeadline, now)
+        return eff === 'EXPIRED' || p.status === 6
+      }).length,
+    }
+  }, [pacts, currentTime])
 
   const activity = useMemo(() => ({
     open: pacts.filter((p: PactData) => p.status === 0).length,
@@ -173,14 +203,14 @@ function TapeDashboard() {
       <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 animate-enter">
         {/* Category Filters */}
         <div role="group" aria-label="Filter contract categories" className="flex items-center gap-1.5 overflow-x-auto hide-scroll w-full sm:w-auto pb-1 sm:pb-0">
-          {(['ALL', 'DELIVERY', 'JOB', 'LIVE'] as FilterCategory[]).map(cat => {
+          {(['ALL', 'DELIVERY', 'JOB', 'LIVE', 'DISPUTED', 'EXPIRED'] as FilterCategory[]).map(cat => {
             const active = filter === cat
-            const count = cat === 'ALL' ? counts.ALL : cat === 'DELIVERY' ? counts.DELIVERY : cat === 'JOB' ? counts.JOB : null
+            const count = counts[cat]
             return (
               <button
                 key={cat}
                 type="button"
-                onClick={() => setFilter(cat)}
+                onClick={() => handleSetFilter(cat)}
                 aria-pressed={active}
                 className={`px-3 py-1.5 font-label-caps text-[11px] uppercase tracking-wider transition-colors shrink-0 ${
                   active
@@ -191,17 +221,17 @@ function TapeDashboard() {
                 {cat === 'LIVE' ? (
                   <span className="flex items-center gap-1.5">
                     <span className="w-1.5 h-1.5 rounded-full bg-primary-fixed live-dot" />
-                    LIVE FEED
+                    LIVE ({count})
                   </span>
                 ) : (
-                  `${cat} ${count !== null ? `(${count})` : ''}`
+                  `${cat} (${count})`
                 )}
               </button>
             )
           })}
           {filter !== 'ALL' && (
             <button
-              onClick={() => setFilter('ALL')}
+              onClick={() => handleSetFilter('ALL')}
               className="px-2 py-1 text-[11px] text-text-dim hover:text-primary-fixed underline transition-colors"
             >
               Reset
@@ -246,20 +276,33 @@ function TapeDashboard() {
           ) : filtered.length === 0 ? (
             <div className="flex flex-col items-center justify-center px-6 py-16 text-center">
               <div className="mb-3 flex h-10 w-10 items-center justify-center border border-outline-border bg-[#12161b] font-display-mono text-primary-fixed text-lg">
-                +
+                {filter === 'ALL' ? '+' : 'Ø'}
               </div>
               <p className="font-display-mono text-[14px] font-bold uppercase tracking-wider text-white">
                 {filter === 'ALL' ? 'No pacts recorded yet' : `No ${filter.toLowerCase()} pacts found`}
               </p>
               <p className="mt-1.5 max-w-sm font-body-sans text-[12px] leading-5 text-text-muted">
-                The tape displays verified on-chain escrow commitments. Initiate the first agreement to start verifiable settlement history.
+                {filter === 'ALL'
+                  ? 'The tape displays verified on-chain escrow commitments. Initiate the first agreement to start verifiable settlement history.'
+                  : `No agreements on Arc Testnet currently match the "${filter}" filter criteria.`}
               </p>
-              <Link
-                href="/new"
-                className="pact-button-primary mt-5 px-4 py-2 text-[11px] font-bold uppercase tracking-wider"
-              >
-                Create First Pact
-              </Link>
+              <div className="flex items-center gap-3 mt-5 flex-wrap justify-center">
+                {filter !== 'ALL' && (
+                  <button
+                    type="button"
+                    onClick={() => handleSetFilter('ALL')}
+                    className="px-4 py-2 border border-outline-border bg-[#07080a] text-white hover:border-primary-fixed text-[11px] font-bold uppercase tracking-wider transition-colors"
+                  >
+                    Clear Filter / Show All ({counts.ALL})
+                  </button>
+                )}
+                <Link
+                  href="/new"
+                  className="pact-button-primary px-4 py-2 text-[11px] font-bold uppercase tracking-wider"
+                >
+                  Create New Pact
+                </Link>
+              </div>
             </div>
           ) : (
             filtered.map((p) => {
