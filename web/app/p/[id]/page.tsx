@@ -19,6 +19,7 @@ import ActionConfirmModal from '../../../components/ActionConfirmModal'
 import RoleBadge, { type RoleType } from '../../../components/RoleBadge'
 import PartyCard from '../../../components/PartyCard'
 import AddressDisplay from '../../../components/AddressDisplay'
+import TermsVerifier from '../../../components/TermsVerifier'
 import { transactionErrorMessage } from '../../../lib/transactionErrors'
 import { evaluatePactActions, getPrimaryUserAction, type PactAction, type DisputeData } from '../../../lib/actionMatrix'
 
@@ -1158,54 +1159,20 @@ export default function PactDetailPage({ params }: { params: Promise<{ id: strin
       )}
 
       {/* ========================================================================= */}
-      {/* 8. PROOF PAYLOAD & DISPUTE AUDIT TRAIL */}
+      {/* 8. TERMS VERIFICATION & CRYPTOGRAPHIC AUDIT */}
       {/* ========================================================================= */}
-      <div className="grid gap-6 sm:grid-cols-2">
-        {/* Written Terms & SHA-256 Verifier */}
-        <section aria-label="Written Terms Verification" className="border border-outline-border bg-[#0c0f12] p-5 animate-enter space-y-3">
-          <div className="flex items-center justify-between pb-3 border-b border-outline-hairline">
-            <div className="flex items-center gap-2">
-              <span className="material-symbols-outlined text-[18px] text-primary-fixed">fingerprint</span>
-              <h2 className="font-headline-mono text-[13px] font-bold uppercase tracking-wider text-white">
-                Cryptographic Terms Hash
-              </h2>
-            </div>
-            <span className="text-[10px] font-code-hash text-text-dim">SHA-256 On-Chain</span>
-          </div>
+      <TermsVerifier
+        canonicalTerms={pactTerms}
+        onChainTermsHash={pact.termsHash as `0x${string}`}
+        plaintextTerms={termsInput}
+        onPlaintextChange={setTermsInput}
+        isTaker={isTaker}
+      />
 
-          <div className="p-3 border border-outline-hairline bg-[#07080a] font-code-hash text-[11px] text-primary-fixed break-all select-all">
-            {pact.termsHash}
-          </div>
-
-          <div>
-            <label htmlFor="terms-verify-input" className="block font-label-caps text-[11px] uppercase tracking-wider text-text-muted mb-1.5">
-              Verify Written Plaintext Terms Locally
-            </label>
-            <textarea
-              id="terms-verify-input"
-              value={termsInput}
-              onChange={e => setTermsInput(e.target.value)}
-              rows={3}
-              placeholder="Paste agreement text to confirm cryptographic match..."
-              className="w-full border border-outline-border bg-[#07080a] p-3 text-[12px] font-code-hash text-white outline-none focus:border-primary-fixed resize-y"
-            />
-            <div className="mt-1.5 flex items-center justify-between text-[11px] font-code-hash">
-              {termsMatch ? (
-                <span className="text-emerald-400 font-bold">
-                  ✓ Cryptographic Match: Plaintext terms verified.
-                </span>
-              ) : termsMismatch ? (
-                <span className="text-rose-400 font-bold">
-                  ❌ Mismatch: Plaintext does not match on-chain hash.
-                </span>
-              ) : (
-                <span className="text-text-dim">
-                  Paste plaintext to verify before signing acceptance.
-                </span>
-              )}
-            </div>
-          </div>
-        </section>
+      {/* ========================================================================= */}
+      {/* 9. PROOF PAYLOAD & DISPUTE AUDIT TRAIL */}
+      {/* ========================================================================= */}
+      <div>
 
         {/* Proof Deliverable & Dispute Logs */}
         <section aria-label="Delivery Proof and Audit" className="border border-outline-border bg-[#0c0f12] p-5 animate-enter space-y-3">
