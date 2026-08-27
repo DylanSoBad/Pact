@@ -16,10 +16,45 @@ import PactStateMachine from '../../../components/PactStateMachine'
 import Countdown from '../../../components/Countdown'
 import TransactionProgress, { type TransactionStage } from '../../../components/TransactionProgress'
 import ActionConfirmModal from '../../../components/ActionConfirmModal'
-import RoleBadge from '../../../components/RoleBadge'
+import RoleBadge, { type RoleType } from '../../../components/RoleBadge'
 import PartyCard from '../../../components/PartyCard'
+import AddressDisplay from '../../../components/AddressDisplay'
 import { transactionErrorMessage } from '../../../lib/transactionErrors'
-import { evaluatePactActions, type PactAction, type DisputeData } from '../../../lib/actionMatrix'
+import { evaluatePactActions, getPrimaryUserAction, type PactAction, type DisputeData } from '../../../lib/actionMatrix'
+
+function getStatusStyle(status: number) {
+  switch (status) {
+    case 0:
+      return 'text-sky-400 border border-sky-500/40 bg-sky-950/25 font-bold'
+    case 1:
+      return 'text-primary-fixed border border-primary-fixed/40 bg-primary-fixed/10 font-bold'
+    case 2:
+      return 'text-purple-300 border border-purple-500/40 bg-purple-950/25 font-bold'
+    case 3:
+      return 'text-amber-400 border border-amber-500/40 bg-amber-950/30 font-bold'
+    case 4:
+      return 'text-emerald-400 border border-emerald-500/40 bg-emerald-950/25 font-bold'
+    case 5:
+      return 'text-zinc-400 border border-zinc-700/40 bg-zinc-900/30 font-bold'
+    case 6:
+      return 'text-rose-400 border border-rose-500/40 bg-rose-950/25 font-bold'
+    default:
+      return 'text-slate-400 border border-slate-700/40 bg-slate-900/30 font-bold'
+  }
+}
+
+function statusLabel(status: number): string {
+  switch (status) {
+    case 0: return 'OFFERED'
+    case 1: return 'ACTIVE'
+    case 2: return 'PROOF SUBMITTED'
+    case 3: return 'DISPUTED'
+    case 4: return 'SETTLED & CLEARED'
+    case 5: return 'CANCELLED'
+    case 6: return 'EXPIRED'
+    default: return 'UNKNOWN'
+  }
+}
 
 export default function PactDetailPage({ params }: { params: Promise<{ id: string }> }) {
   const { id: idParam } = use(params)
@@ -286,6 +321,8 @@ export default function PactDetailPage({ params }: { params: Promise<{ id: strin
   const isArbiter = Boolean(normalizedAddress && normalizedAddress === pact.arbiter.toLowerCase())
   const isRespondent = Boolean(dispute && normalizedAddress && normalizedAddress === (dispute.opener.toLowerCase() === pact.maker.toLowerCase() ? pact.taker.toLowerCase() : pact.maker.toLowerCase()))
 
+  const userRoleType: RoleType = isMaker ? 'MAKER' : isTaker ? 'TAKER' : isArbiter ? 'ARBITER' : 'OBSERVER'
+
   const pactTerms = toCanonicalTerms(pact, protocolAddress)
   const termsMatch = Boolean(termsInput && pactTerms && verifyPactTerms(pactTerms, termsInput, pact.termsHash as `0x${string}`))
   const termsMismatch = Boolean(termsInput && !termsMatch)
@@ -303,7 +340,9 @@ export default function PactDetailPage({ params }: { params: Promise<{ id: strin
     hasProofInput: Boolean(proofInput.trim()),
   })
 
+  const primaryAction = getPrimaryUserAction(pact, dispute, address, now)
   const uniqueTokens = [...new Set([pact.tokenMaker, pact.tokenTaker, USDC_ERC20].filter(token => isAddress(token)))] as `0x${string}`[]
+  const hasWithdrawableCredits = Object.values(credits).some(v => v > 0n)
 
   const copyPactId = () => {
     navigator.clipboard.writeText(String(id))
@@ -312,9 +351,12 @@ export default function PactDetailPage({ params }: { params: Promise<{ id: strin
   }
 
   return (
-    <div className="w-full space-y-6">
-      {/* Header */}
-      <header className="flex flex-col sm:flex-row sm:items-end justify-between gap-4 border-b border-outline-hairline pb-5 animate-enter">
+    <div className="w-full space-y-6 pb-20 md:pb-8">
+      
+      {/* ========================================================================= */}
+      {/* 1. HERO HEADER & STATUS BADGE */}
+      {/* ========================================================================= */}
+      <header className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 border-b border-outline-hairline pb-5 animate-enter">
         <div>
           <div className="flex items-center gap-2 mb-1.5">
             <Link href="/" className="text-[11px] font-label-caps text-text-muted hover:text-primary-fixed transition-colors">
@@ -323,24 +365,28 @@ export default function PactDetailPage({ params }: { params: Promise<{ id: strin
             <span className="text-text-dim">/</span>
             <span className="pact-eyebrow">Agreement Record</span>
           </div>
+
           <div className="flex items-center gap-3 flex-wrap">
-            <h1 className="font-display-mono text-[24px] sm:text-[30px] font-bold text-white tracking-tight">
+            <h1 className="font-display-mono text-[26px] sm:text-[32px] font-bold text-white tracking-tight">
               Pact #{String(id).padStart(4, '0')}
             </h1>
             <button
               type="button"
               onClick={copyPactId}
-              className="px-2 py-0.5 border border-outline-border bg-[#0c0f12] text-[10px] font-label-caps uppercase text-text-muted hover:text-white"
+              className="px-2 py-0.5 border border-outline-border bg-[#0c0f12] text-[10px] font-label-caps uppercase text-text-muted hover:text-white transition-colors"
             >
               {copiedId ? 'Copied ✓' : 'Copy ID'}
             </button>
+            <span className={`px-2.5 py-0.5 text-[10px] font-label-caps uppercase font-bold tracking-wider ${getStatusStyle(pact.status)}`}>
+              {statusLabel(pact.status)}
+            </span>
             <span className="px-2.5 py-0.5 border border-outline-border bg-[#12161b] text-[10px] font-label-caps uppercase text-text-muted font-bold">
               {kindLabel(pact.kind)}
             </span>
           </div>
         </div>
 
-        <div className="flex items-center gap-2 font-code-hash text-[11px]">
+        <div className="flex items-center gap-3 font-code-hash text-[11px] flex-wrap">
           <a
             href={`https://testnet.arcscan.app/address/${protocolAddress}`}
             target="_blank"
@@ -348,71 +394,260 @@ export default function PactDetailPage({ params }: { params: Promise<{ id: strin
             className="text-primary-fixed hover:underline flex items-center gap-1"
           >
             <span className="material-symbols-outlined text-[14px]">verified</span>
-            Verified Contract on ArcScan ↗
+            Verified Arc Contract ↗
           </a>
         </div>
       </header>
 
-      {/* State Machine Lifecycle Progress */}
+      {/* ========================================================================= */}
+      {/* 2. USER ROLE & IMMEDIATE NEXT ACTION HERO BANNER */}
+      {/* ========================================================================= */}
+      <section aria-label="User Role and Next Action" className="border border-outline-border bg-[#0c0f12] p-4 sm:p-5 animate-enter">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+          <div className="flex items-start sm:items-center gap-3.5">
+            <div className="shrink-0">
+              <RoleBadge role={userRoleType} isCurrentUser={isMaker || isTaker || isArbiter} size="md" />
+            </div>
+            <div>
+              <p className="text-[13px] font-bold text-white font-headline-mono">
+                {isMaker
+                  ? 'Your Role: Maker (Deal Creator & Depositor)'
+                  : isTaker
+                  ? 'Your Role: Designated Counterparty (Taker)'
+                  : isArbiter
+                  ? 'Your Role: Designated Arbiter (Mediator)'
+                  : 'Viewing Mode: Observer (Third-Party)'}
+              </p>
+              <p className="text-[11px] font-body-sans text-text-muted mt-0.5 max-w-xl leading-5">
+                {isMaker
+                  ? `You locked ${formatAmount(pact.amountMaker)} ${tokenSymbol(pact.tokenMaker)} in escrow for counterparty ${truncateAddress(pact.taker)}.`
+                  : isTaker
+                  ? `Maker ${truncateAddress(pact.maker)} offered ${formatAmount(pact.amountMaker)} ${tokenSymbol(pact.tokenMaker)} for fulfillment.`
+                  : isArbiter
+                  ? `You are assigned to evaluate evidence and rule if a dispute is bonded.`
+                  : `This agreement is managed by Maker ${truncateAddress(pact.maker)} and Taker ${truncateAddress(pact.taker)}.`}
+              </p>
+            </div>
+          </div>
+
+          {primaryAction && primaryAction.isEligible && (
+            <div className="shrink-0">
+              <span className="inline-flex items-center gap-1.5 px-3 py-1 bg-primary-fixed text-[#090b0d] font-bold text-[11px] font-label-caps uppercase tracking-wider rounded-sm shadow-[0_0_15px_rgba(243,232,140,0.2)] animate-pulse">
+                <span>⚡ Next: {primaryAction.shortLabel}</span>
+              </span>
+            </div>
+          )}
+        </div>
+      </section>
+
+      {/* ========================================================================= */}
+      {/* 3. LIFECYCLE PROGRESS STEPPER */}
+      {/* ========================================================================= */}
       <PactStateMachine
         status={pact.status}
         offerExpiry={pact.offerExpiry}
         disputeDeadline={pact.disputeDeadline}
       />
 
-      {/* Capital & Escrow Vault Card */}
-      <section aria-label="Escrow Capital Breakdown" className="border border-outline-border bg-[#0c0f12] p-5 animate-enter">
+      {/* ========================================================================= */}
+      {/* 4. ESCROW CAPITAL VAULT VS CLAIMABLE CREDITS */}
+      {/* ========================================================================= */}
+      <div className="grid gap-6 lg:grid-cols-3">
+        {/* Active Escrow Custody (2 cols) */}
+        <section aria-label="Escrow Capital Breakdown" className="lg:col-span-2 border border-outline-border bg-[#0c0f12] p-5 animate-enter flex flex-col justify-between">
+          <div>
+            <div className="flex items-center justify-between pb-3 border-b border-outline-hairline mb-4">
+              <div className="flex items-center gap-2">
+                <span className="material-symbols-outlined text-[18px] text-primary-fixed">account_balance</span>
+                <h2 className="font-headline-mono text-[13px] font-bold uppercase tracking-wider text-white">
+                  Escrow Capital & Custody Vault
+                </h2>
+              </div>
+              <span className="text-[10px] font-code-hash text-emerald-400 font-bold">
+                {isTerminal(pact.status) ? 'Escrow Cleared' : 'Locked on Arc Network'}
+              </span>
+            </div>
+
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-px bg-outline-hairline border border-outline-hairline">
+              <div className="bg-[#07080a] p-3.5">
+                <span className="font-label-caps text-[10px] uppercase tracking-wider text-text-muted block">Maker Collateral</span>
+                <span className="font-display-mono text-[16px] sm:text-[18px] font-bold text-primary-fixed mt-1 block">
+                  {formatAmount(pact.amountMaker)} {tokenSymbol(pact.tokenMaker)}
+                </span>
+                <span className="text-[10px] text-text-dim mt-0.5 block">Locked in contract</span>
+              </div>
+
+              <div className="bg-[#07080a] p-3.5">
+                <span className="font-label-caps text-[10px] uppercase tracking-wider text-text-muted block">Taker Collateral</span>
+                <span className="font-display-mono text-[16px] sm:text-[18px] font-bold text-white mt-1 block">
+                  {pact.amountTaker > 0n ? `${formatAmount(pact.amountTaker)} ${tokenSymbol(pact.tokenTaker)}` : 'None (0.00)'}
+                </span>
+                <span className="text-[10px] text-text-dim mt-0.5 block">
+                  {pact.status === 0 ? 'Pending acceptance' : 'Escrowed'}
+                </span>
+              </div>
+
+              <div className="bg-[#07080a] p-3.5">
+                <span className="font-label-caps text-[10px] uppercase tracking-wider text-text-muted block">Dispute Bond (5%)</span>
+                <span className="font-display-mono text-[16px] sm:text-[18px] font-bold text-amber-400 mt-1 block">
+                  {formatAmount(pact.bondAmount)} USDC
+                </span>
+                <span className="text-[10px] text-text-dim mt-0.5 block">Refunded to winner</span>
+              </div>
+
+              <div className="bg-[#07080a] p-3.5">
+                <span className="font-label-caps text-[10px] uppercase tracking-wider text-text-muted block">Arbiter Fee Cap</span>
+                <span className="font-display-mono text-[16px] sm:text-[18px] font-bold text-text-muted mt-1 block">
+                  {formatAmount(pact.arbiterFeeCap)} USDC
+                </span>
+                <span className="text-[10px] text-text-dim mt-0.5 block">Max mediator fee</span>
+              </div>
+            </div>
+          </div>
+
+          <p className="mt-4 text-[11px] text-text-dim font-body-sans border-t border-outline-hairline/40 pt-2.5">
+            🔒 <strong>Strict Escrow Guarantee:</strong> Collateral cannot be moved arbitrarily. Funds only transition via mutual agreement, verified proof completion, or bonded arbitration.
+          </p>
+        </section>
+
+        {/* Claimable Pull-Payment Credits Vault (1 col) */}
+        <section aria-label="Withdrawable Credits" className={`border p-5 animate-enter flex flex-col justify-between ${
+          hasWithdrawableCredits
+            ? 'border-emerald-500/50 bg-emerald-950/20 shadow-[0_0_20px_rgba(52,211,153,0.1)]'
+            : 'border-outline-border bg-[#0c0f12]'
+        }`}>
+          <div>
+            <div className="flex items-center justify-between pb-3 border-b border-outline-hairline mb-3">
+              <div className="flex items-center gap-2">
+                <span className={`material-symbols-outlined text-[18px] ${hasWithdrawableCredits ? 'text-emerald-400' : 'text-text-muted'}`}>
+                  account_balance_wallet
+                </span>
+                <h2 className="font-headline-mono text-[13px] font-bold uppercase tracking-wider text-white">
+                  Pull Credits
+                </h2>
+              </div>
+              <span className={`text-[10px] font-label-caps uppercase font-bold ${hasWithdrawableCredits ? 'text-emerald-400' : 'text-text-dim'}`}>
+                {hasWithdrawableCredits ? 'Available Now' : 'Zero Balance'}
+              </span>
+            </div>
+
+            <p className="text-[11px] leading-5 text-text-muted font-body-sans mb-3">
+              Refunds and settlements are safely credited to your internal escrow account. Withdraw anytime to your wallet.
+            </p>
+
+            {hasWithdrawableCredits ? (
+              <div className="space-y-2">
+                {uniqueTokens.map(token => credits[token] > 0n && (
+                  <button
+                    key={token}
+                    type="button"
+                    disabled={busy}
+                    onClick={() => {
+                      const withdrawAction: PactAction = {
+                        type: 'WITHDRAW_CREDITS',
+                        label: `Withdraw ${formatAmount(credits[token])} ${tokenSymbol(token)} to Wallet`,
+                        shortLabel: `Withdraw ${tokenSymbol(token)}`,
+                        functionName: 'withdraw',
+                        role: 'PUBLIC',
+                        severity: 'primary',
+                        isDangerous: false,
+                        isEligible: true,
+                        description: `Transfer internal escrow pull-payment credits directly into your connected wallet address (${truncateAddress(address || '')}).`,
+                        financialSummary: {
+                          amount: credits[token],
+                          token: token,
+                          recipient: address || '',
+                          recipientRole: 'Connected Wallet',
+                        },
+                      }
+                      requestActionConfirmation(withdrawAction, () => execute('withdraw', [token], `Withdraw ${tokenSymbol(token)}`))
+                    }}
+                    className="pact-button-primary flex w-full justify-between items-center px-3.5 py-2.5 min-h-[44px]"
+                  >
+                    <span className="text-[11px] font-bold uppercase">Withdraw {tokenSymbol(token)}</span>
+                    <span className="font-bold font-code-hash text-[13px]">{formatAmount(credits[token])} {tokenSymbol(token)}</span>
+                  </button>
+                ))}
+              </div>
+            ) : (
+              <div className="p-3 border border-outline-hairline bg-[#07080a] text-center font-code-hash text-[11px] text-text-dim">
+                No withdrawable balance for connected wallet.
+              </div>
+            )}
+          </div>
+
+          <span className="text-[10px] text-text-dim font-code-hash mt-3 block pt-2 border-t border-outline-hairline/40">
+            Pull-over-push prevents re-entrancy risks.
+          </span>
+        </section>
+      </div>
+
+      {/* ========================================================================= */}
+      {/* 5. COMMITTED DEADLINES & COUNTDOWNS */}
+      {/* ========================================================================= */}
+      <section aria-label="Committed Deadlines" className="border border-outline-border bg-[#0c0f12] p-5 animate-enter">
         <div className="flex items-center justify-between pb-3 border-b border-outline-hairline mb-4">
           <div className="flex items-center gap-2">
-            <span className="material-symbols-outlined text-[18px] text-primary-fixed">account_balance</span>
+            <span className="material-symbols-outlined text-[18px] text-primary-fixed">schedule</span>
             <h2 className="font-headline-mono text-[13px] font-bold uppercase tracking-wider text-white">
-              Escrow Capital & Custody Vault
+              Committed Deadlines & Urgency Cutoffs
             </h2>
           </div>
-          <span className="text-[10px] font-code-hash text-emerald-400 font-bold">
-            Locked on Arc Network
-          </span>
+          <span className="text-[10px] font-code-hash text-text-dim">EVM Block Timestamps</span>
         </div>
 
-        <div className="grid grid-cols-2 lg:grid-cols-4 gap-px bg-outline-hairline border border-outline-hairline">
-          <div className="bg-[#07080a] p-4">
-            <span className="font-label-caps text-[10px] uppercase tracking-wider text-text-muted block">Maker Collateral</span>
-            <span className="font-display-mono text-[18px] font-bold text-primary-fixed mt-1 block">
-              {formatAmount(pact.amountMaker)} {tokenSymbol(pact.tokenMaker)}
-            </span>
-            <span className="text-[10px] text-text-dim mt-0.5 block">Locked upon offer creation</span>
+        <div className="grid gap-4 sm:grid-cols-3 font-code-hash text-[12px]">
+          <div className={`p-3.5 border bg-[#07080a] flex flex-col justify-between ${
+            pact.status === 0 ? 'border-primary-fixed/40 ring-1 ring-primary-fixed/20' : 'border-outline-hairline'
+          }`}>
+            <div>
+              <span className="text-[10px] font-label-caps uppercase text-text-muted block">1. Offer Expiry</span>
+              <span className="text-white font-bold block mt-1">{formatDate(pact.offerExpiry)}</span>
+              <span className="text-[10px] text-text-dim mt-0.5 block">Acceptance cutoff window</span>
+            </div>
+            {pact.status === 0 && (
+              <div className="mt-3 pt-2.5 border-t border-outline-hairline/40">
+                <Countdown deadlineTs={pact.offerExpiry} compact showLabel={false} />
+              </div>
+            )}
           </div>
 
-          <div className="bg-[#07080a] p-4">
-            <span className="font-label-caps text-[10px] uppercase tracking-wider text-text-muted block">Counterparty Collateral</span>
-            <span className="font-display-mono text-[18px] font-bold text-white mt-1 block">
-              {pact.amountTaker > 0n ? `${formatAmount(pact.amountTaker)} ${tokenSymbol(pact.tokenTaker)}` : 'None (0.00)'}
-            </span>
-            <span className="text-[10px] text-text-dim mt-0.5 block">
-              {pact.status === 0 ? 'Pending acceptance' : 'Escrowed'}
-            </span>
+          <div className={`p-3.5 border bg-[#07080a] flex flex-col justify-between ${
+            pact.status === 1 ? 'border-primary-fixed/40 ring-1 ring-primary-fixed/20' : 'border-outline-hairline'
+          }`}>
+            <div>
+              <span className="text-[10px] font-label-caps uppercase text-text-muted block">2. Performance Deadline</span>
+              <span className="text-white font-bold block mt-1">{formatDate(pact.performanceDeadline)}</span>
+              <span className="text-[10px] text-text-dim mt-0.5 block">Delivery / work proof cutoff</span>
+            </div>
+            {pact.status === 1 && (
+              <div className="mt-3 pt-2.5 border-t border-outline-hairline/40">
+                <Countdown deadlineTs={pact.performanceDeadline} compact showLabel={false} />
+              </div>
+            )}
           </div>
 
-          <div className="bg-[#07080a] p-4">
-            <span className="font-label-caps text-[10px] uppercase tracking-wider text-text-muted block">Dispute Bond (5%)</span>
-            <span className="font-display-mono text-[18px] font-bold text-amber-400 mt-1 block">
-              {formatAmount(pact.bondAmount)} USDC
-            </span>
-            <span className="text-[10px] text-text-dim mt-0.5 block">Refunded to winner</span>
-          </div>
-
-          <div className="bg-[#07080a] p-4">
-            <span className="font-label-caps text-[10px] uppercase tracking-wider text-text-muted block">Arbiter Fee Cap</span>
-            <span className="font-display-mono text-[18px] font-bold text-text-muted mt-1 block">
-              {formatAmount(pact.arbiterFeeCap)} USDC
-            </span>
-            <span className="text-[10px] text-text-dim mt-0.5 block">Max mediator fee</span>
+          <div className={`p-3.5 border bg-[#07080a] flex flex-col justify-between ${
+            pact.status === 2 || pact.status === 3 ? 'border-primary-fixed/40 ring-1 ring-primary-fixed/20' : 'border-outline-hairline'
+          }`}>
+            <div>
+              <span className="text-[10px] font-label-caps uppercase text-text-muted block">3. Dispute Window Cutoff</span>
+              <span className="text-white font-bold block mt-1">{formatDate(pact.disputeDeadline)}</span>
+              <span className="text-[10px] text-text-dim mt-0.5 block">Final settlement cutoff</span>
+            </div>
+            {(pact.status === 1 || pact.status === 2 || pact.status === 3) && (
+              <div className="mt-3 pt-2.5 border-t border-outline-hairline/40">
+                <Countdown deadlineTs={pact.disputeDeadline} compact showLabel={false} />
+              </div>
+            )}
           </div>
         </div>
       </section>
 
-      {/* Participants Matrix with PartyCards */}
-      <section aria-label="Pact Participants" className="grid gap-3 sm:grid-cols-3 animate-enter">
+      {/* ========================================================================= */}
+      {/* 6. PARTICIPANTS & ARBITRATION MATRIX */}
+      {/* ========================================================================= */}
+      <section aria-label="Pact Participants" className="grid gap-4 sm:grid-cols-3 animate-enter">
         <PartyCard
           role="MAKER"
           address={pact.maker}
@@ -435,229 +670,44 @@ export default function PactDetailPage({ params }: { params: Promise<{ id: strin
         />
       </section>
 
-      {/* Deadlines & Time Windows */}
-      <section aria-label="Committed Deadlines" className="border border-outline-border bg-[#0c0f12] p-5 animate-enter">
-        <div className="flex items-center justify-between pb-3 border-b border-outline-hairline mb-4">
-          <div className="flex items-center gap-2">
-            <span className="material-symbols-outlined text-[18px] text-primary-fixed">schedule</span>
-            <h2 className="font-headline-mono text-[13px] font-bold uppercase tracking-wider text-white">
-              Committed Deadlines & Cutoffs
-            </h2>
-          </div>
-        </div>
-
-        <div className="grid gap-3 sm:grid-cols-3 font-code-hash text-[12px]">
-          <div className="p-3 border border-outline-hairline bg-[#07080a] flex flex-col justify-between">
-            <div>
-              <span className="text-[10px] font-label-caps uppercase text-text-muted block">Offer Expiry</span>
-              <span className="text-white font-bold block mt-1">{formatDate(pact.offerExpiry)}</span>
-              <span className="text-[10px] text-text-dim mt-0.5 block">Acceptance deadline</span>
-            </div>
-            {pact.status === 0 && (
-              <div className="mt-2 pt-2 border-t border-outline-hairline/40">
-                <Countdown deadlineTs={pact.offerExpiry} compact showLabel={false} />
-              </div>
-            )}
-          </div>
-
-          <div className="p-3 border border-outline-hairline bg-[#07080a] flex flex-col justify-between">
-            <div>
-              <span className="text-[10px] font-label-caps uppercase text-text-muted block">Performance Deadline</span>
-              <span className="text-white font-bold block mt-1">{formatDate(pact.performanceDeadline)}</span>
-              <span className="text-[10px] text-text-dim mt-0.5 block">Delivery / work proof window</span>
-            </div>
-            {pact.status === 1 && (
-              <div className="mt-2 pt-2 border-t border-outline-hairline/40">
-                <Countdown deadlineTs={pact.performanceDeadline} compact showLabel={false} />
-              </div>
-            )}
-          </div>
-
-          <div className="p-3 border border-outline-hairline bg-[#07080a] flex flex-col justify-between">
-            <div>
-              <span className="text-[10px] font-label-caps uppercase text-text-muted block">Dispute Window Cutoff</span>
-              <span className="text-white font-bold block mt-1">{formatDate(pact.disputeDeadline)}</span>
-              <span className="text-[10px] text-text-dim mt-0.5 block">Final settlement cutoff</span>
-            </div>
-            {(pact.status === 1 || pact.status === 2 || pact.status === 3) && (
-              <div className="mt-2 pt-2 border-t border-outline-hairline/40">
-                <Countdown deadlineTs={pact.disputeDeadline} compact showLabel={false} />
-              </div>
-            )}
-          </div>
-        </div>
-      </section>
-
-      {/* Written Terms & SHA-256 Verifier */}
-      <section aria-label="Written Terms Verification" className="border border-outline-border bg-[#0c0f12] p-5 animate-enter">
-        <div className="flex items-center justify-between pb-3 border-b border-outline-hairline mb-3">
-          <div className="flex items-center gap-2">
-            <span className="material-symbols-outlined text-[18px] text-primary-fixed">fingerprint</span>
-            <h2 className="font-headline-mono text-[13px] font-bold uppercase tracking-wider text-white">
-              Cryptographic Terms Hash
-            </h2>
-          </div>
-          <span className="text-[10px] font-code-hash text-text-dim">SHA-256 On-Chain Anchor</span>
-        </div>
-
-        <div className="p-3 border border-outline-hairline bg-[#07080a] font-code-hash text-[11px] text-primary-fixed break-all">
-          {pact.termsHash}
-        </div>
-
-        <div className="mt-4">
-          <label htmlFor="terms-verify-input" className="block font-label-caps text-[11px] uppercase tracking-wider text-text-muted mb-1.5">
-            Verify Written Plaintext Terms Locally
-          </label>
-          <textarea
-            id="terms-verify-input"
-            value={termsInput}
-            onChange={e => setTermsInput(e.target.value)}
-            rows={4}
-            placeholder="Paste the written agreement plaintext to verify cryptographic match against on-chain termsHash before accepting..."
-            className="w-full border border-outline-border bg-[#07080a] p-3 text-[12px] font-code-hash text-white outline-none focus:border-primary-fixed resize-y"
-          />
-          <div className="mt-2 flex items-center justify-between text-[11px] font-code-hash">
-            {termsMatch ? (
-              <span className="text-emerald-400 font-bold">
-                ✓ Cryptographic Match: Plaintext and all on-chain economic terms match byte-for-byte.
-              </span>
-            ) : termsMismatch ? (
-              <span className="text-rose-400 font-bold">
-                ❌ Cryptographic Mismatch: The provided plaintext does not hash to the on-chain commitment.
-              </span>
-            ) : (
-              <span className="text-text-dim">
-                Paste agreement text to confirm cryptographic match before signing acceptance.
-              </span>
-            )}
-          </div>
-        </div>
-      </section>
-
-      {/* Active Dispute Information Box */}
-      {dispute && (
-        <section aria-label="Contested Dispute Details" className="border border-amber-500/40 bg-[#0c0f12] p-5 space-y-3 animate-enter">
-          <div className="flex items-center justify-between pb-3 border-b border-outline-hairline">
-            <div className="flex items-center gap-2">
-              <span className="material-symbols-outlined text-amber-400 text-[18px]">gavel</span>
-              <h2 className="font-headline-mono text-[13px] font-bold uppercase tracking-wider text-white">
-                Contested Dispute Status
-              </h2>
-            </div>
-            <span className="px-2 py-0.5 border border-amber-500/40 bg-amber-950/20 text-amber-400 text-[10px] font-bold uppercase font-label-caps">
-              DISPUTED
-            </span>
-          </div>
-
-          <div className="grid gap-3 sm:grid-cols-2 text-[12px] font-code-hash text-text-muted">
-            <div className="p-3 bg-[#07080a] border border-outline-hairline">
-              <span className="text-[10px] uppercase text-text-dim block">Dispute Opener</span>
-              <span className="text-white font-bold">{truncateAddress(dispute.opener)}</span>
-            </div>
-            <div className="p-3 bg-[#07080a] border border-outline-hairline">
-              <span className="text-[10px] uppercase text-text-dim block">Claim Type</span>
-              <span className="text-amber-400 font-bold">{dispute.claim === 1 ? 'Maker Claim (Refund All)' : 'Taker Claim (Release All)'}</span>
-            </div>
-            <div className="p-3 bg-[#07080a] border border-outline-hairline flex flex-col justify-between">
-              <div>
-                <span className="text-[10px] uppercase text-text-dim block">Response Deadline</span>
-                <span className="text-white block mt-0.5">{formatDate(dispute.responseDeadline)}</span>
-              </div>
-              {dispute.arbiterDeadline === 0n && (
-                <div className="mt-2 pt-2 border-t border-outline-hairline/40">
-                  <Countdown deadlineTs={dispute.responseDeadline} compact showLabel={false} />
-                </div>
-              )}
-            </div>
-            <div className="p-3 bg-[#07080a] border border-outline-hairline flex flex-col justify-between">
-              <div>
-                <span className="text-[10px] uppercase text-text-dim block">Arbiter Ruling Deadline</span>
-                <span className="text-white block mt-0.5">{dispute.arbiterDeadline ? formatDate(dispute.arbiterDeadline) : 'Awaiting Counterparty Bond'}</span>
-              </div>
-              {dispute.arbiterDeadline > 0n && (
-                <div className="mt-2 pt-2 border-t border-outline-hairline/40">
-                  <Countdown deadlineTs={dispute.arbiterDeadline} compact showLabel={false} />
-                </div>
-              )}
-            </div>
-          </div>
-        </section>
-      )}
-
-      {/* Contextual Action Hub (Role & State Based CTAs) */}
+      {/* ========================================================================= */}
+      {/* 7. CONTEXTUAL EXECUTION HUB (ACTIONS & TRIGGERS) */}
+      {/* ========================================================================= */}
       {!isTerminal(pact.status) && (
-        <section aria-label="Action Execution Panel" className="border border-primary-fixed/40 bg-[#0c0f12] p-5 space-y-4 animate-enter">
+        <section aria-label="Action Execution Panel" className="border border-primary-fixed/40 bg-[#0c0f12] p-5 space-y-4 animate-enter shadow-lg">
           <div className="flex items-center justify-between pb-3 border-b border-outline-hairline">
             <div className="flex items-center gap-2">
               <span className="material-symbols-outlined text-primary-fixed text-[18px]">bolt</span>
-              <h2 className="font-headline-mono text-[13px] font-bold uppercase tracking-wider text-white">
+              <h2 className="font-headline-mono text-[14px] font-bold uppercase tracking-wider text-white">
                 Contextual Execution Hub
               </h2>
             </div>
-            <span className="text-[10px] font-label-caps uppercase text-text-dim">Role-Aware Triggers</span>
+            <span className="text-[10px] font-label-caps uppercase text-text-dim">Role & State Guarded</span>
           </div>
 
           {!isConnected ? (
-            <div className="p-4 border border-outline-hairline bg-[#07080a] text-center space-y-3">
+            <div className="p-5 border border-outline-hairline bg-[#07080a] text-center space-y-3">
               <p className="text-[12px] font-body-sans text-text-muted">
                 Connect your Arc Network wallet to execute role-specific actions (Accept Offer, Submit Proof, Release Funds, or Open Dispute).
               </p>
               <button
                 type="button"
                 onClick={() => openWalletModal(true)}
-                className="pact-button-primary min-h-[40px] px-5 text-[11px] font-bold uppercase tracking-wider"
+                className="pact-button-primary min-h-[42px] px-6 text-[11px] font-bold uppercase tracking-wider"
               >
                 Connect Wallet
               </button>
             </div>
           ) : (
-            <>
-              {/* Connected User Role Clarity Banner */}
-              <div className={`p-4 border flex items-start gap-3.5 ${
-                isMaker
-                  ? 'border-primary-fixed/50 bg-primary-fixed/5'
-                  : isTaker
-                  ? 'border-sky-500/50 bg-sky-950/20'
-                  : isArbiter
-                  ? 'border-purple-500/50 bg-purple-950/20'
-                  : 'border-outline-hairline bg-[#07080a]'
-              }`}>
-                <div className="shrink-0 mt-0.5">
-                  <RoleBadge
-                    role={isMaker ? 'MAKER' : isTaker ? 'TAKER' : isArbiter ? 'ARBITER' : 'OBSERVER'}
-                    isCurrentUser={isMaker || isTaker || isArbiter}
-                    size="md"
-                  />
-                </div>
-                <div className="space-y-1">
-                  <p className="text-[12px] font-bold text-white">
-                    {isMaker
-                      ? 'You are the Maker (Deal Creator)'
-                      : isTaker
-                      ? 'You are the Designated Counterparty (Taker)'
-                      : isArbiter
-                      ? 'You are the Designated Neutral Arbiter'
-                      : 'You are viewing as an Observer (Third-Party)'}
-                  </p>
-                  <p className="text-[11px] font-body-sans text-text-muted leading-relaxed">
-                    {isMaker
-                      ? `You deposited ${formatAmount(pact.amountMaker)} ${tokenSymbol(pact.tokenMaker)} into escrow. Counterparty is ${truncateAddress(pact.taker)}. You hold authority to release funds upon satisfaction or open a dispute before cutoff.`
-                      : isTaker
-                      ? `Maker is ${truncateAddress(pact.maker)}. You are responsible for delivering work and submitting proof before the performance cutoff.`
-                      : isArbiter
-                      ? `You are assigned to evaluate evidence and issue a binding ruling if a dispute is opened and bonded by both parties.`
-                      : `State-changing deal actions are restricted to Maker (${truncateAddress(pact.maker)}) and Counterparty (${truncateAddress(pact.taker)}). Public execution becomes available if deadlines lapse.`}
-                  </p>
-                </div>
-              </div>
-
+            <div className="space-y-4">
+              
               {/* STATUS 0: OFFERED (Before Expiry) */}
               {pact.status === 0 && now <= pact.offerExpiry && (
                 <div className="space-y-3">
                   {isTaker && (
                     <div className="space-y-2">
                       <p className="text-[12px] font-body-sans text-text-muted">
-                        You are the designated counterparty. Verify terms above, then sign to lock any required collateral and activate the pact.
+                        You are the designated counterparty. Paste matching written terms in the verifier below, then confirm acceptance to lock any required collateral and activate the agreement.
                       </p>
                       <button
                         type="button"
@@ -673,11 +723,12 @@ export default function PactDetailPage({ params }: { params: Promise<{ id: strin
                       </button>
                       {!termsMatch && (
                         <p className="text-[11px] font-code-hash text-amber-300">
-                          ℹ️ Acceptance requires byte-for-byte verification of written terms against on-chain hash.
+                          ℹ️ Acceptance requires byte-for-byte verification of written terms against the on-chain hash.
                         </p>
                       )}
                     </div>
                   )}
+
                   {isMaker && (
                     <div className="space-y-2">
                       <p className="text-[12px] font-body-sans text-text-muted">
@@ -700,8 +751,9 @@ export default function PactDetailPage({ params }: { params: Promise<{ id: strin
                       </button>
                     </div>
                   )}
+
                   {!isMaker && !isTaker && (
-                    <div className="p-3 border border-outline-hairline bg-[#07080a] text-[12px] text-text-dim font-code-hash">
+                    <div className="p-3.5 border border-outline-hairline bg-[#07080a] text-[12px] text-text-dim font-code-hash">
                       Offer is pending acceptance by counterparty {truncateAddress(pact.taker)} before {formatDate(pact.offerExpiry)}.
                     </div>
                   )}
@@ -736,10 +788,6 @@ export default function PactDetailPage({ params }: { params: Promise<{ id: strin
                     >
                       Expire Offer & Claim Collateral Refund ({formatAmount(pact.amountMaker)} {tokenSymbol(pact.tokenMaker)})
                     </button>
-                  ) : isTaker ? (
-                    <div className="p-3 border border-outline-hairline bg-[#07080a] text-[12px] text-rose-300 font-code-hash">
-                      Acceptance deadline has passed. This offer is no longer valid.
-                    </div>
                   ) : (
                     <button
                       type="button"
@@ -763,7 +811,7 @@ export default function PactDetailPage({ params }: { params: Promise<{ id: strin
               {/* STATUS 1: ACTIVE */}
               {pact.status === 1 && (
                 <div className="space-y-4">
-                  {/* Taker Submit Proof (before performance deadline) */}
+                  {/* Taker Submit Proof */}
                   {isTaker && now <= pact.performanceDeadline && (
                     <div className="space-y-2">
                       <p className="text-[12px] font-body-sans text-text-muted">
@@ -774,7 +822,7 @@ export default function PactDetailPage({ params }: { params: Promise<{ id: strin
                           value={proofInput}
                           onChange={e => setProofInput(e.target.value)}
                           placeholder="Proof reference / tracking ID / deliverable link…"
-                          className="flex-1 border border-outline-border bg-[#07080a] px-3 py-2 text-[12px] font-code-hash text-white outline-none focus:border-primary-fixed"
+                          className="flex-1 border border-outline-border bg-[#07080a] px-3.5 py-2.5 text-[12px] font-code-hash text-white outline-none focus:border-primary-fixed"
                         />
                         <button
                           type="button"
@@ -795,20 +843,13 @@ export default function PactDetailPage({ params }: { params: Promise<{ id: strin
                     </div>
                   )}
 
-                  {/* Taker missed performance deadline banner */}
-                  {isTaker && now > pact.performanceDeadline && now <= pact.disputeDeadline && (
-                    <div className="p-3 border border-amber-500/40 bg-amber-950/20 text-[12px] font-code-hash text-amber-300">
-                      Performance window elapsed on {formatDate(pact.performanceDeadline)}. Proof can no longer be submitted.
-                    </div>
-                  )}
-
-                  {/* Maker Release Collateral (before dispute deadline) */}
+                  {/* Maker Release Collateral */}
                   {isMaker && now <= pact.disputeDeadline && (
                     <div className="space-y-2">
                       <p className="text-[12px] font-body-sans text-text-muted">
                         {now > pact.performanceDeadline
                           ? 'Counterparty did not submit delivery proof. You can release collateral or open a dispute before cutoff.'
-                          : 'Once satisfied with delivery, release locked escrow funds directly to the counterparty.'}
+                          : 'Once satisfied with deliverable completion, release locked escrow funds directly to the counterparty.'}
                       </p>
                       <button
                         type="button"
@@ -828,7 +869,7 @@ export default function PactDetailPage({ params }: { params: Promise<{ id: strin
                     </div>
                   )}
 
-                  {/* Open Dispute (before dispute deadline) */}
+                  {/* Open Dispute Trigger */}
                   {canOpenDispute && (
                     <div className="pt-2 border-t border-outline-hairline">
                       <button
@@ -849,15 +890,9 @@ export default function PactDetailPage({ params }: { params: Promise<{ id: strin
                     </div>
                   )}
 
-                  {/* Active & Dispute Deadline Passed (No proof submitted) -> Reverts 100% to Maker */}
+                  {/* Deadline Elapsed (No proof) */}
                   {now > pact.disputeDeadline && (
                     <div className="space-y-3 p-4 border border-rose-500/40 bg-rose-950/20">
-                      <div className="flex items-center gap-2">
-                        <span className="material-symbols-outlined text-rose-400 text-[18px]">gavel</span>
-                        <span className="font-headline-mono text-[13px] font-bold uppercase text-rose-300">
-                          Dispute Window Closed (No Proof Submitted)
-                        </span>
-                      </div>
                       <p className="text-[12px] font-body-sans text-text-muted">
                         The dispute window elapsed without proof submission or dispute. 100% of locked collateral reverts to the Maker.
                       </p>
@@ -877,10 +912,6 @@ export default function PactDetailPage({ params }: { params: Promise<{ id: strin
                         >
                           Claim Full Collateral Refund as Maker ({formatAmount(pact.amountMaker)} {tokenSymbol(pact.tokenMaker)})
                         </button>
-                      ) : isTaker ? (
-                        <div className="p-3 border border-outline-hairline bg-[#07080a] text-[12px] text-text-dim font-code-hash">
-                          Dispute cutoff passed without delivery proof. Collateral reverts to maker upon settlement.
-                        </div>
                       ) : (
                         <button
                           type="button"
@@ -906,7 +937,6 @@ export default function PactDetailPage({ params }: { params: Promise<{ id: strin
               {/* STATUS 2: PROOF SUBMITTED */}
               {pact.status === 2 && (
                 <div className="space-y-4">
-                  {/* Maker Release Collateral */}
                   {isMaker && now <= pact.disputeDeadline && (
                     <div className="space-y-2">
                       <p className="text-[12px] font-body-sans text-text-muted">
@@ -930,14 +960,12 @@ export default function PactDetailPage({ params }: { params: Promise<{ id: strin
                     </div>
                   )}
 
-                  {/* Taker Awaiting Maker Review */}
                   {isTaker && now <= pact.disputeDeadline && (
-                    <div className="p-3 border border-outline-hairline bg-[#07080a] text-[12px] text-text-dim font-code-hash">
+                    <div className="p-3.5 border border-outline-hairline bg-[#07080a] text-[12px] text-text-dim font-code-hash">
                       Proof anchored on-chain. Maker ({truncateAddress(pact.maker)}) has until {formatDate(pact.disputeDeadline)} to release funds or open a dispute.
                     </div>
                   )}
 
-                  {/* Open Dispute (before dispute deadline) */}
                   {canOpenDispute && (
                     <div className="pt-2 border-t border-outline-hairline">
                       <button
@@ -958,17 +986,10 @@ export default function PactDetailPage({ params }: { params: Promise<{ id: strin
                     </div>
                   )}
 
-                  {/* Proof Submitted & Dispute Deadline Passed -> Releases 100% to Taker */}
                   {now > pact.disputeDeadline && (
                     <div className="space-y-3 p-4 border border-emerald-500/40 bg-emerald-950/20">
-                      <div className="flex items-center gap-2">
-                        <span className="material-symbols-outlined text-emerald-400 text-[18px]">verified</span>
-                        <span className="font-headline-mono text-[13px] font-bold uppercase text-emerald-300">
-                          Dispute Window Closed (Proof Uncontested)
-                        </span>
-                      </div>
                       <p className="text-[12px] font-body-sans text-text-muted">
-                        The dispute window closed with proof unchallenged. Escrow funds and collateral are released 100% to the Counterparty ({truncateAddress(pact.taker)}).
+                        Dispute window closed with proof unchallenged. Escrow funds and collateral are released 100% to Counterparty ({truncateAddress(pact.taker)}).
                       </p>
                       {isTaker ? (
                         <button
@@ -986,22 +1007,6 @@ export default function PactDetailPage({ params }: { params: Promise<{ id: strin
                         >
                           Claim Escrow Payout & Collateral as Counterparty
                         </button>
-                      ) : isMaker ? (
-                        <button
-                          type="button"
-                          disabled={busy}
-                          onClick={() => {
-                            const action = availableActions.find(a => a.type === 'DEADLINE_SETTLE_TAKER')
-                            if (action) {
-                              requestActionConfirmation(action, () => execute('refundAfterDeadline', [BigInt(id)], 'Finalize settlement'))
-                            } else {
-                              void execute('refundAfterDeadline', [BigInt(id)], 'Finalize settlement')
-                            }
-                          }}
-                          className="pact-button-secondary w-full min-h-[44px] text-[11px] font-bold uppercase"
-                        >
-                          Finalize Settlement to Counterparty
-                        </button>
                       ) : (
                         <button
                           type="button"
@@ -1016,7 +1021,7 @@ export default function PactDetailPage({ params }: { params: Promise<{ id: strin
                           }}
                           className="pact-button-secondary w-full min-h-[44px] text-[11px] font-bold uppercase"
                         >
-                          Settle Pact (Public Execution)
+                          Settle Pact to Counterparty (Public Execution)
                         </button>
                       )}
                     </div>
@@ -1027,7 +1032,6 @@ export default function PactDetailPage({ params }: { params: Promise<{ id: strin
               {/* STATUS 3: DISPUTED */}
               {pact.status === 3 && (
                 <div className="space-y-4">
-                  {/* Respondent Counter-Bond (before response deadline) */}
                   {canRespond && (
                     <div className="space-y-2">
                       <p className="text-[12px] font-body-sans text-amber-300">
@@ -1051,7 +1055,6 @@ export default function PactDetailPage({ params }: { params: Promise<{ id: strin
                     </div>
                   )}
 
-                  {/* Arbiter Decision Panel (before arbiter deadline) */}
                   {canRule && (
                     <div className="space-y-3 p-4 border border-outline-hairline bg-[#07080a]">
                       <p className="text-[12px] font-headline-mono font-bold uppercase text-white">
@@ -1102,7 +1105,6 @@ export default function PactDetailPage({ params }: { params: Promise<{ id: strin
                     </div>
                   )}
 
-                  {/* Unanswered Dispute Default Judgment */}
                   {canDefault && (
                     <div className="space-y-2 p-4 border border-amber-500/40 bg-amber-950/20">
                       <p className="text-[12px] font-body-sans text-amber-300">
@@ -1126,7 +1128,6 @@ export default function PactDetailPage({ params }: { params: Promise<{ id: strin
                     </div>
                   )}
 
-                  {/* Arbiter Timeout (14 days passed) */}
                   {canArbiterTimeout && (
                     <div className="space-y-2 p-4 border border-amber-500/40 bg-amber-950/20">
                       <p className="text-[12px] font-body-sans text-amber-300">
@@ -1151,63 +1152,135 @@ export default function PactDetailPage({ params }: { params: Promise<{ id: strin
                   )}
                 </div>
               )}
-            </>
+            </div>
           )}
         </section>
       )}
 
-      {/* Claimable Escrow Credits Panel */}
-      {Object.values(credits).some(value => value > 0n) && (
-        <section className="border border-emerald-500/40 bg-emerald-950/20 p-5 space-y-4 animate-enter">
-          <div className="flex items-center justify-between pb-3 border-b border-emerald-500/30">
+      {/* ========================================================================= */}
+      {/* 8. PROOF PAYLOAD & DISPUTE AUDIT TRAIL */}
+      {/* ========================================================================= */}
+      <div className="grid gap-6 sm:grid-cols-2">
+        {/* Written Terms & SHA-256 Verifier */}
+        <section aria-label="Written Terms Verification" className="border border-outline-border bg-[#0c0f12] p-5 animate-enter space-y-3">
+          <div className="flex items-center justify-between pb-3 border-b border-outline-hairline">
             <div className="flex items-center gap-2">
-              <span className="material-symbols-outlined text-emerald-400 text-[20px]">account_balance_wallet</span>
-              <h2 className="font-headline-mono text-[13px] font-bold uppercase tracking-wider text-emerald-300">
-                Claimable Escrow Credits Available
+              <span className="material-symbols-outlined text-[18px] text-primary-fixed">fingerprint</span>
+              <h2 className="font-headline-mono text-[13px] font-bold uppercase tracking-wider text-white">
+                Cryptographic Terms Hash
               </h2>
             </div>
-            <span className="text-[10px] font-label-caps uppercase text-emerald-400 font-bold">
-              Pull-Payment Balances
-            </span>
+            <span className="text-[10px] font-code-hash text-text-dim">SHA-256 On-Chain</span>
           </div>
 
-          <div className="p-3 border border-emerald-500/20 bg-[#07080a] text-[12px] font-body-sans text-text-muted">
-            <strong className="text-white">Pull-Payment Security Mechanism:</strong> In PACT V1, all collateral refunds, dispute bond returns, and settlements are safely credited to your internal escrow account. Click <strong>Withdraw</strong> to transfer funds directly into your wallet.
+          <div className="p-3 border border-outline-hairline bg-[#07080a] font-code-hash text-[11px] text-primary-fixed break-all select-all">
+            {pact.termsHash}
           </div>
 
-          <div className="space-y-2">
-            {uniqueTokens.map(token => credits[token] > 0n && (
-              <button
-                key={token}
-                disabled={busy}
-                onClick={() => {
-                  const withdrawAction: PactAction = {
-                    type: 'WITHDRAW_CREDITS',
-                    label: `Withdraw ${formatAmount(credits[token])} ${tokenSymbol(token)} to Wallet`,
-                    shortLabel: `Withdraw ${tokenSymbol(token)}`,
-                    functionName: 'withdraw',
-                    role: 'PUBLIC',
-                    severity: 'primary',
-                    isDangerous: false,
-                    isEligible: true,
-                    description: `Transfer internal escrow pull-payment credits directly into your connected wallet address (${truncateAddress(address || '')}).`,
-                    financialSummary: {
-                      amount: credits[token],
-                      token: token,
-                      recipient: address || '',
-                      recipientRole: 'Connected Wallet',
-                    },
-                  }
-                  requestActionConfirmation(withdrawAction, () => execute('withdraw', [token], `Withdraw ${tokenSymbol(token)}`))
-                }}
-                className="pact-button-primary flex w-full justify-between items-center px-4 py-3 min-h-[48px]"
-              >
-                <span>Withdraw {tokenSymbol(token)} to Connected Wallet</span>
-                <span className="font-bold text-[14px]">{formatAmount(credits[token])} {tokenSymbol(token)}</span>
-              </button>
-            ))}
+          <div>
+            <label htmlFor="terms-verify-input" className="block font-label-caps text-[11px] uppercase tracking-wider text-text-muted mb-1.5">
+              Verify Written Plaintext Terms Locally
+            </label>
+            <textarea
+              id="terms-verify-input"
+              value={termsInput}
+              onChange={e => setTermsInput(e.target.value)}
+              rows={3}
+              placeholder="Paste agreement text to confirm cryptographic match..."
+              className="w-full border border-outline-border bg-[#07080a] p-3 text-[12px] font-code-hash text-white outline-none focus:border-primary-fixed resize-y"
+            />
+            <div className="mt-1.5 flex items-center justify-between text-[11px] font-code-hash">
+              {termsMatch ? (
+                <span className="text-emerald-400 font-bold">
+                  ✓ Cryptographic Match: Plaintext terms verified.
+                </span>
+              ) : termsMismatch ? (
+                <span className="text-rose-400 font-bold">
+                  ❌ Mismatch: Plaintext does not match on-chain hash.
+                </span>
+              ) : (
+                <span className="text-text-dim">
+                  Paste plaintext to verify before signing acceptance.
+                </span>
+              )}
+            </div>
           </div>
         </section>
+
+        {/* Proof Deliverable & Dispute Logs */}
+        <section aria-label="Delivery Proof and Audit" className="border border-outline-border bg-[#0c0f12] p-5 animate-enter space-y-3">
+          <div className="flex items-center justify-between pb-3 border-b border-outline-hairline">
+            <div className="flex items-center gap-2">
+              <span className="material-symbols-outlined text-[18px] text-primary-fixed">inventory_2</span>
+              <h2 className="font-headline-mono text-[13px] font-bold uppercase tracking-wider text-white">
+                Fulfillment Proof & Audit
+              </h2>
+            </div>
+            <span className="text-[10px] font-code-hash text-text-dim">On-Chain Delivery</span>
+          </div>
+
+          {pact.status >= 2 && pact.proofHash && pact.proofHash !== '0x0000000000000000000000000000000000000000000000000000000000000000' ? (
+            <div className="space-y-2">
+              <span className="text-[10px] font-label-caps uppercase text-emerald-400 block font-bold">
+                ✓ Proof Anchored On-Chain
+              </span>
+              <div className="p-3 border border-emerald-500/30 bg-[#07080a] font-code-hash text-[11px] text-emerald-300 break-all select-all">
+                {pact.proofHash}
+              </div>
+            </div>
+          ) : (
+            <div className="p-4 border border-outline-hairline bg-[#07080a] text-center font-code-hash text-[12px] text-text-dim">
+              No delivery proof submitted yet.
+            </div>
+          )}
+
+          {/* Active Dispute Information Summary */}
+          {dispute && (
+            <div className="p-3 border border-amber-500/30 bg-amber-950/15 text-[11px] font-code-hash space-y-1.5">
+              <div className="flex justify-between">
+                <span className="text-text-muted">Dispute Opener:</span>
+                <span className="text-white font-bold">{truncateAddress(dispute.opener)}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-text-muted">Claim Type:</span>
+                <span className="text-amber-400 font-bold">{dispute.claim === 1 ? 'Maker Claim (Refund)' : 'Taker Claim (Release)'}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-text-muted">Response Cutoff:</span>
+                <span className="text-white">{formatDate(dispute.responseDeadline)}</span>
+              </div>
+            </div>
+          )}
+        </section>
+      </div>
+
+      {/* ========================================================================= */}
+      {/* 9. MOBILE STICKY BOTTOM ACTION BAR (< md) */}
+      {/* ========================================================================= */}
+      {primaryAction && primaryAction.isEligible && !isTerminal(pact.status) && (
+        <div className="md:hidden fixed bottom-0 left-0 right-0 z-40 p-3 bg-[#0c0f12]/95 backdrop-blur-md border-t border-primary-fixed/40 shadow-2xl flex items-center justify-between gap-3 animate-enter">
+          <div className="truncate">
+            <span className="font-headline-mono text-[11px] font-bold text-white block truncate">
+              Pact #{String(id).padStart(4, '0')} · {statusLabel(pact.status)}
+            </span>
+            <span className="text-[10px] text-primary-fixed block truncate">
+              {primaryAction.label}
+            </span>
+          </div>
+          <button
+            type="button"
+            disabled={busy}
+            onClick={() => {
+              const anchor = document.querySelector('section[aria-label="Action Execution Panel"]')
+              if (anchor) {
+                anchor.scrollIntoView({ behavior: 'smooth', block: 'center' })
+              }
+            }}
+            className="pact-button-primary min-h-[40px] px-4 text-[11px] font-bold uppercase tracking-wider shrink-0 shadow-lg"
+          >
+            ⚡ Act Now →
+          </button>
+        </div>
       )}
 
       {/* Pre-Flight Confirmation Modal */}
