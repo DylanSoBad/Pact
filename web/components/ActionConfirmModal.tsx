@@ -2,6 +2,8 @@
 
 import { formatAmount, tokenSymbol, truncateAddress } from '../lib/format'
 import type { PactAction } from '../lib/actionMatrix'
+import RoleBadge from './RoleBadge'
+import AddressDisplay from './AddressDisplay'
 
 export interface ActionConfirmModalProps {
   isOpen: boolean
@@ -23,12 +25,6 @@ export default function ActionConfirmModal({
   if (!isOpen || !action) return null
 
   const isDangerous = action.isDangerous
-  const severityBadge =
-    action.severity === 'danger'
-      ? 'border-rose-500/40 bg-rose-950/30 text-rose-400'
-      : action.severity === 'warning'
-      ? 'border-amber-500/40 bg-amber-950/30 text-amber-400'
-      : 'border-primary-fixed/40 bg-primary-fixed/10 text-primary-fixed'
 
   return (
     <div
@@ -41,13 +37,11 @@ export default function ActionConfirmModal({
         {/* Header */}
         <div className="flex items-start justify-between gap-3 pb-3 border-b border-outline-hairline">
           <div>
-            <div className="flex items-center gap-2 mb-1">
+            <div className="flex items-center gap-2 mb-1.5 flex-wrap">
               <span className="text-[10px] font-label-caps uppercase text-text-muted">
                 Pact #{String(pactId).padStart(4, '0')} · Pre-Flight Action Review
               </span>
-              <span className={`px-2 py-0.5 text-[9px] font-label-caps uppercase font-bold border ${severityBadge}`}>
-                {action.role}
-              </span>
+              <RoleBadge role={action.role} isCurrentUser={true} size="xs" />
             </div>
             <h2 id="action-confirm-title" className="font-headline-mono text-[16px] font-bold text-white">
               {action.label}
@@ -75,10 +69,10 @@ export default function ActionConfirmModal({
           </div>
         </div>
 
-        {/* Financial Flow Breakdown */}
-        <div className="border border-outline-hairline bg-[#07080a] p-3.5 space-y-2.5 text-[12px]">
+        {/* Financial Flow Breakdown & Counterparty Identity */}
+        <div className="border border-outline-hairline bg-[#07080a] p-3.5 space-y-3 text-[12px]">
           <span className="font-label-caps text-[10px] uppercase text-text-muted block border-b border-outline-hairline/40 pb-1">
-            Capital Movement & Custody Impact
+            Capital Movement & Counterparty Flow
           </span>
 
           {action.financialSummary.amount > 0n && (
@@ -99,11 +93,21 @@ export default function ActionConfirmModal({
             </div>
           )}
 
-          <div className="flex items-center justify-between">
-            <span className="text-text-dim">Recipient / Custody:</span>
-            <span className="text-white font-medium">
-              {truncateAddress(action.financialSummary.recipient)} ({action.financialSummary.recipientRole})
-            </span>
+          <div className="pt-2 border-t border-outline-hairline/40 space-y-1.5">
+            <div className="flex items-center justify-between text-text-dim text-[11px]">
+              <span>Recipient Role:</span>
+              <span className="text-white font-bold">{action.financialSummary.recipientRole}</span>
+            </div>
+            {action.financialSummary.recipient && (
+              <div className="flex items-center justify-between text-[11px]">
+                <span className="text-text-dim">Recipient Address:</span>
+                <AddressDisplay
+                  address={action.financialSummary.recipient}
+                  showCopy={true}
+                  showExplorer={true}
+                />
+              </div>
+            )}
           </div>
         </div>
 

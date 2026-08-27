@@ -5,6 +5,7 @@ import type { PactData } from '../lib/reads'
 import { formatDate } from '../lib/format'
 
 import { evaluatePactActions, type ActionType, type ActionRole, type ActionSeverity } from '../lib/actionMatrix'
+import RoleBadge, { type RoleType } from './RoleBadge'
 
 export type ActionItem = {
   pact: PactData
@@ -236,9 +237,11 @@ export default function ActionCenter({ pacts, address }: { pacts: PactData[]; ad
                         {action.title}
                       </span>
                       {action.role && (
-                        <span className="px-1.5 py-0.2 border border-outline-hairline bg-[#12161b] text-[9px] font-label-caps uppercase text-text-muted">
-                          {action.role}
-                        </span>
+                        <RoleBadge
+                          role={action.role as RoleType}
+                          isCurrentUser={true}
+                          size="xs"
+                        />
                       )}
                     </div>
                     <span className={`px-2 py-0.5 font-label-caps text-[9px] uppercase tracking-wider font-bold shrink-0 ${deadlineStatus.badgeStyle}`}>

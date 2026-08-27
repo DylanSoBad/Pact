@@ -16,6 +16,8 @@ import PactStateMachine from '../../../components/PactStateMachine'
 import Countdown from '../../../components/Countdown'
 import TransactionProgress, { type TransactionStage } from '../../../components/TransactionProgress'
 import ActionConfirmModal from '../../../components/ActionConfirmModal'
+import RoleBadge from '../../../components/RoleBadge'
+import PartyCard from '../../../components/PartyCard'
 import { transactionErrorMessage } from '../../../lib/transactionErrors'
 import { evaluatePactActions, type PactAction, type DisputeData } from '../../../lib/actionMatrix'
 
@@ -219,7 +221,7 @@ export default function PactDetailPage({ params }: { params: Promise<{ id: strin
         permit
           ? [BigInt(id), expectedTermsHash, permit.deadline, permit.v, permit.r, permit.s]
           : [BigInt(id), expectedTermsHash],
-        'Accept pact offer & lock counterparty collateral',
+        'Accept pact offer as Counterparty',
       )
     } catch (error) {
       setBusyLabel('')
@@ -409,52 +411,28 @@ export default function PactDetailPage({ params }: { params: Promise<{ id: strin
         </div>
       </section>
 
-      {/* Participants Matrix (Maker, Counterparty, Arbiter) */}
+      {/* Participants Matrix with PartyCards */}
       <section aria-label="Pact Participants" className="grid gap-3 sm:grid-cols-3 animate-enter">
-        {/* Maker Card */}
-        <div className={`p-4 border bg-[#0c0f12] flex flex-col justify-between ${isMaker ? 'border-primary-fixed/50 ring-1 ring-primary-fixed/20' : 'border-outline-border'}`}>
-          <div>
-            <div className="flex items-center justify-between mb-2">
-              <span className="font-label-caps text-[10px] uppercase tracking-wider text-text-muted">Maker (Creator)</span>
-              {isMaker && <span className="px-1.5 py-0.5 bg-primary-fixed text-black font-label-caps text-[9px] font-bold uppercase">You</span>}
-            </div>
-            <p className="font-code-hash text-[13px] font-bold text-white break-all">{truncateAddress(pact.maker)}</p>
-          </div>
-          <div className="mt-3 pt-2 border-t border-outline-hairline/60 flex items-center justify-between text-[11px] font-code-hash">
-            <span className="text-primary-fixed">{formatAmount(pact.amountMaker)} {tokenSymbol(pact.tokenMaker)}</span>
-            <a href={`https://testnet.arcscan.app/address/${pact.maker}`} target="_blank" rel="noreferrer" className="text-text-dim hover:text-primary-fixed">ArcScan ↗</a>
-          </div>
-        </div>
-
-        {/* Counterparty Card */}
-        <div className={`p-4 border bg-[#0c0f12] flex flex-col justify-between ${isTaker ? 'border-primary-fixed/50 ring-1 ring-primary-fixed/20' : 'border-outline-border'}`}>
-          <div>
-            <div className="flex items-center justify-between mb-2">
-              <span className="font-label-caps text-[10px] uppercase tracking-wider text-text-muted">Counterparty (Taker)</span>
-              {isTaker && <span className="px-1.5 py-0.5 bg-primary-fixed text-black font-label-caps text-[9px] font-bold uppercase">You</span>}
-            </div>
-            <p className="font-code-hash text-[13px] font-bold text-white break-all">{truncateAddress(pact.taker)}</p>
-          </div>
-          <div className="mt-3 pt-2 border-t border-outline-hairline/60 flex items-center justify-between text-[11px] font-code-hash">
-            <span className="text-white">{pact.amountTaker > 0n ? `${formatAmount(pact.amountTaker)} ${tokenSymbol(pact.tokenTaker)}` : '0 Collateral'}</span>
-            <a href={`https://testnet.arcscan.app/address/${pact.taker}`} target="_blank" rel="noreferrer" className="text-text-dim hover:text-primary-fixed">ArcScan ↗</a>
-          </div>
-        </div>
-
-        {/* Arbiter Card */}
-        <div className={`p-4 border bg-[#0c0f12] flex flex-col justify-between ${isArbiter ? 'border-primary-fixed/50 ring-1 ring-primary-fixed/20' : 'border-outline-border'}`}>
-          <div>
-            <div className="flex items-center justify-between mb-2">
-              <span className="font-label-caps text-[10px] uppercase tracking-wider text-text-muted">Designated Arbiter</span>
-              {isArbiter && <span className="px-1.5 py-0.5 bg-primary-fixed text-black font-label-caps text-[9px] font-bold uppercase">You</span>}
-            </div>
-            <p className="font-code-hash text-[13px] font-bold text-white break-all">{truncateAddress(pact.arbiter)}</p>
-          </div>
-          <div className="mt-3 pt-2 border-t border-outline-hairline/60 flex items-center justify-between text-[11px] font-code-hash">
-            <span className="text-text-muted">Fee Cap: {formatAmount(pact.arbiterFeeCap)} USDC</span>
-            <a href={`https://testnet.arcscan.app/address/${pact.arbiter}`} target="_blank" rel="noreferrer" className="text-text-dim hover:text-primary-fixed">ArcScan ↗</a>
-          </div>
-        </div>
+        <PartyCard
+          role="MAKER"
+          address={pact.maker}
+          isCurrentUser={isMaker}
+          collateralAmount={pact.amountMaker}
+          tokenAddress={pact.tokenMaker}
+        />
+        <PartyCard
+          role="TAKER"
+          address={pact.taker}
+          isCurrentUser={isTaker}
+          collateralAmount={pact.amountTaker}
+          tokenAddress={pact.tokenTaker}
+        />
+        <PartyCard
+          role="ARBITER"
+          address={pact.arbiter}
+          isCurrentUser={isArbiter}
+          feeCap={pact.arbiterFeeCap}
+        />
       </section>
 
       {/* Deadlines & Time Windows */}
@@ -634,6 +612,45 @@ export default function PactDetailPage({ params }: { params: Promise<{ id: strin
             </div>
           ) : (
             <>
+              {/* Connected User Role Clarity Banner */}
+              <div className={`p-4 border flex items-start gap-3.5 ${
+                isMaker
+                  ? 'border-primary-fixed/50 bg-primary-fixed/5'
+                  : isTaker
+                  ? 'border-sky-500/50 bg-sky-950/20'
+                  : isArbiter
+                  ? 'border-purple-500/50 bg-purple-950/20'
+                  : 'border-outline-hairline bg-[#07080a]'
+              }`}>
+                <div className="shrink-0 mt-0.5">
+                  <RoleBadge
+                    role={isMaker ? 'MAKER' : isTaker ? 'TAKER' : isArbiter ? 'ARBITER' : 'OBSERVER'}
+                    isCurrentUser={isMaker || isTaker || isArbiter}
+                    size="md"
+                  />
+                </div>
+                <div className="space-y-1">
+                  <p className="text-[12px] font-bold text-white">
+                    {isMaker
+                      ? 'You are the Maker (Deal Creator)'
+                      : isTaker
+                      ? 'You are the Designated Counterparty (Taker)'
+                      : isArbiter
+                      ? 'You are the Designated Neutral Arbiter'
+                      : 'You are viewing as an Observer (Third-Party)'}
+                  </p>
+                  <p className="text-[11px] font-body-sans text-text-muted leading-relaxed">
+                    {isMaker
+                      ? `You deposited ${formatAmount(pact.amountMaker)} ${tokenSymbol(pact.tokenMaker)} into escrow. Counterparty is ${truncateAddress(pact.taker)}. You hold authority to release funds upon satisfaction or open a dispute before cutoff.`
+                      : isTaker
+                      ? `Maker is ${truncateAddress(pact.maker)}. You are responsible for delivering work and submitting proof before the performance cutoff.`
+                      : isArbiter
+                      ? `You are assigned to evaluate evidence and issue a binding ruling if a dispute is opened and bonded by both parties.`
+                      : `State-changing deal actions are restricted to Maker (${truncateAddress(pact.maker)}) and Counterparty (${truncateAddress(pact.taker)}). Public execution becomes available if deadlines lapse.`}
+                  </p>
+                </div>
+              </div>
+
               {/* STATUS 0: OFFERED (Before Expiry) */}
               {pact.status === 0 && now <= pact.offerExpiry && (
                 <div className="space-y-3">
@@ -652,7 +669,7 @@ export default function PactDetailPage({ params }: { params: Promise<{ id: strin
                         }}
                         className="pact-button-primary w-full min-h-[48px] text-[12px] font-bold uppercase tracking-wider disabled:opacity-40"
                       >
-                        {termsMatch ? 'Verify Terms & Accept Pact Offer' : 'Paste Matching Plaintext Terms to Enable Acceptance'}
+                        {termsMatch ? 'Verify Terms & Accept Pact as Counterparty' : 'Paste Matching Plaintext Terms to Enable Acceptance'}
                       </button>
                       {!termsMatch && (
                         <p className="text-[11px] font-code-hash text-amber-300">
@@ -679,7 +696,7 @@ export default function PactDetailPage({ params }: { params: Promise<{ id: strin
                         }}
                         className="pact-button-secondary w-full min-h-[44px] text-[11px] font-bold uppercase text-rose-300 hover:text-rose-200 border-rose-500/30 hover:border-rose-400"
                       >
-                        Cancel Offer & Reclaim Maker Collateral
+                        Cancel Offer as Maker & Reclaim Escrow Collateral
                       </button>
                     </div>
                   )}
@@ -772,7 +789,7 @@ export default function PactDetailPage({ params }: { params: Promise<{ id: strin
                           }}
                           className="pact-button-primary min-h-[44px] px-5 text-[11px] font-bold uppercase tracking-wider shrink-0 disabled:opacity-40"
                         >
-                          Submit Proof Hash
+                          Submit Proof as Counterparty
                         </button>
                       </div>
                     </div>
@@ -806,7 +823,7 @@ export default function PactDetailPage({ params }: { params: Promise<{ id: strin
                         }}
                         className="pact-button-primary w-full min-h-[48px] text-[12px] font-bold uppercase tracking-wider"
                       >
-                        Release Collateral to Counterparty
+                        Release Collateral to Counterparty ({truncateAddress(pact.taker)})
                       </button>
                     </div>
                   )}
@@ -827,7 +844,7 @@ export default function PactDetailPage({ params }: { params: Promise<{ id: strin
                         }}
                         className="pact-button-secondary w-full min-h-[44px] text-[11px] font-bold uppercase tracking-wider text-amber-400 hover:border-amber-400"
                       >
-                        Open Bonded Dispute ({formatAmount(pact.bondAmount)} USDC Bond)
+                        Open Bonded Dispute as {isMaker ? 'Maker' : 'Counterparty'} ({formatAmount(pact.bondAmount)} USDC Bond)
                       </button>
                     </div>
                   )}
@@ -858,7 +875,7 @@ export default function PactDetailPage({ params }: { params: Promise<{ id: strin
                           }}
                           className="pact-button-primary w-full min-h-[48px] text-[12px] font-bold uppercase tracking-wider"
                         >
-                          Claim Full Collateral Refund ({formatAmount(pact.amountMaker)} {tokenSymbol(pact.tokenMaker)})
+                          Claim Full Collateral Refund as Maker ({formatAmount(pact.amountMaker)} {tokenSymbol(pact.tokenMaker)})
                         </button>
                       ) : isTaker ? (
                         <div className="p-3 border border-outline-hairline bg-[#07080a] text-[12px] text-text-dim font-code-hash">
@@ -893,7 +910,7 @@ export default function PactDetailPage({ params }: { params: Promise<{ id: strin
                   {isMaker && now <= pact.disputeDeadline && (
                     <div className="space-y-2">
                       <p className="text-[12px] font-body-sans text-text-muted">
-                        Proof submitted by counterparty. Review proof and release escrow funds, or open a bonded dispute before cutoff ({formatDate(pact.disputeDeadline)}).
+                        Proof submitted by Counterparty ({truncateAddress(pact.taker)}). Review deliverable proof and release escrow funds, or open a bonded dispute before cutoff ({formatDate(pact.disputeDeadline)}).
                       </p>
                       <button
                         type="button"
@@ -908,7 +925,7 @@ export default function PactDetailPage({ params }: { params: Promise<{ id: strin
                         }}
                         className="pact-button-primary w-full min-h-[48px] text-[12px] font-bold uppercase tracking-wider"
                       >
-                        Release Collateral to Counterparty
+                        Review Proof & Release Escrow to Counterparty
                       </button>
                     </div>
                   )}
@@ -916,7 +933,7 @@ export default function PactDetailPage({ params }: { params: Promise<{ id: strin
                   {/* Taker Awaiting Maker Review */}
                   {isTaker && now <= pact.disputeDeadline && (
                     <div className="p-3 border border-outline-hairline bg-[#07080a] text-[12px] text-text-dim font-code-hash">
-                      Proof anchored on-chain. Maker has until {formatDate(pact.disputeDeadline)} to release funds or open a dispute.
+                      Proof anchored on-chain. Maker ({truncateAddress(pact.maker)}) has until {formatDate(pact.disputeDeadline)} to release funds or open a dispute.
                     </div>
                   )}
 
@@ -936,7 +953,7 @@ export default function PactDetailPage({ params }: { params: Promise<{ id: strin
                         }}
                         className="pact-button-secondary w-full min-h-[44px] text-[11px] font-bold uppercase tracking-wider text-amber-400 hover:border-amber-400"
                       >
-                        Open Bonded Dispute ({formatAmount(pact.bondAmount)} USDC Bond)
+                        Open Bonded Dispute as {isMaker ? 'Maker' : 'Counterparty'} ({formatAmount(pact.bondAmount)} USDC Bond)
                       </button>
                     </div>
                   )}
@@ -951,7 +968,7 @@ export default function PactDetailPage({ params }: { params: Promise<{ id: strin
                         </span>
                       </div>
                       <p className="text-[12px] font-body-sans text-text-muted">
-                        The dispute window closed with proof unchallenged. Escrow funds and collateral are released 100% to the Counterparty (Taker).
+                        The dispute window closed with proof unchallenged. Escrow funds and collateral are released 100% to the Counterparty ({truncateAddress(pact.taker)}).
                       </p>
                       {isTaker ? (
                         <button
@@ -967,7 +984,7 @@ export default function PactDetailPage({ params }: { params: Promise<{ id: strin
                           }}
                           className="pact-button-primary w-full min-h-[48px] text-[12px] font-bold uppercase tracking-wider"
                         >
-                          Claim Escrow Payout & Collateral
+                          Claim Escrow Payout & Collateral as Counterparty
                         </button>
                       ) : isMaker ? (
                         <button
@@ -1029,7 +1046,7 @@ export default function PactDetailPage({ params }: { params: Promise<{ id: strin
                         }}
                         className="pact-button-primary w-full min-h-[48px] text-[12px] font-bold uppercase tracking-wider"
                       >
-                        Post Counter-Bond & Contest Dispute
+                        Post Counter-Bond as Respondent & Contest Dispute
                       </button>
                     </div>
                   )}
@@ -1038,7 +1055,7 @@ export default function PactDetailPage({ params }: { params: Promise<{ id: strin
                   {canRule && (
                     <div className="space-y-3 p-4 border border-outline-hairline bg-[#07080a]">
                       <p className="text-[12px] font-headline-mono font-bold uppercase text-white">
-                        Arbiter Decision Panel
+                        Designated Arbiter Decision Panel
                       </p>
                       <div>
                         <label className="block text-[11px] font-label-caps uppercase text-text-muted mb-1">
@@ -1064,7 +1081,7 @@ export default function PactDetailPage({ params }: { params: Promise<{ id: strin
                           }}
                           className="pact-button-primary min-h-[44px] text-[11px] font-bold uppercase"
                         >
-                          Rule for Maker (Refund)
+                          Rule for Maker (100% Refund)
                         </button>
                         <button
                           type="button"
@@ -1079,7 +1096,7 @@ export default function PactDetailPage({ params }: { params: Promise<{ id: strin
                           }}
                           className="pact-button-primary min-h-[44px] text-[11px] font-bold uppercase"
                         >
-                          Rule for Taker (Release)
+                          Rule for Counterparty (100% Release)
                         </button>
                       </div>
                     </div>

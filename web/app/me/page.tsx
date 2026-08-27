@@ -30,6 +30,8 @@ import {
 import TransactionProgress, { type TransactionStage } from '../../components/TransactionProgress'
 import { transactionErrorMessage } from '../../lib/transactionErrors'
 import { getPrimaryUserAction } from '../../lib/actionMatrix'
+import RoleBadge from '../../components/RoleBadge'
+import AddressDisplay from '../../components/AddressDisplay'
 
 export default function MePage() {
   const { address, isConnected } = useAccount()
@@ -746,19 +748,17 @@ export default function MePage() {
 
                       {/* Col 3: Role & Counterparty */}
                       <div className="col-span-3">
-                        <div className="flex items-center gap-1.5">
-                          <span className={`px-1.5 py-0.5 text-[9px] font-label-caps uppercase font-bold ${
-                            isMaker
-                              ? 'bg-primary-fixed/10 text-primary-fixed border border-primary-fixed/30'
-                              : isTaker
-                              ? 'bg-sky-950/30 text-sky-400 border border-sky-500/30'
-                              : 'bg-purple-950/30 text-purple-400 border border-purple-500/30'
-                          }`}>
-                            {isMaker ? 'MAKER' : isTaker ? 'COUNTERPARTY' : 'ARBITER'}
-                          </span>
-                          <span className="text-text-muted text-[11px]">
-                            {truncateAddress(counterparty)}
-                          </span>
+                        <div className="flex items-center gap-1.5 flex-wrap">
+                          <RoleBadge
+                            role={isMaker ? 'MAKER' : isTaker ? 'TAKER' : 'ARBITER'}
+                            isCurrentUser={true}
+                            size="xs"
+                          />
+                          <AddressDisplay
+                            address={counterparty}
+                            showCopy={true}
+                            showExplorer={true}
+                          />
                         </div>
                       </div>
 
@@ -813,15 +813,11 @@ export default function MePage() {
                           >
                             #{String(p.id).padStart(4, '0')}
                           </Link>
-                          <span className={`px-1.5 py-0.5 text-[9px] font-label-caps uppercase font-bold ${
-                            isMaker
-                              ? 'bg-primary-fixed/10 text-primary-fixed border border-primary-fixed/30'
-                              : isTaker
-                              ? 'bg-sky-950/30 text-sky-400 border border-sky-500/30'
-                              : 'bg-purple-950/30 text-purple-400 border border-purple-500/30'
-                          }`}>
-                            {isMaker ? 'MAKER' : isTaker ? 'COUNTERPARTY' : 'ARBITER'}
-                          </span>
+                          <RoleBadge
+                            role={isMaker ? 'MAKER' : isTaker ? 'TAKER' : 'ARBITER'}
+                            isCurrentUser={true}
+                            size="xs"
+                          />
                         </div>
                         <span className={`px-2 py-0.5 text-[9px] font-label-caps uppercase font-bold ${
                           p.status === 4
@@ -849,10 +845,15 @@ export default function MePage() {
                         )}
                       </div>
 
-                      <div className="flex items-center justify-between pt-1">
-                        <span className="text-[11px] text-text-dim">
-                          Counterparty: {truncateAddress(counterparty)}
-                        </span>
+                      <div className="flex items-center justify-between pt-1 flex-wrap gap-2">
+                        <div className="flex items-center gap-1.5 text-[11px] text-text-dim">
+                          <span>Counterparty:</span>
+                          <AddressDisplay
+                            address={counterparty}
+                            showCopy={true}
+                            showExplorer={true}
+                          />
+                        </div>
                         <Link
                           href={`/p/${p.id}`}
                           className={`px-3 py-1 text-[11px] font-bold uppercase tracking-wider transition-colors ${
