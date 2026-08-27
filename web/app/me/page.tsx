@@ -2,10 +2,10 @@
 
 import { useState, useEffect, useMemo, useCallback, useRef } from 'react'
 import Link from 'next/link'
-import TapeLine from '../../components/TapeLine'
 import ActionCenter from '../../components/ActionCenter'
 import TableSkeleton from '../../components/TableSkeleton'
 import NetworkStatusBanner from '../../components/NetworkStatusBanner'
+import Countdown from '../../components/Countdown'
 import { useAccount, useChainId, usePublicClient, useWalletClient } from 'wagmi'
 import { useModal } from 'connectkit'
 import { toast } from 'sonner'
@@ -14,13 +14,17 @@ import { USDC_ERC20, EURC, getPactAddress } from '../../lib/arc'
 import { PACT_ABI } from '../../lib/abi'
 import {
   kindLabel, statusLabel, effectiveStatusLabel, formatAmount, tokenSymbol,
-  formatTimestamp, truncateAddress
+  formatTimestamp, truncateAddress, formatDate
 } from '../../lib/format'
 import { useCurrentTime } from '../../hooks/useCurrentTime'
 import {
   filterPortfolioPacts,
+  computeActiveCapitalAtStake,
+  computeRoleCounts,
+  getRelevantDeadline,
   type PortfolioRoleFilter,
   type PortfolioStatusFilter,
+  type PortfolioSortOrder,
   requiresActionFrom
 } from '../../lib/filter'
 import TransactionProgress, { type TransactionStage } from '../../components/TransactionProgress'
@@ -42,6 +46,7 @@ export default function MePage() {
   const [networkError, setNetworkError] = useState(false)
   const [roleFilter, setRoleFilter] = useState<PortfolioRoleFilter>('ALL')
   const [statusFilter, setStatusFilter] = useState<PortfolioStatusFilter>('ALL')
+  const [sortOrder, setSortOrder] = useState<PortfolioSortOrder>('DEADLINE')
   const [searchQuery, setSearchQuery] = useState('')
   const [copiedAddr, setCopiedAddr] = useState(false)
   const [nextCursor, setNextCursor] = useState<string | null>(null)
@@ -54,20 +59,24 @@ export default function MePage() {
   const inFlightRef = useRef(false)
 
   useEffect(() => {
-    document.title = 'PACT · Portfolio & Account'
+    document.title = 'PACT · Executive Portfolio Command Center'
 
     // Parse URL query params on mount
     if (typeof window !== 'undefined') {
       const params = new URLSearchParams(window.location.search)
       const roleParam = params.get('role')?.toUpperCase() as PortfolioRoleFilter | null
       const statusParam = params.get('status')?.toUpperCase() as PortfolioStatusFilter | null
+      const sortParam = params.get('sort')?.toUpperCase() as PortfolioSortOrder | null
       const qParam = params.get('q')
 
-      if (roleParam && (['ALL', 'MAKER', 'TAKER'] as PortfolioRoleFilter[]).includes(roleParam)) {
+      if (roleParam && (['ALL', 'MAKER', 'TAKER', 'ARBITER'] as PortfolioRoleFilter[]).includes(roleParam)) {
         setRoleFilter(roleParam)
       }
       if (statusParam && (['ALL', 'ACTION_REQUIRED', 'LIVE', 'SETTLED', 'EXPIRED', 'DISPUTED'] as PortfolioStatusFilter[]).includes(statusParam)) {
         setStatusFilter(statusParam)
+      }
+      if (sortParam && (['DEADLINE', 'NEWEST', 'VALUE'] as PortfolioSortOrder[]).includes(sortParam)) {
+        setSortOrder(sortParam)
       }
       if (qParam) {
         setSearchQuery(qParam)
@@ -75,7 +84,12 @@ export default function MePage() {
     }
   }, [])
 
-  const updateUrlParams = (newRole: PortfolioRoleFilter, newStatus: PortfolioStatusFilter, newSearch: string) => {
+  const updateUrlParams = (
+    newRole: PortfolioRoleFilter,
+    newStatus: PortfolioStatusFilter,
+    newSort: PortfolioSortOrder,
+    newSearch: string
+  ) => {
     if (typeof window !== 'undefined') {
       const url = new URL(window.location.href)
       if (newRole === 'ALL') url.searchParams.delete('role')
@@ -83,6 +97,9 @@ export default function MePage() {
 
       if (newStatus === 'ALL') url.searchParams.delete('status')
       else url.searchParams.set('status', newStatus)
+
+      if (newSort === 'DEADLINE') url.searchParams.delete('sort')
+      else url.searchParams.set('sort', newSort)
 
       if (!newSearch.trim()) url.searchParams.delete('q')
       else url.searchParams.set('q', newSearch.trim())
@@ -93,24 +110,30 @@ export default function MePage() {
 
   const handleSetRoleFilter = (r: PortfolioRoleFilter) => {
     setRoleFilter(r)
-    updateUrlParams(r, statusFilter, searchQuery)
+    updateUrlParams(r, statusFilter, sortOrder, searchQuery)
   }
 
   const handleSetStatusFilter = (s: PortfolioStatusFilter) => {
     setStatusFilter(s)
-    updateUrlParams(roleFilter, s, searchQuery)
+    updateUrlParams(roleFilter, s, sortOrder, searchQuery)
+  }
+
+  const handleSetSortOrder = (sort: PortfolioSortOrder) => {
+    setSortOrder(sort)
+    updateUrlParams(roleFilter, statusFilter, sort, searchQuery)
   }
 
   const handleSearchChange = (q: string) => {
     setSearchQuery(q)
-    updateUrlParams(roleFilter, statusFilter, q)
+    updateUrlParams(roleFilter, statusFilter, sortOrder, q)
   }
 
   const handleResetFilters = () => {
     setRoleFilter('ALL')
     setStatusFilter('ALL')
+    setSortOrder('DEADLINE')
     setSearchQuery('')
-    updateUrlParams('ALL', 'ALL', '')
+    updateUrlParams('ALL', 'ALL', 'DEADLINE', '')
   }
 
   const loadUserData = useCallback(async (cursor: string | null = null, mode: 'replace' | 'refresh' | 'append' = 'refresh') => {
@@ -149,7 +172,7 @@ export default function MePage() {
         setCredits(Object.fromEntries(balances))
       }
     } catch (err) {
-      console.error('Error loading /me data:', err)
+      console.error('Error loading executive /me data:', err)
       setNetworkError(true)
     } finally {
       inFlightRef.current = false
@@ -226,6 +249,20 @@ export default function MePage() {
     }
   }
 
+  // Executive Capital & Filter Metrics
+  const capitalSummary = useMemo(() => {
+    return computeActiveCapitalAtStake(pacts, address || '')
+  }, [pacts, address])
+
+  const roleCounts = useMemo(() => {
+    return computeRoleCounts(pacts, address || '')
+  }, [pacts, address])
+
+  const claimableCredits = Object.entries(credits).filter(([, val]) => val > 0n)
+  const totalClaimableCredits = useMemo(() => {
+    return Object.values(credits).reduce((acc, v) => acc + v, 0n)
+  }, [credits])
+
   const filteredPacts = useMemo(() => {
     return filterPortfolioPacts(pacts, {
       role: roleFilter,
@@ -233,18 +270,15 @@ export default function MePage() {
       accountAddress: address,
       currentNowTs: BigInt(currentTime),
       searchQuery,
+      sortOrder,
     })
-  }, [pacts, roleFilter, statusFilter, address, currentTime, searchQuery])
+  }, [pacts, roleFilter, statusFilter, address, currentTime, searchQuery, sortOrder])
 
-  const roleCounts = useMemo(() => {
-    if (!address) return { ALL: 0, MAKER: 0, TAKER: 0 }
-    const account = address.toLowerCase()
-    return {
-      ALL: pacts.length,
-      MAKER: pacts.filter(p => p.maker.toLowerCase() === account).length,
-      TAKER: pacts.filter(p => p.taker.toLowerCase() === account).length,
-    }
-  }, [pacts, address])
+  const pendingActionsCount = useMemo(() => {
+    if (!address) return 0
+    const now = BigInt(currentTime)
+    return pacts.filter(p => requiresActionFrom(p, address, now)).length
+  }, [pacts, address, currentTime])
 
   const statusCounts = useMemo(() => {
     const now = BigInt(currentTime)
@@ -252,6 +286,7 @@ export default function MePage() {
     const roleRestricted = pacts.filter(p => {
       if (roleFilter === 'MAKER') return p.maker.toLowerCase() === account
       if (roleFilter === 'TAKER') return p.taker.toLowerCase() === account
+      if (roleFilter === 'ARBITER') return p.arbiter.toLowerCase() === account
       return true
     })
 
@@ -268,12 +303,11 @@ export default function MePage() {
     }
   }, [pacts, address, roleFilter, currentTime])
 
-  const hasReputation = Boolean(reputation && (reputation.cleared + reputation.slashed > 0))
-  const successRate = hasReputation && reputation
-    ? ((reputation.cleared / (reputation.cleared + reputation.slashed)) * 100).toFixed(0)
+  // Verified clearance track record (ignoring self-reported unverified notional)
+  const totalSettledOrDisputed = (reputation?.cleared || 0) + (reputation?.slashed || 0)
+  const successRate = totalSettledOrDisputed > 0 && reputation
+    ? ((reputation.cleared / totalSettledOrDisputed) * 100).toFixed(0)
     : null
-
-  const claimableCredits = Object.entries(credits).filter(([, val]) => val > 0n)
 
   // Disconnected State
   if (!isConnected) {
@@ -283,12 +317,12 @@ export default function MePage() {
           <div className="mx-auto mb-4 flex h-12 w-12 items-center justify-center border border-outline-border bg-[#12161b] text-primary-fixed">
             <span className="material-symbols-outlined text-[24px]">lock</span>
           </div>
-          <p className="pact-eyebrow mb-2">Private On-chain Portfolio</p>
+          <p className="pact-eyebrow mb-2">Executive Escrow Command Center</p>
           <h1 className="font-display-mono text-[24px] sm:text-[28px] font-bold text-white tracking-tight">
             Connect Your Wallet
           </h1>
           <p className="mt-3 max-w-md mx-auto font-body-sans text-[13px] leading-6 text-text-muted">
-            Connect your Arc Network wallet to view your active escrow commitments, track counterparties, review pending actions, and inspect your on-chain settlement reputation.
+            Connect your Arc Network wallet to access your executive command center: inspect active capital at stake, withdraw claimable credits, and prioritize pending commitments.
           </p>
           <button
             type="button"
@@ -300,24 +334,24 @@ export default function MePage() {
 
           <div className="mt-8 pt-6 border-t border-outline-hairline text-left">
             <h2 className="font-headline-mono text-[12px] font-bold uppercase tracking-wider text-white mb-2">
-              What you can do in Portfolio:
+              Executive Command Features:
             </h2>
             <ul className="grid gap-2 sm:grid-cols-2 text-[12px] font-body-sans text-text-muted">
               <li className="flex items-center gap-2">
                 <span className="text-primary-fixed">✓</span>
-                Monitor your created & counterparty pacts
+                Live capital at stake across Maker & Taker roles
               </li>
               <li className="flex items-center gap-2">
                 <span className="text-primary-fixed">✓</span>
-                Withdraw available escrow refund credits
+                Instant pull-payment credits withdrawal
               </li>
               <li className="flex items-center gap-2">
                 <span className="text-primary-fixed">✓</span>
-                Track actions required across active deals
+                Deadline-prioritized Action Center
               </li>
               <li className="flex items-center gap-2">
                 <span className="text-primary-fixed">✓</span>
-                Inspect on-chain settlement reputation
+                Verified on-chain clearance track record
               </li>
             </ul>
           </div>
@@ -326,26 +360,33 @@ export default function MePage() {
     )
   }
 
-  // Connected Portfolio View
   return (
     <div className="w-full space-y-6">
       {/* Portfolio Header & Wallet Identity */}
       <header className="flex flex-col sm:flex-row sm:items-end justify-between gap-4 border-b border-outline-hairline pb-5 animate-enter">
         <div>
-          <p className="pact-eyebrow mb-1">Account Portfolio & Escrow Balances</p>
+          <p className="pact-eyebrow mb-1">Personal Pact Command Center</p>
           <h1 className="font-display-mono text-[24px] sm:text-[30px] font-bold text-white tracking-tight">
-            My Portfolio
+            Executive Portfolio
           </h1>
-          <div className="mt-2 flex items-center gap-2 font-code-hash text-[12px]">
-            <span className="text-text-muted">Connected:</span>
+          <div className="mt-2 flex items-center gap-2 font-code-hash text-[12px] flex-wrap">
+            <span className="text-text-muted">Connected Wallet:</span>
             <span className="text-white font-bold">{truncateAddress(address || '')}</span>
             <button
               type="button"
               onClick={copyAddress}
               className="text-text-dim hover:text-primary-fixed transition-colors text-[11px] underline"
             >
-              {copiedAddr ? 'Copied' : 'Copy'}
+              {copiedAddr ? 'Copied ✓' : 'Copy'}
             </button>
+            <a
+              href={`https://testnet.arcscan.app/address/${address}`}
+              target="_blank"
+              rel="noreferrer"
+              className="text-[11px] font-label-caps uppercase tracking-wider text-primary-fixed hover:underline flex items-center gap-0.5 ml-1"
+            >
+              ArcScan ↗
+            </a>
           </div>
         </div>
         <div className="flex items-center gap-2">
@@ -364,37 +405,68 @@ export default function MePage() {
         <NetworkStatusBanner onRetry={() => loadUserData(null, 'replace')} isRetrying={loading} />
       )}
 
-      {/* Overview Metric Cards */}
-      <section aria-label="Account Overview" className="grid grid-cols-2 lg:grid-cols-4 gap-px bg-outline-hairline border border-outline-hairline animate-enter">
-        <div className="bg-[#0c0f12] p-4 flex flex-col justify-between min-h-[90px]">
-          <span className="font-label-caps text-[10px] uppercase tracking-wider text-text-muted">Total Pacts</span>
-          <div className="flex items-baseline justify-between mt-1">
-            <span className="font-display-mono text-[24px] font-bold text-white tabular-nums">{pacts.length}</span>
-            <span className="text-[11px] text-text-dim font-code-hash">Participated</span>
-          </div>
-        </div>
-        <div className="bg-[#0c0f12] p-4 flex flex-col justify-between min-h-[90px]">
-          <span className="font-label-caps text-[10px] uppercase tracking-wider text-primary-fixed">As Maker</span>
-          <div className="flex items-baseline justify-between mt-1">
-            <span className="font-display-mono text-[24px] font-bold text-primary-fixed tabular-nums">{roleCounts.MAKER}</span>
-            <span className="text-[11px] text-text-dim font-code-hash">Created</span>
-          </div>
-        </div>
-        <div className="bg-[#0c0f12] p-4 flex flex-col justify-between min-h-[90px]">
-          <span className="font-label-caps text-[10px] uppercase tracking-wider text-sky-400">As Counterparty</span>
-          <div className="flex items-baseline justify-between mt-1">
-            <span className="font-display-mono text-[24px] font-bold text-sky-400 tabular-nums">{roleCounts.TAKER}</span>
-            <span className="text-[11px] text-text-dim font-code-hash">Accepted</span>
-          </div>
-        </div>
-        <div className="bg-[#0c0f12] p-4 flex flex-col justify-between min-h-[90px]">
-          <span className="font-label-caps text-[10px] uppercase tracking-wider text-emerald-400">Reputation</span>
-          <div className="flex items-baseline justify-between mt-1">
-            <span className="font-display-mono text-[24px] font-bold text-emerald-400 tabular-nums">
-              {successRate ? `${successRate}%` : '—'}
+      {/* Executive Capital & Status Strip */}
+      <section aria-label="Executive Capital Allocation" className="grid grid-cols-2 lg:grid-cols-4 gap-px bg-outline-hairline border border-outline-hairline animate-enter">
+        {/* Card 1: Active Collateral at Stake */}
+        <div className="bg-[#0c0f12] p-4 flex flex-col justify-between min-h-[100px]">
+          <span className="font-label-caps text-[10px] uppercase tracking-wider text-primary-fixed flex items-center gap-1.5">
+            <span className="w-1.5 h-1.5 rounded-full bg-primary-fixed live-dot" />
+            Active Capital at Stake
+          </span>
+          <div className="mt-1">
+            <span className="font-display-mono text-[22px] sm:text-[24px] font-bold text-white tabular-nums">
+              ${formatAmount(capitalSummary.totalAtStake)}
             </span>
-            <span className="text-[11px] text-text-dim font-code-hash">
-              {reputation ? `${reputation.cleared} Cleared` : 'No history'}
+            <span className="text-[10px] text-text-dim block mt-0.5 font-code-hash">
+              {capitalSummary.activePactsCount} Active Escrow {capitalSummary.activePactsCount === 1 ? 'Deal' : 'Deals'}
+            </span>
+          </div>
+        </div>
+
+        {/* Card 2: Available Escrow Credits */}
+        <div className="bg-[#0c0f12] p-4 flex flex-col justify-between min-h-[100px]">
+          <span className="font-label-caps text-[10px] uppercase tracking-wider text-emerald-400 flex items-center gap-1.5">
+            <span className="material-symbols-outlined text-[14px]">account_balance_wallet</span>
+            Claimable Credits
+          </span>
+          <div className="mt-1">
+            <span className="font-display-mono text-[22px] sm:text-[24px] font-bold text-emerald-400 tabular-nums">
+              ${formatAmount(totalClaimableCredits)}
+            </span>
+            <span className="text-[10px] text-text-dim block mt-0.5 font-code-hash">
+              {claimableCredits.length > 0 ? 'Ready for 1-Click Withdrawal' : 'No unclaimed credits'}
+            </span>
+          </div>
+        </div>
+
+        {/* Card 3: Actions Due */}
+        <div className="bg-[#0c0f12] p-4 flex flex-col justify-between min-h-[100px]">
+          <span className="font-label-caps text-[10px] uppercase tracking-wider text-orange-400 flex items-center gap-1.5">
+            <span className="material-symbols-outlined text-[14px]">pending_actions</span>
+            Actions Required
+          </span>
+          <div className="mt-1">
+            <span className={`font-display-mono text-[22px] sm:text-[24px] font-bold tabular-nums ${pendingActionsCount > 0 ? 'text-orange-400' : 'text-text-muted'}`}>
+              {pendingActionsCount}
+            </span>
+            <span className="text-[10px] text-text-dim block mt-0.5 font-code-hash">
+              {pendingActionsCount > 0 ? 'Pending sign, proof, or settlement' : 'All commitments up to date'}
+            </span>
+          </div>
+        </div>
+
+        {/* Card 4: Verified On-Chain Clearance Record */}
+        <div className="bg-[#0c0f12] p-4 flex flex-col justify-between min-h-[100px]">
+          <span className="font-label-caps text-[10px] uppercase tracking-wider text-text-muted flex items-center gap-1.5">
+            <span className="material-symbols-outlined text-[14px]">verified</span>
+            Verified Clearance Rate
+          </span>
+          <div className="mt-1">
+            <span className="font-display-mono text-[22px] sm:text-[24px] font-bold text-white tabular-nums">
+              {successRate ? `${successRate}%` : '100%'}
+            </span>
+            <span className="text-[10px] text-text-dim block mt-0.5 font-code-hash">
+              {reputation ? `${reputation.cleared} Cleared · ${reputation.slashed} Disputed` : 'Zero disputes'}
             </span>
           </div>
         </div>
@@ -440,12 +512,12 @@ export default function MePage() {
         </section>
       )}
 
-      {/* Action Center */}
+      {/* Priority Action Center */}
       <ActionCenter pacts={pacts} address={address || ''} />
 
-      {/* Multi-Dimensional Filter Toolbar */}
+      {/* Multi-Dimensional Filter & Sort Control Toolbar */}
       <div className="space-y-3 animate-enter">
-        {/* Row 1: Role Filters */}
+        {/* Row 1: Role Filters & Sorting Controls */}
         <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
           <div role="group" aria-label="Filter pacts by role" className="flex items-center gap-1.5 overflow-x-auto hide-scroll w-full sm:w-auto">
             <button
@@ -484,11 +556,33 @@ export default function MePage() {
             >
               AS COUNTERPARTY ({roleCounts.TAKER})
             </button>
+            <button
+              type="button"
+              onClick={() => handleSetRoleFilter('ARBITER')}
+              aria-pressed={roleFilter === 'ARBITER'}
+              className={`px-3 py-1.5 font-label-caps text-[11px] uppercase tracking-wider transition-colors shrink-0 ${
+                roleFilter === 'ARBITER'
+                  ? 'border border-purple-400 bg-purple-400 text-[#090b0d] font-bold'
+                  : 'border border-outline-border bg-[#0c0f12] text-text-muted hover:text-white'
+              }`}
+            >
+              AS ARBITER ({roleCounts.ARBITER})
+            </button>
           </div>
 
-          <span className="font-code-hash text-[11px] text-text-dim shrink-0">
-            Showing {filteredPacts.length} of {pacts.length} agreements
-          </span>
+          {/* Priority Sort Selector */}
+          <div className="flex items-center gap-2 w-full sm:w-auto justify-between sm:justify-end">
+            <span className="font-code-hash text-[11px] text-text-dim shrink-0">Sort By:</span>
+            <select
+              value={sortOrder}
+              onChange={(e) => handleSetSortOrder(e.target.value as PortfolioSortOrder)}
+              className="bg-[#07080a] border border-outline-border text-white text-[11px] font-code-hash px-2.5 py-1 focus:border-primary-fixed focus:outline-none transition-colors"
+            >
+              <option value="DEADLINE">⏱ Urgent Deadlines First</option>
+              <option value="NEWEST">Latest ID (Newest)</option>
+              <option value="VALUE">Highest Collateral ($)</option>
+            </select>
+          </div>
         </div>
 
         {/* Row 2: Status Sub-Filters & Quick Search */}
@@ -522,18 +616,18 @@ export default function MePage() {
                 </button>
               )
             })}
-            {(roleFilter !== 'ALL' || statusFilter !== 'ALL' || searchQuery) && (
+            {(roleFilter !== 'ALL' || statusFilter !== 'ALL' || sortOrder !== 'DEADLINE' || searchQuery) && (
               <button
                 onClick={handleResetFilters}
                 className="px-2 py-1 text-[10px] text-text-dim hover:text-primary-fixed underline transition-colors shrink-0"
               >
-                Reset
+                Reset All
               </button>
             )}
           </div>
 
           {/* Quick Search */}
-          <div className="relative w-full md:w-48">
+          <div className="relative w-full md:w-56">
             <span className="material-symbols-outlined absolute left-2.5 top-1/2 -translate-y-1/2 text-[14px] text-text-dim">
               search
             </span>
@@ -541,7 +635,7 @@ export default function MePage() {
               type="text"
               value={searchQuery}
               onChange={(e) => handleSearchChange(e.target.value)}
-              placeholder="Search ID or terms..."
+              placeholder="Search #ID, address, or terms..."
               className="w-full bg-[#07080a] border border-outline-border pl-8 pr-2.5 py-1 text-[11px] font-code-hash text-white placeholder:text-text-dim focus:border-primary-fixed focus:outline-none transition-colors"
             />
             {searchQuery && (
@@ -557,19 +651,19 @@ export default function MePage() {
         </div>
       </div>
 
-      {/* Pacts Feed / List */}
-      <section aria-label="My Pacts Feed" className="border border-outline-hairline bg-[#0c0f12] overflow-hidden animate-enter">
-        {/* Table Header (Desktop) */}
+      {/* Main Executive Command Feed (Dual Presentation: Desktop Table + Mobile Cards) */}
+      <section aria-label="Executive Pact Directory" className="border border-outline-hairline bg-[#0c0f12] overflow-hidden animate-enter">
+        {/* Table Header (Desktop >= md) */}
         <div className="hidden md:grid grid-cols-12 gap-4 px-4 py-2.5 border-b border-outline-hairline bg-[#07080a] font-label-caps text-[10px] uppercase tracking-wider text-text-muted">
           <div className="col-span-3">TIME / CONTRACT ID</div>
-          <div className="col-span-2">AGREEMENT TYPE</div>
-          <div className="col-span-3 text-right">COLLATERAL AMOUNT</div>
-          <div className="col-span-2 text-center">STATUS</div>
-          <div className="col-span-2 text-right">MAKER</div>
+          <div className="col-span-2">TYPE & TERMS</div>
+          <div className="col-span-3">ROLE & COUNTERPARTY</div>
+          <div className="col-span-2 text-right">COLLATERAL</div>
+          <div className="col-span-2 text-right">STATUS / ACTION</div>
         </div>
 
-        {/* Rows */}
-        <div className="divide-y divide-outline-hairline/40">
+        {/* Rows (Desktop Table + Mobile Cards) */}
+        <div>
           {loading ? (
             <TableSkeleton rows={6} />
           ) : filteredPacts.length === 0 ? (
@@ -588,7 +682,7 @@ export default function MePage() {
                   : 'Adjust or reset your active filters to inspect all account commitments.'}
               </p>
               <div className="flex items-center gap-3 mt-5 flex-wrap justify-center">
-                {(roleFilter !== 'ALL' || statusFilter !== 'ALL') && (
+                {(roleFilter !== 'ALL' || statusFilter !== 'ALL' || searchQuery) && (
                   <button
                     type="button"
                     onClick={handleResetFilters}
@@ -606,34 +700,157 @@ export default function MePage() {
               </div>
             </div>
           ) : (
-            filteredPacts.map(p => {
-              const amt = p.kind === 1
-                ? `${formatAmount(p.amountMaker)} ${tokenSymbol(p.tokenMaker)} ↔ ${formatAmount(p.amountTaker)} ${tokenSymbol(p.tokenTaker)}`
-                : `${formatAmount(p.amountMaker)} ${tokenSymbol(p.tokenMaker)}`
+            <div className="divide-y divide-outline-hairline/40">
+              {filteredPacts.map(p => {
+                const userAddr = address?.toLowerCase() ?? ''
+                const isMaker = p.maker.toLowerCase() === userAddr
+                const isTaker = p.taker.toLowerCase() === userAddr
+                const isArbiter = p.arbiter.toLowerCase() === userAddr
+                const counterparty = isMaker ? p.taker : p.maker
+                const activeDeadline = getRelevantDeadline(p)
+                const isLive = p.status >= 0 && p.status <= 3
+                const amt = p.kind === 1
+                  ? `${formatAmount(p.amountMaker)} ${tokenSymbol(p.tokenMaker)} ↔ ${formatAmount(p.amountTaker)} ${tokenSymbol(p.tokenTaker)}`
+                  : `${formatAmount(p.amountMaker)} ${tokenSymbol(p.tokenMaker)}`
 
-              const activeDeadline = p.status === 0
-                ? p.offerExpiry
-                : p.status === 1
-                ? p.performanceDeadline
-                : p.status === 2 || p.status === 3
-                ? p.disputeDeadline
-                : undefined
+                return (
+                  <div key={p.id}>
+                    {/* Desktop Row (>= md) */}
+                    <div className="hidden md:grid grid-cols-12 gap-4 px-4 py-3.5 items-center hover:bg-[#12161b]/60 transition-colors font-code-hash text-[12px]">
+                      {/* Col 1: Time / ID */}
+                      <div className="col-span-3">
+                        <div className="flex items-center gap-2">
+                          <Link
+                            href={`/p/${p.id}`}
+                            className="text-white font-bold hover:text-primary-fixed transition-colors font-code-hash"
+                          >
+                            #{String(p.id).padStart(4, '0')}
+                          </Link>
+                          {isLive && (
+                            <Countdown deadlineTs={activeDeadline} compact showLabel={false} />
+                          )}
+                        </div>
+                        <span className="text-[10px] text-text-dim block mt-0.5">{formatTimestamp(p.updatedAt)}</span>
+                      </div>
 
-              return (
-                <TapeLine
-                  key={p.id}
-                  pact={{
-                    id: p.id,
-                    time: formatTimestamp(p.updatedAt),
-                    kind: kindLabel(p.kind),
-                    status: effectiveStatusLabel(p.status, p.offerExpiry, p.disputeDeadline, BigInt(currentTime)),
-                    amount: amt,
-                    address: truncateAddress(p.maker),
-                    deadlineTs: activeDeadline,
-                  }}
-                />
-              )
-            })
+                      {/* Col 2: Type & Terms */}
+                      <div className="col-span-2">
+                        <span className="text-white font-medium block">{kindLabel(p.kind)}</span>
+                        <span className="text-[10px] text-text-dim block truncate max-w-[120px]" title={p.termsHash}>
+                          {p.termsHash.slice(0, 10)}…
+                        </span>
+                      </div>
+
+                      {/* Col 3: Role & Counterparty */}
+                      <div className="col-span-3">
+                        <div className="flex items-center gap-1.5">
+                          <span className={`px-1.5 py-0.5 text-[9px] font-label-caps uppercase font-bold ${
+                            isMaker
+                              ? 'bg-primary-fixed/10 text-primary-fixed border border-primary-fixed/30'
+                              : isTaker
+                              ? 'bg-sky-950/30 text-sky-400 border border-sky-500/30'
+                              : 'bg-purple-950/30 text-purple-400 border border-purple-500/30'
+                          }`}>
+                            {isMaker ? 'MAKER' : isTaker ? 'COUNTERPARTY' : 'ARBITER'}
+                          </span>
+                          <span className="text-text-muted text-[11px]">
+                            {truncateAddress(counterparty)}
+                          </span>
+                        </div>
+                      </div>
+
+                      {/* Col 4: Collateral */}
+                      <div className="col-span-2 text-right">
+                        <span className="text-white font-bold block tabular-nums">{amt}</span>
+                        <span className="text-[10px] text-text-dim block">
+                          Bond: ${formatAmount(p.bondAmount)}
+                        </span>
+                      </div>
+
+                      {/* Col 5: Status / Action */}
+                      <div className="col-span-2 flex flex-col items-end gap-1">
+                        <span className={`px-2 py-0.5 text-[9px] font-label-caps uppercase font-bold ${
+                          p.status === 4
+                            ? 'text-emerald-400 border border-emerald-500/30 bg-emerald-950/20'
+                            : p.status === 3
+                            ? 'text-amber-400 border border-amber-500/30 bg-amber-950/20'
+                            : p.status >= 5
+                            ? 'text-rose-400 border border-rose-500/30 bg-rose-950/20'
+                            : 'text-primary-fixed border border-primary-fixed/30 bg-primary-fixed/10'
+                        }`}>
+                          {effectiveStatusLabel(p.status, p.offerExpiry, p.disputeDeadline, BigInt(currentTime))}
+                        </span>
+                        <Link
+                          href={`/p/${p.id}`}
+                          className="text-[11px] text-primary-fixed hover:underline font-bold"
+                        >
+                          Open Pact →
+                        </Link>
+                      </div>
+                    </div>
+
+                    {/* Mobile Card (< md) */}
+                    <div className="md:hidden p-4 space-y-3 hover:bg-[#12161b]/40 transition-colors font-code-hash text-[12px]">
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-2">
+                          <Link
+                            href={`/p/${p.id}`}
+                            className="text-white font-bold text-[14px] hover:text-primary-fixed"
+                          >
+                            #{String(p.id).padStart(4, '0')}
+                          </Link>
+                          <span className={`px-1.5 py-0.5 text-[9px] font-label-caps uppercase font-bold ${
+                            isMaker
+                              ? 'bg-primary-fixed/10 text-primary-fixed border border-primary-fixed/30'
+                              : isTaker
+                              ? 'bg-sky-950/30 text-sky-400 border border-sky-500/30'
+                              : 'bg-purple-950/30 text-purple-400 border border-purple-500/30'
+                          }`}>
+                            {isMaker ? 'MAKER' : isTaker ? 'COUNTERPARTY' : 'ARBITER'}
+                          </span>
+                        </div>
+                        <span className={`px-2 py-0.5 text-[9px] font-label-caps uppercase font-bold ${
+                          p.status === 4
+                            ? 'text-emerald-400 border border-emerald-500/30 bg-emerald-950/20'
+                            : p.status === 3
+                            ? 'text-amber-400 border border-amber-500/30 bg-amber-950/20'
+                            : p.status >= 5
+                            ? 'text-rose-400 border border-rose-500/30 bg-rose-950/20'
+                            : 'text-primary-fixed border border-primary-fixed/30 bg-primary-fixed/10'
+                        }`}>
+                          {effectiveStatusLabel(p.status, p.offerExpiry, p.disputeDeadline, BigInt(currentTime))}
+                        </span>
+                      </div>
+
+                      <div className="flex items-baseline justify-between border-y border-outline-hairline/40 py-2">
+                        <div>
+                          <span className="text-[10px] uppercase text-text-dim block">Collateral Amount</span>
+                          <span className="text-white font-bold text-[14px]">{amt}</span>
+                        </div>
+                        {isLive && (
+                          <div className="text-right">
+                            <span className="text-[10px] uppercase text-text-dim block">Time Remaining</span>
+                            <Countdown deadlineTs={activeDeadline} compact showLabel={false} />
+                          </div>
+                        )}
+                      </div>
+
+                      <div className="flex items-center justify-between pt-1">
+                        <span className="text-[11px] text-text-dim">
+                          Counterparty: {truncateAddress(counterparty)}
+                        </span>
+                        <Link
+                          href={`/p/${p.id}`}
+                          className="px-3 py-1 bg-[#12161b] border border-outline-border text-primary-fixed text-[11px] font-bold uppercase tracking-wider hover:border-primary-fixed"
+                        >
+                          Open Pact →
+                        </Link>
+                      </div>
+                    </div>
+                  </div>
+                )
+              })}
+            </div>
           )}
         </div>
 
@@ -657,11 +874,7 @@ export default function MePage() {
         label={txLabel}
         hash={txHash}
         error={txError}
-        onDismiss={() => {
-          setTxStage('idle')
-          setTxError('')
-          setTxHash(null)
-        }}
+        onClose={() => setTxStage('idle')}
       />
     </div>
   )

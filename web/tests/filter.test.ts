@@ -139,7 +139,7 @@ describe('Portfolio Multi-Dimensional Filter Logic (filterPortfolioPacts)', () =
       accountAddress: ALICE,
       currentNowTs: BASE_NOW
     })
-    expect(result.map(p => p.id)).toEqual([1, 2, 4, 5])
+    expect(result.map(p => p.id)).toEqual([1, 2, 5, 4])
   })
 
   it('filters by Role: AS COUNTERPARTY (TAKER)', () => {

@@ -3,8 +3,9 @@ import { effectiveStatusLabel } from './format'
 
 export type OverviewFilter = 'ALL' | 'DELIVERY' | 'JOB' | 'LIVE' | 'DISPUTED' | 'EXPIRED'
 
-export type PortfolioRoleFilter = 'ALL' | 'MAKER' | 'TAKER'
+export type PortfolioRoleFilter = 'ALL' | 'MAKER' | 'TAKER' | 'ARBITER'
 export type PortfolioStatusFilter = 'ALL' | 'ACTION_REQUIRED' | 'LIVE' | 'SETTLED' | 'EXPIRED' | 'DISPUTED'
+export type PortfolioSortOrder = 'DEADLINE' | 'NEWEST' | 'VALUE'
 
 export interface PortfolioFilterCriteria {
   role: PortfolioRoleFilter
@@ -12,6 +13,17 @@ export interface PortfolioFilterCriteria {
   accountAddress?: string
   currentNowTs?: bigint
   searchQuery?: string
+  sortOrder?: PortfolioSortOrder
+}
+
+/**
+ * Returns the currently active countdown deadline for a pact based on its status.
+ */
+export function getRelevantDeadline(pact: PactData): bigint {
+  if (pact.status === 0) return pact.offerExpiry
+  if (pact.status === 1) return pact.performanceDeadline
+  if (pact.status === 2 || pact.status === 3) return pact.disputeDeadline
+  return pact.updatedAt
 }
 
 /**
@@ -55,6 +67,65 @@ export function requiresActionFrom(pact: PactData, address: string, nowTs: bigin
 }
 
 /**
+ * Computes active capital currently committed at stake by a specific user across active pacts.
+ */
+export function computeActiveCapitalAtStake(pacts: PactData[], address: string): {
+  makerCollateral: bigint
+  takerCollateral: bigint
+  totalAtStake: bigint
+  activePactsCount: number
+} {
+  if (!address) return { makerCollateral: 0n, takerCollateral: 0n, totalAtStake: 0n, activePactsCount: 0 }
+  const account = address.toLowerCase()
+  let makerCollateral = 0n
+  let takerCollateral = 0n
+  let activePactsCount = 0
+
+  for (const p of pacts) {
+    const isLive = p.status >= 0 && p.status <= 3
+    if (!isLive) continue
+
+    const isMaker = p.maker.toLowerCase() === account
+    const isTaker = p.taker.toLowerCase() === account
+
+    if (isMaker) {
+      makerCollateral += p.collateralMaker
+      activePactsCount++
+    }
+    if (isTaker) {
+      takerCollateral += p.collateralTaker
+      if (!isMaker) activePactsCount++
+    }
+  }
+
+  return {
+    makerCollateral,
+    takerCollateral,
+    totalAtStake: makerCollateral + takerCollateral,
+    activePactsCount,
+  }
+}
+
+/**
+ * Computes pact counts partitioned by role for a given user account.
+ */
+export function computeRoleCounts(pacts: PactData[], address: string): {
+  ALL: number
+  MAKER: number
+  TAKER: number
+  ARBITER: number
+} {
+  if (!address) return { ALL: pacts.length, MAKER: 0, TAKER: 0, ARBITER: 0 }
+  const account = address.toLowerCase()
+  return {
+    ALL: pacts.length,
+    MAKER: pacts.filter(p => p.maker.toLowerCase() === account).length,
+    TAKER: pacts.filter(p => p.taker.toLowerCase() === account).length,
+    ARBITER: pacts.filter(p => p.arbiter.toLowerCase() === account).length,
+  }
+}
+
+/**
  * Pure filter function for Overview / The Tape with search support.
  */
 export function filterOverviewPacts(
@@ -91,15 +162,15 @@ export function filterOverviewPacts(
 }
 
 /**
- * Pure filter function for Portfolio / My Pacts with combined Role, Status, and Search criteria.
+ * Pure filter and sort function for Portfolio / My Pacts with combined Role, Status, Search, and Priority Sort criteria.
  */
 export function filterPortfolioPacts(pacts: PactData[], criteria: PortfolioFilterCriteria): PactData[] {
-  const { role, status, accountAddress, currentNowTs, searchQuery } = criteria
+  const { role, status, accountAddress, currentNowTs, searchQuery, sortOrder = 'DEADLINE' } = criteria
   const now = currentNowTs ?? BigInt(Math.floor(Date.now() / 1000))
   const account = accountAddress?.toLowerCase() ?? ''
   const q = searchQuery?.trim().toLowerCase() ?? ''
 
-  return pacts.filter((p) => {
+  const filtered = pacts.filter((p) => {
     if (q) {
       const matchId = String(p.id).includes(q.replace('#', ''))
       const matchMaker = p.maker.toLowerCase().includes(q)
@@ -111,6 +182,7 @@ export function filterPortfolioPacts(pacts: PactData[], criteria: PortfolioFilte
     // 1. Role Filter
     if (role === 'MAKER' && account && p.maker.toLowerCase() !== account) return false
     if (role === 'TAKER' && account && p.taker.toLowerCase() !== account) return false
+    if (role === 'ARBITER' && account && p.arbiter.toLowerCase() !== account) return false
 
     // 2. Status Filter
     if (status === 'ACTION_REQUIRED') {
@@ -135,5 +207,36 @@ export function filterPortfolioPacts(pacts: PactData[], criteria: PortfolioFilte
     }
 
     return true
+  })
+
+  // 3. Priority Sorting
+  return filtered.sort((a, b) => {
+    if (sortOrder === 'NEWEST') {
+      return b.id - a.id
+    }
+
+    if (sortOrder === 'VALUE') {
+      const valA = a.collateralMaker + a.collateralTaker
+      const valB = b.collateralMaker + b.collateralTaker
+      if (valB > valA) return 1
+      if (valB < valA) return -1
+      return b.id - a.id
+    }
+
+    // Default 'DEADLINE': Prioritize active pacts with earliest deadline first, then terminal
+    const isLiveA = a.status >= 0 && a.status <= 3
+    const isLiveB = b.status >= 0 && b.status <= 3
+
+    if (isLiveA && !isLiveB) return -1
+    if (!isLiveA && isLiveB) return 1
+
+    if (isLiveA && isLiveB) {
+      const deadA = getRelevantDeadline(a)
+      const deadB = getRelevantDeadline(b)
+      if (deadA < deadB) return -1
+      if (deadA > deadB) return 1
+    }
+
+    return b.id - a.id
   })
 }
