@@ -33,14 +33,14 @@ export const viewport: Viewport = {
 export const metadata: Metadata = {
   metadataBase: new URL("https://pact-protocol-five.vercel.app"),
   title: {
-    default: "PACT Protocol — Institutional Escrow & OTC on ARC",
-    template: "PACT · %s",
+    default: "PACT Protocol",
+    template: "%s · PACT Protocol",
   },
   description: "Institutional escrow and economic agreement protocol with collateral on ARC Testnet. Not a DEX — real verifiable agreements.",
   keywords: ["PACT Protocol", "Arc Testnet", "Smart Contracts", "Collateral", "Economic Contracts", "Web3", "Blockchain", "OTC Escrow"],
   authors: [{ name: "PACT Team" }],
   openGraph: {
-    title: "PACT Protocol — Institutional Escrow & OTC on ARC",
+    title: "PACT Protocol",
     description: "Institutional escrow and economic agreement protocol with collateral on ARC Testnet. Not a DEX — real verifiable agreements.",
     url: "https://pact-protocol-five.vercel.app",
     siteName: "PACT Protocol",
@@ -57,7 +57,7 @@ export const metadata: Metadata = {
   },
   twitter: {
     card: "summary_large_image",
-    title: "PACT Protocol — Institutional Escrow & OTC on ARC",
+    title: "PACT Protocol",
     description: "Institutional escrow and economic agreement protocol with collateral on ARC Testnet. Not a DEX — real verifiable agreements.",
     images: ["/og-image.png"],
   },

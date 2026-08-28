@@ -30,7 +30,7 @@ function TapeDashboard() {
 
   useEffect(() => {
     if (localStorage.getItem('pact-onboarding-seen') !== 'true') setShowOnboarding(true)
-    document.title = 'PACT · The Tape (Overview)'
+    document.title = 'PACT Protocol'
 
     // Sync URL query state on mount
     if (typeof window !== 'undefined') {

@@ -44,4 +44,6 @@ test('desktop keeps the full wordmark and primary navigation', async ({ page }, 
 
   await expect(page.getByTestId('brand-wordmark')).toBeVisible()
   await expect(page.getByRole('navigation', { name: 'Main Navigation' })).toBeVisible()
+  await expect(page.getByTestId('site-navbar').getByRole('link', { name: /new pact/i })).toHaveCount(0)
+  await expect(page).toHaveTitle('PACT Protocol')
 })

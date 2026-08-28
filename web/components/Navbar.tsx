@@ -15,7 +15,7 @@ export default function Navbar() {
   ]
 
   return (
-    <header className="sticky top-0 z-40 w-full border-b border-outline-hairline bg-[#07080a]/90 backdrop-blur-md">
+    <header data-testid="site-navbar" className="sticky top-0 z-40 w-full border-b border-outline-hairline bg-[#07080a]/90 backdrop-blur-md">
       <div className="mx-auto flex h-14 w-full max-w-terminal items-center justify-between gap-3 px-3 sm:px-4 md:h-16 md:px-6">
         {/* Left: Brand & Nav Links */}
         <div className="flex items-center gap-6 md:gap-8">
@@ -77,13 +77,6 @@ export default function Navbar() {
 
           <ConnectButton />
 
-          <Link
-            href="/new"
-            className="pact-button-primary hidden sm:inline-flex min-h-[38px] sm:min-h-[42px] px-4 font-label-caps text-[11px] font-bold uppercase tracking-wider"
-          >
-            <span className="material-symbols-outlined text-[16px]" aria-hidden="true">add</span>
-            New pact
-          </Link>
         </div>
       </div>
     </header>
