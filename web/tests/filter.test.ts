@@ -3,10 +3,7 @@ import { PactData } from '../lib/reads'
 import {
   filterOverviewPacts,
   filterPortfolioPacts,
-  requiresActionFrom,
-  type OverviewFilter,
-  type PortfolioRoleFilter,
-  type PortfolioStatusFilter
+  requiresActionFrom
 } from '../lib/filter'
 
 const ALICE = '0x1111111111111111111111111111111111111111'

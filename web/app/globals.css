@@ -16,7 +16,7 @@
   --color-on-surface: #f4f5f7;
   --color-on-surface-variant: #9ba3af;
   --color-text-muted: #8b949e;
-  --color-text-dim: #656d76;
+  --color-text-dim: #7d8794;
 
   --color-primary: #c8f542;
   --color-primary-fixed: #c8f542;
@@ -225,6 +225,12 @@ body {
   padding-bottom: env(safe-area-inset-bottom, 0px);
 }
 
+.mobile-sticky-action {
+  bottom: calc(3.75rem + env(safe-area-inset-bottom, 0px));
+  padding-left: max(0.75rem, env(safe-area-inset-left, 0px));
+  padding-right: max(0.75rem, env(safe-area-inset-right, 0px));
+}
+
 @media (max-width: 640px) {
   .pact-button-primary,
   .pact-button-secondary,
@@ -244,7 +250,8 @@ body {
   .animate-enter,
   .animate-enter-delay,
   .live-dot,
-  .tape-row {
+  .tape-row,
+  .pact-skeleton {
     animation: none !important;
     transition: none !important;
   }

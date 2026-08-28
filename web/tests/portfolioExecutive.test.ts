@@ -4,11 +4,7 @@ import {
   filterPortfolioPacts,
   computeActiveCapitalAtStake,
   computeRoleCounts,
-  getRelevantDeadline,
-  requiresActionFrom,
-  type PortfolioRoleFilter,
-  type PortfolioStatusFilter,
-  type PortfolioSortOrder
+  getRelevantDeadline
 } from '../lib/filter'
 
 const ALICE = '0x1111111111111111111111111111111111111111'

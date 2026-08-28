@@ -18,8 +18,8 @@ import TransactionProgress, { type TransactionStage } from '../../../components/
 import ActionConfirmModal from '../../../components/ActionConfirmModal'
 import RoleBadge, { type RoleType } from '../../../components/RoleBadge'
 import PartyCard from '../../../components/PartyCard'
-import AddressDisplay from '../../../components/AddressDisplay'
 import TermsVerifier from '../../../components/TermsVerifier'
+import PageSkeleton from '../../../components/PageSkeleton'
 import { transactionErrorMessage } from '../../../lib/transactionErrors'
 import { evaluatePactActions, getPrimaryUserAction, type PactAction, type DisputeData } from '../../../lib/actionMatrix'
 
@@ -287,12 +287,7 @@ export default function PactDetailPage({ params }: { params: Promise<{ id: strin
   }
 
   if (loading) {
-    return (
-      <div className="border border-outline-border bg-[#0c0f12] p-12 text-center text-[13px] font-code-hash text-text-muted flex items-center justify-center gap-3">
-        <span className="w-2.5 h-2.5 bg-primary-fixed live-dot" />
-        READING VERIFIED ON-CHAIN PACT STATE…
-      </div>
-    )
+    return <PageSkeleton variant="detail" />
   }
 
   if (!protocolAddress) {
@@ -326,8 +321,6 @@ export default function PactDetailPage({ params }: { params: Promise<{ id: strin
 
   const pactTerms = toCanonicalTerms(pact, protocolAddress)
   const termsMatch = Boolean(termsInput && pactTerms && verifyPactTerms(pactTerms, termsInput, pact.termsHash as `0x${string}`))
-  const termsMismatch = Boolean(termsInput && !termsMatch)
-
   const canOpenDispute = (isMaker || isTaker) && (pact.status === 1 || pact.status === 2) && now <= pact.disputeDeadline
   const canRespond = Boolean(isRespondent && dispute && dispute.arbiterDeadline === 0n && now <= dispute.responseDeadline)
   const canRule = Boolean(isArbiter && dispute && dispute.arbiterDeadline > 0n && now <= dispute.arbiterDeadline)
@@ -1225,7 +1218,7 @@ export default function PactDetailPage({ params }: { params: Promise<{ id: strin
       {/* 9. MOBILE STICKY BOTTOM ACTION BAR (< md) */}
       {/* ========================================================================= */}
       {primaryAction && primaryAction.isEligible && !isTerminal(pact.status) && (
-        <div className="md:hidden fixed bottom-0 left-0 right-0 z-40 p-3 bg-[#0c0f12]/95 backdrop-blur-md border-t border-primary-fixed/40 shadow-2xl flex items-center justify-between gap-3 animate-enter">
+        <div className="mobile-sticky-action md:hidden fixed left-0 right-0 z-40 p-3 bg-[#0c0f12]/95 backdrop-blur-md border-t border-primary-fixed/40 flex items-center justify-between gap-3 animate-enter">
           <div className="truncate">
             <span className="font-headline-mono text-[11px] font-bold text-white block truncate">
               Pact #{String(id).padStart(4, '0')} · {statusLabel(pact.status)}
@@ -1243,9 +1236,9 @@ export default function PactDetailPage({ params }: { params: Promise<{ id: strin
                 anchor.scrollIntoView({ behavior: 'smooth', block: 'center' })
               }
             }}
-            className="pact-button-primary min-h-[40px] px-4 text-[11px] font-bold uppercase tracking-wider shrink-0 shadow-lg"
+            className="pact-button-primary min-h-[44px] px-4 text-[11px] font-bold uppercase tracking-wider shrink-0"
           >
-            ⚡ Act Now →
+            Act Now →
           </button>
         </div>
       )}

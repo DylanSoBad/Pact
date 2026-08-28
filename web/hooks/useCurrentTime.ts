@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react'
 
-let listeners = new Set<(time: number) => void>()
+const listeners = new Set<(time: number) => void>()
 let intervalId: NodeJS.Timeout | null = null
 let sharedCurrentTime = Math.floor(Date.now() / 1000)
 

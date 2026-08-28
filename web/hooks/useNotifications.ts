@@ -3,7 +3,6 @@
 import { useEffect, useMemo, useState, useCallback } from 'react'
 import { useAccount, useReadContract, useChainId } from 'wagmi'
 import {
-  type PactNotification,
   type NotificationPreferences,
   type PactDataForNotification,
   type UserCreditsForNotification,

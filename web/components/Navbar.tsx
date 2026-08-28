@@ -32,7 +32,7 @@ export default function Navbar() {
               priority
               className="h-8 w-8 object-contain md:h-9 md:w-9"
             />
-            <span className="font-display-mono text-[16px] font-bold tracking-wider text-primary-fixed md:text-[18px]">
+            <span data-testid="brand-wordmark" className="hidden font-display-mono text-[16px] font-bold tracking-wider text-primary-fixed sm:inline md:text-[18px]">
               PACT
             </span>
           </Link>
@@ -64,6 +64,7 @@ export default function Navbar() {
             href={CIRCLE_FAUCET_URL}
             target="_blank"
             rel="noopener noreferrer"
+            aria-label="Get test USDC from Circle Faucet"
             title="Get testnet USDC from Circle Faucet (opens in new tab)"
             className="inline-flex min-h-[38px] sm:min-h-[42px] items-center gap-1.5 border border-outline-border bg-[#0c0f12] px-2.5 sm:px-3 font-label-caps text-[11px] uppercase tracking-wider text-text-muted transition-colors hover:border-primary-fixed hover:text-primary-fixed"
           >

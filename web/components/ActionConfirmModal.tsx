@@ -1,6 +1,6 @@
 'use client'
 
-import { formatAmount, tokenSymbol, truncateAddress } from '../lib/format'
+import { formatAmount, tokenSymbol } from '../lib/format'
 import type { PactAction } from '../lib/actionMatrix'
 import RoleBadge from './RoleBadge'
 import AddressDisplay from './AddressDisplay'

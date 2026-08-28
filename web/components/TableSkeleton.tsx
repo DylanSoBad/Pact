@@ -7,8 +7,11 @@ interface TableSkeletonProps {
 export default function TableSkeleton({ rows = 5 }: TableSkeletonProps) {
   return (
     <div 
+      role="status"
+      aria-live="polite"
+      aria-busy="true"
       aria-label="Loading contracts stream" 
-      className="divide-y divide-outline-hairline/40 w-full font-code-hash animate-pulse"
+      className="pact-skeleton divide-y divide-outline-hairline/40 w-full font-code-hash animate-pulse"
     >
       {Array.from({ length: rows }).map((_, i) => (
         <div 

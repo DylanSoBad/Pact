@@ -3,7 +3,6 @@
 import React, { useState, useRef, useEffect } from 'react'
 import Link from 'next/link'
 import { useNotifications } from '../hooks/useNotifications'
-import { type NotificationCategory, type PactNotification } from '../lib/notifications'
 import RoleBadge from './RoleBadge'
 
 export default function NotificationCenter() {

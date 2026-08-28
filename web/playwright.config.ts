@@ -13,7 +13,18 @@ export default defineConfig({
   },
   projects: [
     { name: 'desktop-chromium', use: { ...devices['Desktop Chrome'] } },
-    { name: 'mobile-chromium', use: { ...devices['Pixel 7'] } },
+    {
+      name: 'mobile-galaxy-360',
+      use: { viewport: { width: 360, height: 800 }, deviceScaleFactor: 1, isMobile: true, hasTouch: true },
+    },
+    {
+      name: 'mobile-iphone-390',
+      use: { viewport: { width: 390, height: 844 }, deviceScaleFactor: 1, isMobile: true, hasTouch: true },
+    },
+    {
+      name: 'mobile-pixel-412',
+      use: { viewport: { width: 412, height: 915 }, deviceScaleFactor: 1, isMobile: true, hasTouch: true },
+    },
   ],
   webServer: {
     command: 'cmd /c npm run dev',

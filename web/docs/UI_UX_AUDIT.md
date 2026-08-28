@@ -57,3 +57,11 @@ PACT is an institutional escrow and economic agreement protocol built on Arc Net
   - 100% ESLint passed (0 errors, 0 warnings).
   - 100% Vitest unit tests passed (8 suites, 27 tests).
   - 100% Next.js Turbopack production build compiled successfully.
+
+- **Phase 4 (P3 Production Polish) — COMPLETE:**
+  - Added route-level and Pact Detail skeleton loading states with reduced-motion support.
+  - Removed the stale persisted viewport preview mode from the production shell.
+  - Corrected Docs/Source/Contract footer destinations and marked the unpublished audit honestly as planned.
+  - Added a skip link, mobile wordmark rule and safe-area-aware Pact Detail action bar.
+  - Added responsive regression coverage for 360px, 390px and 412px mobile widths.
+  - Detailed evidence and intentional exclusions are recorded in `docs/PHASE_4_COMPLETION.md`.

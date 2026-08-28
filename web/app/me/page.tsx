@@ -13,8 +13,8 @@ import { fetchPactPage, fetchReputation, PactData } from '../../lib/reads'
 import { USDC_ERC20, EURC, getPactAddress } from '../../lib/arc'
 import { PACT_ABI } from '../../lib/abi'
 import {
-  kindLabel, statusLabel, effectiveStatusLabel, formatAmount, tokenSymbol,
-  formatTimestamp, truncateAddress, formatDate
+  kindLabel, effectiveStatusLabel, formatAmount, tokenSymbol,
+  formatTimestamp, truncateAddress
 } from '../../lib/format'
 import { useCurrentTime } from '../../hooks/useCurrentTime'
 import {
@@ -708,7 +708,6 @@ export default function MePage() {
                 const userAddr = address?.toLowerCase() ?? ''
                 const isMaker = p.maker.toLowerCase() === userAddr
                 const isTaker = p.taker.toLowerCase() === userAddr
-                const isArbiter = p.arbiter.toLowerCase() === userAddr
                 const counterparty = isMaker ? p.taker : p.maker
                 const activeDeadline = getRelevantDeadline(p)
                 const isLive = p.status >= 0 && p.status <= 3

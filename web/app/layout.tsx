@@ -7,6 +7,7 @@ import Navbar from "../components/Navbar";
 import BottomNav from "../components/BottomNav";
 import AppShell from "../components/AppShell";
 import A11yAuditor from "../components/A11yAuditor";
+import SiteFooter from "../components/SiteFooter";
 
 const plexMono = IBM_Plex_Mono({
   variable: "--font-ibm-plex-mono",
@@ -85,28 +86,15 @@ export default function RootLayout({
         <A11yAuditor />
         <Web3Provider>
           <AppShell>
+            <a href="#main-content" className="sr-only z-50 bg-primary-fixed px-4 py-3 text-on-primary-fixed focus:not-sr-only focus:fixed focus:left-3 focus:top-3">
+              Skip to main content
+            </a>
             <Navbar />
             <div className="flex-1 flex flex-col w-full">
-              <main className="mx-auto w-full max-w-terminal flex-1 px-3 py-5 sm:px-6 sm:py-8 pb-16 sm:pb-12">
+              <main id="main-content" className="mx-auto w-full max-w-terminal flex-1 px-3 py-5 sm:px-6 sm:py-8 pb-16 sm:pb-12">
                 {children}
               </main>
-              <footer className="border-t border-outline-hairline bg-[#050608] px-4 py-6 text-center text-[11px] text-text-dim font-code-hash">
-                <div className="mx-auto max-w-terminal flex flex-col sm:flex-row items-center justify-between gap-3">
-                  <div className="flex items-center gap-2">
-                    <span className="inline-block w-2 h-2 rounded-full bg-primary-fixed" />
-                    <span>ARC TESTNET 5042002</span>
-                    <span aria-hidden="true">·</span>
-                    <span>PACT PROTOCOL V1</span>
-                  </div>
-                  <div className="flex items-center gap-3">
-                    <a className="hover:text-primary-fixed transition-colors" href="https://github.com/DylanSoBad/Pact" target="_blank" rel="noreferrer" title="Read PACT documentation">Docs</a>
-                    <span aria-hidden="true">·</span>
-                    <a className="hover:text-primary-fixed transition-colors" href="https://github.com/DylanSoBad/Pact" target="_blank" rel="noreferrer" title="View PACT source code on GitHub">GitHub</a>
-                    <span aria-hidden="true">·</span>
-                    <span className="text-text-dim" title="Formal verification in progress">Formal Verification (V1)</span>
-                  </div>
-                </div>
-              </footer>
+              <SiteFooter />
             </div>
             <BottomNav />
             

@@ -1,10 +1,9 @@
 'use client'
 
 import { useState } from 'react'
-import { CanonicalPactTerms, hashPactTerms, hashTerms, verifyPactTerms } from '../lib/terms'
-import { formatAmount, formatDate, kindLabel, tokenSymbol, truncateAddress } from '../lib/format'
+import { CanonicalPactTerms, hashPactTerms, hashTerms } from '../lib/terms'
+import { formatAmount, formatDate, tokenSymbol } from '../lib/format'
 import AddressDisplay from './AddressDisplay'
-import RoleBadge from './RoleBadge'
 
 export interface TermsVerifierProps {
   canonicalTerms: CanonicalPactTerms | null

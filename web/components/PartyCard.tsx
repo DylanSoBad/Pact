@@ -1,7 +1,7 @@
 'use client'
 
 import React from 'react'
-import RoleBadge, { type RoleType } from './RoleBadge'
+import RoleBadge from './RoleBadge'
 import AddressDisplay from './AddressDisplay'
 import { formatAmount, tokenSymbol } from '../lib/format'
 

@@ -14,7 +14,7 @@ import { useBlockNumber } from 'wagmi'
 import { usePactStore, FilterCategory } from '../lib/store/usePactStore'
 import { usePactStream } from '../hooks/usePactStream'
 import {
-  kindLabel, statusLabel, effectiveStatusLabel, formatAmount, tokenSymbol,
+  kindLabel, effectiveStatusLabel, formatAmount, tokenSymbol,
   formatTimestamp, truncateAddress
 } from '../lib/format'
 

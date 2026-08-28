@@ -1,7 +1,6 @@
 'use client'
 
 import React, { useState } from 'react'
-import { truncateAddress } from '../lib/format'
 
 export interface AddressDisplayProps {
   address: string
@@ -29,7 +28,10 @@ export default function AddressDisplay({
     return <span className="text-text-dim text-[11px] font-code-hash">N/A</span>
   }
 
-  const formattedTruncated = truncateAddress(address)
+  const visibleChars = Math.max(2, truncateChars)
+  const formattedTruncated = address.length > visibleChars * 2 + 2
+    ? `${address.slice(0, visibleChars + 2)}…${address.slice(-visibleChars)}`
+    : address
   const arcscanUrl = `https://testnet.arcscan.app/address/${address}`
 
   const handleCopy = async (e: React.MouseEvent) => {

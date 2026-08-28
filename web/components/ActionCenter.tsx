@@ -4,7 +4,7 @@ import Link from 'next/link'
 import type { PactData } from '../lib/reads'
 import { formatDate } from '../lib/format'
 
-import { evaluatePactActions, type ActionType, type ActionRole, type ActionSeverity } from '../lib/actionMatrix'
+import { type ActionType, type ActionRole, type ActionSeverity } from '../lib/actionMatrix'
 import RoleBadge, { type RoleType } from './RoleBadge'
 
 export type ActionItem = {
