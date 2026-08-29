@@ -19,6 +19,8 @@ function validInput(overrides: Partial<NewPactValidationInput> = {}): NewPactVal
     makerBalanceKnown: true,
     taker,
     arbiter,
+    isCustomArbiter: false,
+    customArbiterAcknowledged: true,
     amountMaker: '2',
     amountTaker: '3',
     notionalUSDC: '20',
@@ -83,6 +85,14 @@ describe('validateNewPactForm', () => {
     const errors = validateNewPactForm(validInput({ taker: arbiter }))
     expect(errors.arbiter).toContain('cannot be the same address')
     expect(errors.taker).toContain('distinct addresses')
+  })
+
+  it('requires custom arbiter risk acknowledgement when custom arbiter is selected', () => {
+    const errors = validateNewPactForm(validInput({
+      isCustomArbiter: true,
+      customArbiterAcknowledged: false,
+    }))
+    expect(errors.arbiter).toContain('acknowledge the Custom Arbiter risk')
   })
 
   it('rejects insufficient balance and fee cap exceeding dispute bond', () => {

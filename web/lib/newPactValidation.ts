@@ -25,6 +25,8 @@ export type NewPactValidationInput = {
   makerBalanceKnown: boolean
   taker: string
   arbiter: string
+  isCustomArbiter?: boolean
+  customArbiterAcknowledged?: boolean
   amountMaker: string
   amountTaker: string
   notionalUSDC: string
@@ -56,23 +58,23 @@ export function validateNewPactForm(input: NewPactValidationInput): NewPactField
   // 1. Counterparty (Taker) Validation
   const trimmedTaker = input.taker.trim()
   if (!trimmedTaker) {
-    errors.taker = 'Counterparty address is required. Enter a valid EVM address (0x...).'
+    errors.taker = 'Counterparty address is required so the smart contract knows who is authorized to accept and fulfill this agreement.'
   } else if (!isAddress(trimmedTaker)) {
-    errors.taker = 'Invalid address format. Address must start with 0x followed by 40 hex characters.'
+    errors.taker = 'Invalid address format. Enter a valid EVM address starting with 0x (42 characters).'
   } else if (trimmedTaker.toLowerCase() === ZERO_ADDRESS) {
-    errors.taker = 'Zero address (0x000...0000) cannot be used as a counterparty.'
+    errors.taker = 'Zero address (0x000...0000) cannot be designated as counterparty.'
   } else if (input.makerAddress && trimmedTaker.toLowerCase() === input.makerAddress.toLowerCase()) {
-    errors.taker = 'Counterparty cannot be your own Maker address. Enter a separate counterparty address.'
+    errors.taker = 'Counterparty cannot be your own Maker address. Enter a distinct counterparty address.'
   }
 
   // 2. Arbiter Validation
   const trimmedArbiter = input.arbiter.trim()
   if (!trimmedArbiter) {
-    errors.arbiter = 'Designated arbiter address is required. Enter a trusted mediator EVM address (0x...).'
+    errors.arbiter = 'Designated arbiter address is required to resolve disputes if performance is contested.'
   } else if (!isAddress(trimmedArbiter)) {
-    errors.arbiter = 'Invalid address format. Address must start with 0x followed by 40 hex characters.'
+    errors.arbiter = 'Invalid address format. Enter a valid EVM address starting with 0x (42 characters).'
   } else if (trimmedArbiter.toLowerCase() === ZERO_ADDRESS) {
-    errors.arbiter = 'Zero address (0x000...0000) cannot be used as an arbiter.'
+    errors.arbiter = 'Zero address (0x000...0000) cannot be designated as arbiter.'
   } else if (input.makerAddress && trimmedArbiter.toLowerCase() === input.makerAddress.toLowerCase()) {
     errors.arbiter = 'Arbiter cannot be your own Maker address. Designate a neutral third party.'
   } else if (
@@ -84,14 +86,16 @@ export function validateNewPactForm(input: NewPactValidationInput): NewPactField
     if (!errors.taker) {
       errors.taker = 'Counterparty and Arbiter must use distinct addresses.'
     }
+  } else if (input.isCustomArbiter && input.customArbiterAcknowledged === false) {
+    errors.arbiter = 'Please acknowledge the Custom Arbiter risk notice before proceeding.'
   }
 
   // 3. Maker Collateral Validation
   const trimmedMakerAmt = input.amountMaker.trim()
   if (!trimmedMakerAmt) {
-    errors.amountMaker = 'Maker collateral is required. Enter an amount greater than 0.'
+    errors.amountMaker = 'Maker collateral is required as the locked escrow payment backing this commitment.'
   } else if (!isDecimal(trimmedMakerAmt) || input.makerAmount <= 0n) {
-    errors.amountMaker = 'Maker collateral must be a positive decimal number (e.g. 100 or 25.50).'
+    errors.amountMaker = 'Maker collateral must be a positive decimal number greater than 0 (e.g. 100 or 25.50).'
   } else if (input.isConnected && input.makerBalanceKnown && input.makerAmount > input.makerBalance) {
     errors.amountMaker = 'Insufficient wallet balance for this collateral amount.'
   }
@@ -104,9 +108,9 @@ export function validateNewPactForm(input: NewPactValidationInput): NewPactField
   // 5. Notional Valuation Validation
   const trimmedNotional = input.notionalUSDC.trim()
   if (!trimmedNotional) {
-    errors.notionalUSDC = 'Notional valuation is required for calculating the 5% dispute bond.'
+    errors.notionalUSDC = 'Notional valuation is required to calculate the standard 5% dispute bond (min 1 USDC).'
   } else if (!isDecimal(trimmedNotional) || input.notionalAmount <= 0n) {
-    errors.notionalUSDC = 'Notional valuation must be a positive decimal number (e.g. 1000).'
+    errors.notionalUSDC = 'Notional valuation must be a positive decimal number in USDC terms (e.g. 1000).'
   }
 
   // 6. Arbiter Fee Cap Validation
@@ -114,7 +118,7 @@ export function validateNewPactForm(input: NewPactValidationInput): NewPactField
   if (!trimmedFeeCap || !isDecimal(trimmedFeeCap) || Number(trimmedFeeCap) < 0) {
     errors.arbiterFeeCap = 'Arbiter fee cap must be a valid non-negative number.'
   } else if (input.feeCapAmount > input.calculatedBond) {
-    errors.arbiterFeeCap = 'Arbiter fee cap cannot exceed the 5% dispute bond amount.'
+    errors.arbiterFeeCap = 'Arbiter fee cap cannot exceed the 5% dispute bond amount committed to the pact.'
   }
 
   // 7. Deadlines & Window Ordering Validation
@@ -150,9 +154,9 @@ export function validateNewPactForm(input: NewPactValidationInput): NewPactField
 
   // 8. Written Terms Validation
   if (!input.terms.trim()) {
-    errors.terms = 'Written agreement terms are required to anchor the pact hash.'
+    errors.terms = 'Written agreement terms are required to commit the cryptographic hash on-chain.'
   } else if (input.terms.trim().length < 10) {
-    errors.terms = 'Agreement terms are too short. Enter clear terms (at least 10 characters).'
+    errors.terms = 'Agreement terms are too short. Enter clear terms and verifiable deliverables (at least 10 characters).'
   }
 
   return errors

@@ -13,9 +13,6 @@ import { signPermit, type PermitAuthorization } from '../../lib/permit'
 import { fetchReputation } from '../../lib/reads'
 import {
   NEW_PACT_FIELD_ORDER,
-  PARTIES_FIELDS,
-  COLLATERAL_FIELDS,
-  TERMS_DEADLINES_FIELDS,
   ZERO_ADDRESS,
   validateNewPactForm,
   getStepFields,
@@ -29,6 +26,8 @@ import TransactionProgress, { type TransactionStage } from '../../components/Tra
 import { transactionErrorMessage } from '../../lib/transactionErrors'
 import RoleBadge from '../../components/RoleBadge'
 import AddressDisplay from '../../components/AddressDisplay'
+import ProtocolTerm from '../../components/ProtocolTerm'
+import AdvancedDetails from '../../components/AdvancedDetails'
 import { formatDate } from '../../lib/format'
 
 const KINDS = [
@@ -36,7 +35,7 @@ const KINDS = [
     value: 0,
     label: 'Delivery Escrow',
     tag: 'DELIVERY',
-    desc: 'Buyer locks purchase funds in escrow; seller delivers physical goods or off-chain asset; payment is released upon proof & verification.',
+    desc: 'Buyer locks purchase funds in escrow; seller delivers physical goods or off-chain asset; payment is released upon verified delivery proof.',
   },
   {
     value: 1,
@@ -51,6 +50,14 @@ const TOKENS = [
   { value: EURC, label: 'EURC' },
   { value: WETH, label: 'WETH' },
   { value: WBTC, label: 'WBTC' },
+]
+
+const VERIFIED_ARBITER_PRESETS = [
+  {
+    name: 'PACT Protocol Verified Arbiter (Default)',
+    address: '0x3333333333333333333333333333333333333333',
+    desc: 'Verified platform multi-sig mediator with strict 14-day SLA and bounded fees.',
+  },
 ]
 
 type TransactionPhase = 'idle' | 'approving' | 'creating' | 'done'
@@ -81,7 +88,9 @@ export default function NewPactPage() {
   const [notionalUSDC, setNotionalUSDC] = useState('')
   const [arbiterFeeCap, setArbiterFeeCap] = useState('1')
   const [taker, setTaker] = useState('')
-  const [arbiter, setArbiter] = useState('')
+  const [arbiter, setArbiter] = useState(VERIFIED_ARBITER_PRESETS[0].address)
+  const [arbiterType, setArbiterType] = useState<'preset' | 'custom'>('preset')
+  const [customArbiterAcknowledged, setCustomArbiterAcknowledged] = useState(true)
   const [terms, setTerms] = useState('')
   const [offerHours, setOfferHours] = useState('24')
   const [performanceDays, setPerformanceDays] = useState('7')
@@ -172,12 +181,16 @@ export default function NewPactPage() {
     }
   }, [amountMaker, tokenMaker, notionalUSDC])
 
+  const isCustomArbiter = arbiterType === 'custom'
+
   const fieldErrors = useMemo(() => validateNewPactForm({
     makerAddress: address,
     isConnected,
     makerBalanceKnown: makerBalanceData !== undefined,
     taker,
     arbiter,
+    isCustomArbiter,
+    customArbiterAcknowledged,
     amountMaker,
     amountTaker,
     notionalUSDC,
@@ -191,9 +204,17 @@ export default function NewPactPage() {
     notionalAmount,
     feeCapAmount,
     calculatedBond,
-  }), [address, amountMaker, amountTaker, arbiter, arbiterFeeCap, calculatedBond, disputeDays, feeCapAmount, isConnected, makerAmount, makerBalance, makerBalanceData, notionalAmount, notionalUSDC, offerHours, performanceDays, taker, terms])
+  }), [address, amountMaker, amountTaker, arbiter, arbiterFeeCap, calculatedBond, customArbiterAcknowledged, disputeDays, feeCapAmount, isConnected, isCustomArbiter, makerAmount, makerBalance, makerBalanceData, notionalAmount, notionalUSDC, offerHours, performanceDays, taker, terms])
 
   const validationError = NEW_PACT_FIELD_ORDER.map(field => fieldErrors[field]).find(Boolean) ?? ''
+
+  const [attemptedSteps, setAttemptedSteps] = useState<Record<number, boolean>>({})
+
+  function getFieldStep(field: NewPactField): FormStep {
+    if (field === 'taker' || field === 'arbiter') return 1
+    if (field === 'amountMaker' || field === 'amountTaker' || field === 'notionalUSDC' || field === 'arbiterFeeCap') return 2
+    return 3
+  }
 
   function touchField(field: NewPactField) {
     setTouchedFields(current => ({ ...current, [field]: true }))
@@ -209,7 +230,8 @@ export default function NewPactPage() {
   }
 
   function visibleFieldError(field: NewPactField) {
-    return submitAttempted || touchedFields[field] ? fieldErrors[field] : undefined
+    const step = getFieldStep(field)
+    return submitAttempted || touchedFields[field] || attemptedSteps[step] ? fieldErrors[field] : undefined
   }
 
   function focusFirstInvalidFieldInStep(step: FormStep) {
@@ -225,9 +247,10 @@ export default function NewPactPage() {
   }
 
   function goToStep(targetStep: FormStep) {
-    // If going forward, validate current step
     if (targetStep > currentStep) {
       touchStepFields(currentStep)
+      setAttemptedSteps(prev => ({ ...prev, [currentStep]: true }))
+      setSubmitAttempted(true)
       const valid = isStepValid(currentStep, fieldErrors)
       if (!valid) {
         toast.error('Please resolve the highlighted errors before proceeding.')
@@ -287,9 +310,7 @@ export default function NewPactPage() {
     }
     setSubmitAttempted(true)
     
-    // Check all fields
     if (validationError) {
-      // Find first step with error and switch to it
       for (const step of [1, 2, 3] as FormStep[]) {
         if (!isStepValid(step, fieldErrors)) {
           setCurrentStep(step)
@@ -475,6 +496,13 @@ export default function NewPactPage() {
   const step2Valid = isStepValid(2, fieldErrors)
   const step3Valid = isStepValid(3, fieldErrors)
 
+  const stepGoals: Record<FormStep, string> = {
+    1: 'Define the agreement archetype, counterparty recipient, and trusted dispute arbiter.',
+    2: 'Specify escrow collateral amounts, asset denomination, and dispute fee economics.',
+    3: 'Set binding offer, performance, and dispute timeframes and commit verifiable terms.',
+    4: 'Verify the complete financial summary, outcome scenarios, and sign on-chain.',
+  }
+
   return (
     <div className="mx-auto w-full max-w-[880px] space-y-6">
       {/* Testnet / Network Notice Banner */}
@@ -508,22 +536,26 @@ export default function NewPactPage() {
 
       {/* Header */}
       <header className="border-b border-outline-hairline pb-5 animate-enter">
-        <p className="pact-eyebrow mb-1">Create Committed Offer</p>
-        <h1 className="font-display-mono text-[26px] sm:text-[32px] font-bold text-white tracking-tight">
-          New Pact
-        </h1>
-        <p className="mt-1 font-body-sans text-[13px] text-text-muted max-w-xl">
-          Create an on-chain escrow commitment. Configure parties, collateral, deadlines, and plaintext terms through the 4-step wizard.
-        </p>
+        <div className="flex flex-col sm:flex-row sm:items-baseline justify-between gap-2">
+          <div>
+            <p className="pact-eyebrow mb-1">Create Committed Offer</p>
+            <h1 className="font-display-mono text-[26px] sm:text-[32px] font-bold text-white tracking-tight">
+              New Pact
+            </h1>
+          </div>
+          <span className="font-code-hash text-[12px] text-text-dim">
+            Step {currentStep} of 4 · <span className="text-primary-fixed">{stepGoals[currentStep]}</span>
+          </span>
+        </div>
       </header>
 
       {/* Step Navigation Wizard Stepper */}
       <nav aria-label="Form Steps" className="grid grid-cols-2 sm:grid-cols-4 gap-2 font-code-hash text-[11px]">
         {[
-          { num: 1 as FormStep, label: '1. Parties', valid: step1Valid, fields: PARTIES_FIELDS },
-          { num: 2 as FormStep, label: '2. Collateral', valid: step2Valid, fields: COLLATERAL_FIELDS },
-          { num: 3 as FormStep, label: '3. Terms & Deadlines', valid: step3Valid, fields: TERMS_DEADLINES_FIELDS },
-          { num: 4 as FormStep, label: '4. Review & Sign', valid: step1Valid && step2Valid && step3Valid, fields: [] },
+          { num: 1 as FormStep, label: '1. Parties', valid: step1Valid },
+          { num: 2 as FormStep, label: '2. Collateral', valid: step2Valid },
+          { num: 3 as FormStep, label: '3. Terms & Deadlines', valid: step3Valid },
+          { num: 4 as FormStep, label: '4. Review & Sign', valid: step1Valid && step2Valid && step3Valid },
         ].map(step => {
           const isActive = currentStep === step.num
           const isPassed = currentStep > step.num
@@ -579,14 +611,20 @@ export default function NewPactPage() {
                   Parties & Agreement Structure
                 </h2>
               </div>
-              <span className="text-[10px] font-label-caps uppercase text-text-dim">Deal Type & Addresses</span>
+              <span className="text-[10px] font-label-caps uppercase text-text-dim">Step 1 of 4</span>
             </div>
+
+            <p className="text-[12px] text-text-muted font-body-sans leading-relaxed">
+              {stepGoals[1]}
+            </p>
 
             {/* Maker Role Card */}
             <div className="p-4 border border-outline-hairline bg-[#07080a] flex flex-col sm:flex-row sm:items-center justify-between gap-3 font-code-hash text-[12px]">
               <div className="flex items-center gap-2 flex-wrap">
                 <RoleBadge role="MAKER" isCurrentUser={true} size="sm" />
-                <span className="text-text-muted">You are creating this pact as Maker (Escrow Depositor).</span>
+                <span className="text-text-muted">
+                  You are creating this pact as <ProtocolTerm term="MAKER">Maker</ProtocolTerm> (Escrow Depositor).
+                </span>
               </div>
               <div className="shrink-0">
                 {address ? (
@@ -630,44 +668,88 @@ export default function NewPactPage() {
               </div>
             </div>
 
-            {/* Counterparty & Arbiter Address Inputs */}
-            <div className="grid gap-5 sm:grid-cols-2 pt-2 border-t border-outline-hairline/60">
-              <div>
-                <div className="flex items-center justify-between mb-1.5">
+            {/* Counterparty Address Input */}
+            <div className="pt-2 border-t border-outline-hairline/60">
+              <div className="flex items-center justify-between mb-1.5">
+                <div className="flex items-center gap-1.5">
                   <label htmlFor="input-taker" className="font-label-caps text-[11px] uppercase tracking-wider text-text-muted">
                     Designated Counterparty Wallet <span className="text-status-error">*</span>
                   </label>
-                  <RoleBadge role="TAKER" isCurrentUser={false} size="xs" />
+                  <ProtocolTerm term="TAKER" />
                 </div>
-                <input
-                  id="input-taker"
-                  ref={el => { fieldRefs.current.taker = el }}
-                  value={taker}
-                  onChange={e => setTaker(e.target.value.trim())}
-                  onBlur={() => touchField('taker')}
-                  aria-invalid={Boolean(visibleFieldError('taker'))}
-                  aria-describedby={visibleFieldError('taker') ? errorId('taker') : undefined}
-                  placeholder="0x… (42-character Arc address)"
-                  className={fieldClassFor('taker')}
-                />
-                {renderFieldError('taker')}
-                <p className="mt-1 text-[10px] text-text-dim font-body-sans">
-                  The only address authorized to accept this agreement and deliver fulfillment proof.
-                </p>
+                <RoleBadge role="TAKER" isCurrentUser={false} size="xs" />
               </div>
+              <input
+                id="input-taker"
+                ref={el => { fieldRefs.current.taker = el }}
+                value={taker}
+                onChange={e => setTaker(e.target.value.trim())}
+                onBlur={() => touchField('taker')}
+                aria-invalid={Boolean(visibleFieldError('taker'))}
+                aria-describedby={visibleFieldError('taker') ? errorId('taker') : undefined}
+                placeholder="0x… (42-character Arc address)"
+                className={fieldClassFor('taker')}
+              />
+              {renderFieldError('taker')}
+              <p className="mt-1 text-[10px] text-text-dim font-body-sans">
+                Required: The only address authorized to accept this agreement and deliver fulfillment proof.
+              </p>
+            </div>
 
-              <div>
-                <div className="flex items-center justify-between mb-1.5">
+            {/* Arbiter Selection: Verified vs Custom */}
+            <div className="pt-3 border-t border-outline-hairline/60 space-y-3">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-1.5">
                   <label htmlFor="input-arbiter" className="font-label-caps text-[11px] uppercase tracking-wider text-text-muted">
                     Designated Arbiter Wallet <span className="text-status-error">*</span>
                   </label>
-                  <RoleBadge role="ARBITER" isCurrentUser={false} size="xs" />
+                  <ProtocolTerm term="ARBITER" />
                 </div>
+                <RoleBadge role="ARBITER" isCurrentUser={false} size="xs" />
+              </div>
+
+              {/* Arbiter Type Toggle */}
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setArbiterType('preset')
+                    setArbiter(VERIFIED_ARBITER_PRESETS[0].address)
+                  }}
+                  className={`px-3 py-1.5 text-[11px] font-label-caps uppercase border transition-colors ${
+                    arbiterType === 'preset'
+                      ? 'border-primary-fixed bg-primary-fixed text-black font-bold'
+                      : 'border-outline-border bg-[#07080a] text-text-muted hover:text-white'
+                  }`}
+                >
+                  ✓ Verified Protocol Arbiter
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setArbiterType('custom')
+                    setCustomArbiterAcknowledged(false)
+                  }}
+                  className={`px-3 py-1.5 text-[11px] font-label-caps uppercase border transition-colors ${
+                    arbiterType === 'custom'
+                      ? 'border-primary-fixed bg-primary-fixed text-black font-bold'
+                      : 'border-outline-border bg-[#07080a] text-text-muted hover:text-white'
+                  }`}
+                >
+                  ⚡ Custom Arbiter Address
+                </button>
+              </div>
+
+              {/* Arbiter Input Field */}
+              <div>
                 <input
                   id="input-arbiter"
                   ref={el => { fieldRefs.current.arbiter = el }}
                   value={arbiter}
-                  onChange={e => setArbiter(e.target.value.trim())}
+                  onChange={e => {
+                    setArbiter(e.target.value.trim())
+                    if (arbiterType === 'preset') setArbiterType('custom')
+                  }}
                   onBlur={() => touchField('arbiter')}
                   aria-invalid={Boolean(visibleFieldError('arbiter'))}
                   aria-describedby={visibleFieldError('arbiter') ? errorId('arbiter') : undefined}
@@ -675,10 +757,32 @@ export default function NewPactPage() {
                   className={fieldClassFor('arbiter')}
                 />
                 {renderFieldError('arbiter')}
-                <p className="mt-1 text-[10px] text-text-dim font-body-sans">
-                  Neutral arbitrator who will adjudicate and split escrow funds if a dispute is formally opened.
-                </p>
               </div>
+
+              {/* Custom Arbiter Warning & Confirmation */}
+              {isCustomArbiter && (
+                <div className="p-3.5 bg-amber-950/20 border border-amber-500/40 text-[11px] font-body-sans space-y-2 text-amber-200">
+                  <div className="flex items-center gap-2 text-amber-400 font-bold font-headline-mono text-[11px] uppercase">
+                    <span>⚠️</span>
+                    <span>Custom Arbiter Risk Advisory</span>
+                  </div>
+                  <p className="text-text-muted leading-relaxed">
+                    You are specifying a custom, unverified third-party arbiter address. The arbiter possesses binding unilateral authority to award disputed escrow funds. Maker, Taker, and Zero address are strictly prohibited.
+                  </p>
+                  <label className="flex items-start gap-2 pt-1 cursor-pointer select-none">
+                    <input
+                      type="checkbox"
+                      aria-label="I understand that the custom arbiter has final binding authority over disputed escrow funds"
+                      checked={customArbiterAcknowledged}
+                      onChange={e => setCustomArbiterAcknowledged(e.target.checked)}
+                      className="accent-[#c8f542] h-4 w-4 mt-0.5 shrink-0"
+                    />
+                    <span className="text-white font-medium">
+                      I understand that the custom arbiter has final binding authority over disputed escrow funds.
+                    </span>
+                  </label>
+                </div>
+              )}
             </div>
 
             {reputation && (
@@ -716,8 +820,12 @@ export default function NewPactPage() {
                   Collateral & Dispute Economics
                 </h2>
               </div>
-              <span className="text-[10px] font-label-caps uppercase text-text-dim">Escrow & Bond Calculations</span>
+              <span className="text-[10px] font-label-caps uppercase text-text-dim">Step 2 of 4</span>
             </div>
+
+            <p className="text-[12px] text-text-muted font-body-sans leading-relaxed">
+              {stepGoals[2]}
+            </p>
 
             {/* Maker Collateral Row */}
             <div className="grid gap-4 sm:grid-cols-2">
@@ -731,9 +839,12 @@ export default function NewPactPage() {
               </div>
               <div>
                 <div className="flex items-center justify-between mb-1.5">
-                  <label htmlFor="input-amount-maker" className="font-label-caps text-[11px] uppercase tracking-wider text-text-muted">
-                    Maker Collateral to Lock <span className="text-status-error">*</span>
-                  </label>
+                  <div className="flex items-center gap-1.5">
+                    <label htmlFor="input-amount-maker" className="font-label-caps text-[11px] uppercase tracking-wider text-text-muted">
+                      Maker Collateral to Lock <span className="text-status-error">*</span>
+                    </label>
+                    <ProtocolTerm term="COLLATERAL" />
+                  </div>
                   {makerBalanceData !== undefined && (
                     <button
                       type="button"
@@ -757,6 +868,9 @@ export default function NewPactPage() {
                   className={fieldClassFor('amountMaker')}
                 />
                 {renderFieldError('amountMaker')}
+                <p className="mt-1 text-[10px] text-text-dim font-body-sans">
+                  Required: Principal funds deposited by Maker to back this agreement.
+                </p>
               </div>
             </div>
 
@@ -771,9 +885,14 @@ export default function NewPactPage() {
                 />
               </div>
               <div>
-                <label htmlFor="input-amount-taker" className="block font-label-caps text-[11px] uppercase tracking-wider text-text-muted mb-1.5">
-                  Counterparty Collateral Required (Optional)
-                </label>
+                <div className="flex items-center justify-between mb-1.5">
+                  <div className="flex items-center gap-1.5">
+                    <label htmlFor="input-amount-taker" className="font-label-caps text-[11px] uppercase tracking-wider text-text-muted">
+                      Counterparty Collateral Required (Optional)
+                    </label>
+                    <ProtocolTerm term="COLLATERAL" />
+                  </div>
+                </div>
                 <input
                   id="input-amount-taker"
                   ref={el => { fieldRefs.current.amountTaker = el }}
@@ -787,12 +906,20 @@ export default function NewPactPage() {
                   className={fieldClassFor('amountTaker')}
                 />
                 {renderFieldError('amountTaker')}
+                <p className="mt-1 text-[10px] text-text-dim font-body-sans">
+                  Optional: Required collateral deposited by counterparty when accepting.
+                </p>
               </div>
 
               <div>
-                <label htmlFor="input-notional-usdc" className="block font-label-caps text-[11px] uppercase tracking-wider text-text-muted mb-1.5">
-                  Notional Value in USDC <span className="text-status-error">*</span>
-                </label>
+                <div className="flex items-center justify-between mb-1.5">
+                  <div className="flex items-center gap-1.5">
+                    <label htmlFor="input-notional-usdc" className="font-label-caps text-[11px] uppercase tracking-wider text-text-muted">
+                      Notional Value in USDC <span className="text-status-error">*</span>
+                    </label>
+                    <ProtocolTerm term="DISPUTE_BOND" />
+                  </div>
+                </div>
                 <input
                   id="input-notional-usdc"
                   ref={el => { fieldRefs.current.notionalUSDC = el }}
@@ -807,14 +934,19 @@ export default function NewPactPage() {
                 />
                 {renderFieldError('notionalUSDC')}
                 <p className="mt-1 text-[10px] text-text-dim font-body-sans">
-                  Determines the required 5% dispute bond posted by claimants.
+                  Required: Base valuation used to compute the 5% dispute bond.
                 </p>
               </div>
 
               <div>
-                <label htmlFor="input-arbiter-fee-cap" className="block font-label-caps text-[11px] uppercase tracking-wider text-text-muted mb-1.5">
-                  Arbiter Fee Cap (USDC)
-                </label>
+                <div className="flex items-center justify-between mb-1.5">
+                  <div className="flex items-center gap-1.5">
+                    <label htmlFor="input-arbiter-fee-cap" className="font-label-caps text-[11px] uppercase tracking-wider text-text-muted">
+                      Arbiter Fee Cap (USDC)
+                    </label>
+                    <ProtocolTerm term="ARBITER_FEE_CAP" />
+                  </div>
+                </div>
                 <input
                   id="input-arbiter-fee-cap"
                   ref={el => { fieldRefs.current.arbiterFeeCap = el }}
@@ -828,7 +960,7 @@ export default function NewPactPage() {
                 />
                 {renderFieldError('arbiterFeeCap')}
                 <p className="mt-1 text-[10px] text-text-dim font-body-sans">
-                  Maximum compensation deducted for arbiter from the dispute bond upon ruling.
+                  Maximum compensation arbiter may claim if an active dispute is resolved.
                 </p>
               </div>
             </div>
@@ -836,35 +968,30 @@ export default function NewPactPage() {
             {/* Calculated Bond & Arbiter Fee Policy Card */}
             <div className="p-4 border border-outline-hairline bg-[#07080a] text-[12px] font-code-hash space-y-2">
               <div className="flex justify-between items-center">
-                <span className="text-text-muted">Calculated Dispute Bond:</span>
+                <span className="text-text-muted">Calculated 5% Dispute Bond:</span>
                 <span className="text-primary-fixed font-bold text-[13px]">{formatUnits(calculatedBond, 6)} USDC</span>
               </div>
               <div className="flex justify-between items-center text-[11px] pt-1 border-t border-outline-hairline/40">
                 <span className="text-text-dim">Arbiter Fee Cap:</span>
                 <span className="text-white font-mono">{arbiterFeeCap || '0'} USDC</span>
               </div>
-              <div className="p-2.5 bg-[#0c0f12] border border-outline-hairline/60 rounded-[1px] text-[10px] leading-relaxed text-text-muted font-body-sans space-y-1">
+              <div className="p-2.5 bg-[#0c0f12] border border-outline-hairline/60 text-[10px] leading-relaxed text-text-muted font-body-sans space-y-1">
                 <div className="text-primary-fixed font-bold uppercase tracking-wider font-headline-mono text-[10px]">
                   🛡️ Bounded Arbiter Fee Policy
                 </div>
                 <p>
-                  • <strong>Loser Pays:</strong> The Arbiter Fee is deducted exclusively from the losing party&apos;s dispute bond if an active dispute is ruled upon.
-                </p>
-                <p>
-                  • <strong>Collateral Ring-Fenced:</strong> Escrowed collateral principal is 100% protected and awarded to the winner without deductions.
-                </p>
-                <p>
-                  • <strong>Zero-Fee Guarantee:</strong> If the contract settles normally, resolves via 3-day default, or the arbiter times out (14 days), the arbiter fee is strictly <strong>0.00 USDC</strong>.
+                  • <strong>Loser Pays:</strong> Arbiter fee is deducted exclusively from the losing party&apos;s dispute bond.
+                  Maximum fee arbiter may claim if dispute occurs. Cannot exceed dispute bond ({formatUnits(calculatedBond, 6)} USDC).
                 </p>
               </div>
             </div>
 
             {/* Step 2 Actions */}
-            <div className="pt-4 border-t border-outline-hairline flex items-center justify-between">
+            <div className="pt-4 border-t border-outline-hairline flex items-center justify-between gap-3">
               <button
                 type="button"
                 onClick={() => goToStep(1)}
-                className="pact-button-secondary min-h-[42px] px-5 text-[11px] uppercase tracking-wider"
+                className="pact-button-secondary min-h-[42px] px-5 text-[11px] font-bold uppercase"
               >
                 ← Back to Parties
               </button>
@@ -892,41 +1019,39 @@ export default function NewPactPage() {
                   Deadlines & Agreement Terms
                 </h2>
               </div>
-              <span className="text-[10px] font-label-caps uppercase text-text-dim">Time Windows & Plaintext</span>
+              <span className="text-[10px] font-label-caps uppercase text-text-dim">Step 3 of 4</span>
             </div>
 
-            {/* Written Terms Textarea */}
+            <p className="text-[12px] text-text-muted font-body-sans leading-relaxed">
+              {stepGoals[3]}
+            </p>
+
+            {/* Written Terms Input */}
             <div>
               <div className="flex items-center justify-between mb-1.5">
-                <label htmlFor="input-terms" className="font-label-caps text-[11px] uppercase tracking-wider text-text-muted">
-                  Agreement Terms & Specifications <span className="text-status-error">*</span>
-                </label>
-                <span className="text-[10px] font-code-hash text-text-dim">
-                  {terms.length} / 2000 characters
+                <div className="flex items-center gap-1.5">
+                  <label htmlFor="input-terms" className="font-label-caps text-[11px] uppercase tracking-wider text-text-muted">
+                    Agreement Terms & Specifications <span className="text-status-error">*</span>
+                  </label>
+                  <ProtocolTerm term="TERMS_HASH" />
+                </div>
+                <span className="text-[10px] text-text-dim font-code-hash">
+                  {terms.length} chars
                 </span>
               </div>
               <textarea
                 id="input-terms"
                 ref={el => { fieldRefs.current.terms = el }}
+                rows={4}
                 value={terms}
                 onChange={e => setTerms(e.target.value)}
                 onBlur={() => touchField('terms')}
                 aria-invalid={Boolean(visibleFieldError('terms'))}
                 aria-describedby={visibleFieldError('terms') ? errorId('terms') : undefined}
-                maxLength={2000}
-                rows={6}
-                placeholder="Detail the deliverables, milestone conditions, quality standards, and fulfillment criteria..."
-                className={`${fieldClassFor('terms')} resize-y`}
+                placeholder="Describe deliverables, milestone criteria, and acceptance standards in clear detail…"
+                className={`${fieldClassFor('terms')} resize-y font-body-sans leading-relaxed text-[12px]`}
               />
               {renderFieldError('terms')}
-              <div className="mt-1.5 flex items-center justify-between text-[10px] font-code-hash text-text-dim">
-                <span>Terms are hashed client-side using SHA-256 for privacy and zero gas overhead.</span>
-                {terms.trim() && (
-                  <span className="text-primary-fixed font-bold truncate max-w-[220px]">
-                    SHA-256: {hashTerms(terms).slice(0, 16)}…
-                  </span>
-                )}
-              </div>
             </div>
 
             {/* Deadlines Inputs */}
@@ -1041,7 +1166,97 @@ export default function NewPactPage() {
                   Pre-Flight Review & On-Chain Commit
                 </h2>
               </div>
-              <span className="text-[10px] font-label-caps uppercase text-text-dim">Final Verification</span>
+              <span className="text-[10px] font-label-caps uppercase text-text-dim">Step 4 of 4</span>
+            </div>
+
+            <p className="text-[12px] text-text-muted font-body-sans leading-relaxed">
+              {stepGoals[4]}
+            </p>
+
+            {/* Comprehensive Financial Summary */}
+            <div className="p-4 border border-primary-fixed/40 bg-primary-fixed/[0.03] space-y-4">
+              <div className="flex items-center justify-between border-b border-outline-hairline pb-2">
+                <div className="flex items-center gap-2">
+                  <span className="text-primary-fixed font-bold text-[14px]">📊</span>
+                  <h3 className="font-headline-mono text-[13px] font-bold uppercase tracking-wider text-white">
+                    Dynamic Financial Summary & Outcome Scenarios
+                  </h3>
+                </div>
+                <span className="text-[10px] font-code-hash text-text-dim">Zero-Spread Escrow</span>
+              </div>
+
+              {/* Collateral & Economics Matrix */}
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-[12px] font-code-hash">
+                <div className="p-2.5 bg-[#07080a] border border-outline-hairline">
+                  <span className="text-[10px] font-label-caps uppercase text-text-dim block">Maker Locks</span>
+                  <span className="text-primary-fixed font-bold text-[13px]">
+                    {amountMaker || '0'} {TOKENS.find(t => t.value === tokenMaker)?.label}
+                  </span>
+                </div>
+                <div className="p-2.5 bg-[#07080a] border border-outline-hairline">
+                  <span className="text-[10px] font-label-caps uppercase text-text-dim block">Taker Locks</span>
+                  <span className="text-white font-bold text-[13px]">
+                    {amountTaker ? `${amountTaker} ${TOKENS.find(t => t.value === tokenTaker)?.label}` : '0.00 (None)'}
+                  </span>
+                </div>
+                <div className="p-2.5 bg-[#07080a] border border-outline-hairline">
+                  <span className="text-[10px] font-label-caps uppercase text-text-dim block">5% Dispute Bond</span>
+                  <span className="text-amber-400 font-bold text-[13px]">
+                    {formatUnits(calculatedBond, 6)} USDC
+                  </span>
+                </div>
+                <div className="p-2.5 bg-[#07080a] border border-outline-hairline">
+                  <span className="text-[10px] font-label-caps uppercase text-text-dim block">Arbiter Fee Cap</span>
+                  <span className="text-white font-bold text-[13px]">
+                    {arbiterFeeCap || '0'} USDC
+                  </span>
+                </div>
+              </div>
+
+              {/* Settlement Outcome Scenarios */}
+              <div className="space-y-2 pt-2 border-t border-outline-hairline/60 text-[11px] font-body-sans">
+                <span className="font-label-caps text-[10px] uppercase tracking-wider text-text-dim block mb-1">
+                  Settlement & Dispute Outcomes
+                </span>
+                
+                <div className="grid gap-2 sm:grid-cols-2">
+                  <div className="p-2.5 bg-[#07080a] border border-outline-hairline space-y-1">
+                    <span className="text-emerald-400 font-bold font-headline-mono text-[11px] block">
+                      ✓ Normal Settlement (Fulfillment Verified)
+                    </span>
+                    <p className="text-text-muted text-[10px] leading-relaxed">
+                      Counterparty receives {amountMaker} {TOKENS.find(t => t.value === tokenMaker)?.label} + refund of any taker collateral. Arbiter fee is <strong>0.00 USDC</strong>.
+                    </p>
+                  </div>
+
+                  <div className="p-2.5 bg-[#07080a] border border-outline-hairline space-y-1">
+                    <span className="text-primary-fixed font-bold font-headline-mono text-[11px] block">
+                      🛡️ Maker Prevails in Dispute
+                    </span>
+                    <p className="text-text-muted text-[10px] leading-relaxed">
+                      Maker receives 100% collateral refund ({amountMaker} {TOKENS.find(t => t.value === tokenMaker)?.label}) + return of dispute bond. Arbiter fee deducted from loser bond.
+                    </p>
+                  </div>
+
+                  <div className="p-2.5 bg-[#07080a] border border-outline-hairline space-y-1">
+                    <span className="text-sky-400 font-bold font-headline-mono text-[11px] block">
+                      📦 Taker Prevails in Dispute
+                    </span>
+                    <p className="text-text-muted text-[10px] leading-relaxed">
+                      Taker receives full payment + return of taker dispute bond. Arbiter fee deducted from maker bond.
+                    </p>
+                  </div>
+
+                  <div className="p-2.5 bg-[#07080a] border border-outline-hairline space-y-1">
+                    <span className="text-zinc-300 font-bold font-headline-mono text-[11px] block">
+                      ⏳ Arbiter Timeout (14 Days)
+                    </span>
+                    <p className="text-text-muted text-[10px] leading-relaxed">
+                      Default safety settlement applies: collateral refunds to depositors, both dispute bonds returned in full. Arbiter fee is strictly <strong>0.00 USDC</strong>.
+                    </p>
+                  </div>
+                </div>
+              </div>
             </div>
 
             {/* Section A: Public On-Chain Data */}
@@ -1102,30 +1317,6 @@ export default function NewPactPage() {
                   <span className="text-white font-bold">{KINDS.find(k => k.value === kind)?.label}</span>
                 </div>
 
-                <div className="pt-2 border-t border-outline-hairline/60">
-                  <span className="text-[10px] font-label-caps uppercase text-text-dim block mb-1">Maker Collateral to Lock</span>
-                  <span className="text-primary-fixed font-bold text-[14px]">
-                    {amountMaker || '0'} {TOKENS.find(t => t.value === tokenMaker)?.label}
-                  </span>
-                </div>
-
-                <div className="pt-2 border-t border-outline-hairline/60">
-                  <span className="text-[10px] font-label-caps uppercase text-text-dim block mb-1">Required Taker Collateral</span>
-                  <span className="text-white font-bold text-[14px]">
-                    {amountTaker ? `${amountTaker} ${TOKENS.find(t => t.value === tokenTaker)?.label}` : 'None (0.00)'}
-                  </span>
-                </div>
-
-                <div>
-                  <span className="text-[10px] font-label-caps uppercase text-text-dim block mb-1">5% Dispute Bond</span>
-                  <span className="text-white">{formatUnits(calculatedBond, 6)} USDC</span>
-                </div>
-
-                <div>
-                  <span className="text-[10px] font-label-caps uppercase text-text-dim block mb-1">Arbiter Fee Cap</span>
-                  <span className="text-white">{arbiterFeeCap || '0'} USDC</span>
-                </div>
-
                 <div>
                   <span className="text-[10px] font-label-caps uppercase text-text-dim block mb-1">Offer Expiration Date</span>
                   <span className="text-white">{formatDate(timestamps.offerExpiry)}</span>
@@ -1168,6 +1359,20 @@ export default function NewPactPage() {
                 ℹ️ The text above is verified client-side. Only its 32-byte cryptographic SHA-256 hash is anchored on Arc Testnet.
               </p>
             </div>
+
+            {/* Progressive Disclosure for On-Chain Technical Details */}
+            <AdvancedDetails
+              contractAddress={protocolAddress}
+              tokenMaker={tokenMaker}
+              tokenTaker={takerAmount > 0n ? tokenTaker : undefined}
+              termsHash={canonicalTermsHash ?? undefined}
+              rawTimestamps={{
+                offerExpiry: timestamps.offerExpiry,
+                performanceDeadline: timestamps.performanceDeadline,
+                disputeDeadline: timestamps.disputeDeadline,
+              }}
+              defaultOpen={false}
+            />
 
             {/* Form-Wide Validation Errors Alert */}
             {submitAttempted && validationError && (

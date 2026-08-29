@@ -20,6 +20,8 @@ import RoleBadge, { type RoleType } from '../../../components/RoleBadge'
 import PartyCard from '../../../components/PartyCard'
 import TermsVerifier from '../../../components/TermsVerifier'
 import PageSkeleton from '../../../components/PageSkeleton'
+import AdvancedDetails from '../../../components/AdvancedDetails'
+import ProtocolTerm from '../../../components/ProtocolTerm'
 import { transactionErrorMessage } from '../../../lib/transactionErrors'
 import { evaluatePactActions, getPrimaryUserAction, type PactAction, type DisputeData } from '../../../lib/actionMatrix'
 
@@ -385,7 +387,7 @@ export default function PactDetailPage({ params }: { params: Promise<{ id: strin
             href={`https://testnet.arcscan.app/address/${protocolAddress}`}
             target="_blank"
             rel="noreferrer"
-            className="text-primary-fixed hover:underline flex items-center gap-1"
+            className="text-primary-fixed hover:underline flex items-center gap-1 font-bold"
           >
             <span className="material-symbols-outlined text-[14px]">verified</span>
             Verified Arc Contract ↗
@@ -427,7 +429,7 @@ export default function PactDetailPage({ params }: { params: Promise<{ id: strin
           {primaryAction && primaryAction.isEligible && (
             <div className="shrink-0">
               <span className="inline-flex items-center gap-1.5 px-3 py-1 bg-primary-fixed text-[#090b0d] font-bold text-[11px] font-label-caps uppercase tracking-wider rounded-sm shadow-[0_0_15px_rgba(243,232,140,0.2)] animate-pulse">
-                <span>⚡ Next: {primaryAction.shortLabel}</span>
+                <span>⚡ Recommended Action: {primaryAction.shortLabel}</span>
               </span>
             </div>
           )}
@@ -464,7 +466,9 @@ export default function PactDetailPage({ params }: { params: Promise<{ id: strin
 
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-px bg-outline-hairline border border-outline-hairline">
               <div className="bg-[#07080a] p-3.5">
-                <span className="font-label-caps text-[10px] uppercase tracking-wider text-text-muted block">Maker Collateral</span>
+                <span className="font-label-caps text-[10px] uppercase tracking-wider text-text-muted block">
+                  <ProtocolTerm term="COLLATERAL">Maker Collateral</ProtocolTerm>
+                </span>
                 <span className="font-display-mono text-[16px] sm:text-[18px] font-bold text-primary-fixed mt-1 block">
                   {formatAmount(pact.amountMaker)} {tokenSymbol(pact.tokenMaker)}
                 </span>
@@ -472,7 +476,9 @@ export default function PactDetailPage({ params }: { params: Promise<{ id: strin
               </div>
 
               <div className="bg-[#07080a] p-3.5">
-                <span className="font-label-caps text-[10px] uppercase tracking-wider text-text-muted block">Taker Collateral</span>
+                <span className="font-label-caps text-[10px] uppercase tracking-wider text-text-muted block">
+                  <ProtocolTerm term="COLLATERAL">Taker Collateral</ProtocolTerm>
+                </span>
                 <span className="font-display-mono text-[16px] sm:text-[18px] font-bold text-white mt-1 block">
                   {pact.amountTaker > 0n ? `${formatAmount(pact.amountTaker)} ${tokenSymbol(pact.tokenTaker)}` : 'None (0.00)'}
                 </span>
@@ -482,7 +488,9 @@ export default function PactDetailPage({ params }: { params: Promise<{ id: strin
               </div>
 
               <div className="bg-[#07080a] p-3.5">
-                <span className="font-label-caps text-[10px] uppercase tracking-wider text-text-muted block">Dispute Bond (5%)</span>
+                <span className="font-label-caps text-[10px] uppercase tracking-wider text-text-muted block">
+                  <ProtocolTerm term="DISPUTE_BOND">Dispute Bond (5%)</ProtocolTerm>
+                </span>
                 <span className="font-display-mono text-[16px] sm:text-[18px] font-bold text-amber-400 mt-1 block">
                   {formatAmount(pact.bondAmount)} USDC
                 </span>
@@ -490,7 +498,9 @@ export default function PactDetailPage({ params }: { params: Promise<{ id: strin
               </div>
 
               <div className="bg-[#07080a] p-3.5">
-                <span className="font-label-caps text-[10px] uppercase tracking-wider text-text-muted block">Arbiter Fee Cap</span>
+                <span className="font-label-caps text-[10px] uppercase tracking-wider text-text-muted block">
+                  <ProtocolTerm term="ARBITER_FEE_CAP">Arbiter Fee Cap</ProtocolTerm>
+                </span>
                 <span className="font-display-mono text-[16px] sm:text-[18px] font-bold text-text-muted mt-1 block">
                   {formatAmount(pact.arbiterFeeCap)} USDC
                 </span>
@@ -571,7 +581,7 @@ export default function PactDetailPage({ params }: { params: Promise<{ id: strin
           </div>
 
           <span className="text-[10px] text-text-dim font-code-hash mt-3 block pt-2 border-t border-outline-hairline/40">
-            Pull-over-push prevents re-entrancy risks.
+            Pull-over-push pattern prevents re-entrancy risks.
           </span>
         </section>
       </div>
@@ -1165,57 +1175,73 @@ export default function PactDetailPage({ params }: { params: Promise<{ id: strin
       {/* ========================================================================= */}
       {/* 9. PROOF PAYLOAD & DISPUTE AUDIT TRAIL */}
       {/* ========================================================================= */}
-      <div>
-
-        {/* Proof Deliverable & Dispute Logs */}
-        <section aria-label="Delivery Proof and Audit" className="border border-outline-border bg-[#0c0f12] p-5 animate-enter space-y-3">
-          <div className="flex items-center justify-between pb-3 border-b border-outline-hairline">
-            <div className="flex items-center gap-2">
-              <span className="material-symbols-outlined text-[18px] text-primary-fixed">inventory_2</span>
-              <h2 className="font-headline-mono text-[13px] font-bold uppercase tracking-wider text-white">
-                Fulfillment Proof & Audit
-              </h2>
-            </div>
-            <span className="text-[10px] font-code-hash text-text-dim">On-Chain Delivery</span>
+      <section aria-label="Delivery Proof and Audit" className="border border-outline-border bg-[#0c0f12] p-5 animate-enter space-y-3">
+        <div className="flex items-center justify-between pb-3 border-b border-outline-hairline">
+          <div className="flex items-center gap-2">
+            <span className="material-symbols-outlined text-[18px] text-primary-fixed">inventory_2</span>
+            <h2 className="font-headline-mono text-[13px] font-bold uppercase tracking-wider text-white">
+              Fulfillment Proof & Audit
+            </h2>
           </div>
+          <span className="text-[10px] font-code-hash text-text-dim">On-Chain Delivery</span>
+        </div>
 
-          {pact.status >= 2 && pact.proofHash && pact.proofHash !== '0x0000000000000000000000000000000000000000000000000000000000000000' ? (
-            <div className="space-y-2">
-              <span className="text-[10px] font-label-caps uppercase text-emerald-400 block font-bold">
-                ✓ Proof Anchored On-Chain
-              </span>
-              <div className="p-3 border border-emerald-500/30 bg-[#07080a] font-code-hash text-[11px] text-emerald-300 break-all select-all">
-                {pact.proofHash}
-              </div>
+        {pact.status >= 2 && pact.proofHash && pact.proofHash !== '0x0000000000000000000000000000000000000000000000000000000000000000' ? (
+          <div className="space-y-2">
+            <span className="text-[10px] font-label-caps uppercase text-emerald-400 block font-bold">
+              ✓ Proof Anchored On-Chain
+            </span>
+            <div className="p-3 border border-emerald-500/30 bg-[#07080a] font-code-hash text-[11px] text-emerald-300 break-all select-all">
+              {pact.proofHash}
             </div>
-          ) : (
-            <div className="p-4 border border-outline-hairline bg-[#07080a] text-center font-code-hash text-[12px] text-text-dim">
-              No delivery proof submitted yet.
-            </div>
-          )}
+          </div>
+        ) : (
+          <div className="p-4 border border-outline-hairline bg-[#07080a] text-center font-code-hash text-[12px] text-text-dim">
+            No delivery proof submitted yet.
+          </div>
+        )}
 
-          {/* Active Dispute Information Summary */}
-          {dispute && (
-            <div className="p-3 border border-amber-500/30 bg-amber-950/15 text-[11px] font-code-hash space-y-1.5">
-              <div className="flex justify-between">
-                <span className="text-text-muted">Dispute Opener:</span>
-                <span className="text-white font-bold">{truncateAddress(dispute.opener)}</span>
-              </div>
-              <div className="flex justify-between">
-                <span className="text-text-muted">Claim Type:</span>
-                <span className="text-amber-400 font-bold">{dispute.claim === 1 ? 'Maker Claim (Refund)' : 'Taker Claim (Release)'}</span>
-              </div>
-              <div className="flex justify-between">
-                <span className="text-text-muted">Response Cutoff:</span>
-                <span className="text-white">{formatDate(dispute.responseDeadline)}</span>
-              </div>
+        {/* Active Dispute Information Summary */}
+        {dispute && (
+          <div className="p-3 border border-amber-500/30 bg-amber-950/15 text-[11px] font-code-hash space-y-1.5">
+            <div className="flex justify-between">
+              <span className="text-text-muted">Dispute Opener:</span>
+              <span className="text-white font-bold">{truncateAddress(dispute.opener)}</span>
             </div>
-          )}
-        </section>
-      </div>
+            <div className="flex justify-between">
+              <span className="text-text-muted">Claim Type:</span>
+              <span className="text-amber-400 font-bold">{dispute.claim === 1 ? 'Maker Claim (Refund)' : 'Taker Claim (Release)'}</span>
+            </div>
+            <div className="flex justify-between">
+              <span className="text-text-muted">Response Cutoff:</span>
+              <span className="text-white">{formatDate(dispute.responseDeadline)}</span>
+            </div>
+          </div>
+        )}
+      </section>
 
       {/* ========================================================================= */}
-      {/* 9. MOBILE STICKY BOTTOM ACTION BAR (< md) */}
+      {/* 10. PROGRESSIVE DISCLOSURE: ON-CHAIN TECHNICAL DETAILS */}
+      {/* ========================================================================= */}
+      <AdvancedDetails
+        contractAddress={protocolAddress}
+        tokenMaker={pact.tokenMaker}
+        tokenTaker={pact.amountTaker > 0n ? pact.tokenTaker : undefined}
+        termsHash={pact.termsHash}
+        proofHash={pact.proofHash}
+        pactId={pact.id}
+        rawTimestamps={{
+          createdAt: pact.createdAt,
+          updatedAt: pact.updatedAt,
+          offerExpiry: pact.offerExpiry,
+          performanceDeadline: pact.performanceDeadline,
+          disputeDeadline: pact.disputeDeadline,
+        }}
+        defaultOpen={false}
+      />
+
+      {/* ========================================================================= */}
+      {/* 11. MOBILE STICKY BOTTOM ACTION BAR (< md) */}
       {/* ========================================================================= */}
       {primaryAction && primaryAction.isEligible && !isTerminal(pact.status) && (
         <div className="mobile-sticky-action md:hidden fixed left-0 right-0 z-40 p-3 bg-[#0c0f12]/95 backdrop-blur-md border-t border-primary-fixed/40 flex items-center justify-between gap-3 animate-enter">
