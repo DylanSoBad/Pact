@@ -195,10 +195,10 @@ function TapeDashboard() {
           ['Capital in escrow', marketMetrics.escrow, `Across ${marketMetrics.activeCount} active pact${marketMetrics.activeCount === 1 ? '' : 's'}`],
           ['Settlement rate', marketMetrics.settlementRate, `${marketMetrics.terminalCount} terminal pact${marketMetrics.terminalCount === 1 ? '' : 's'}`],
           ['Median close', marketMetrics.medianClose, 'From funding to settlement'],
-        ].map(([label, value, detail]) => (
-          <article key={label} className="pact-metric-card min-h-[132px] bg-[#0b0f0c] p-5 sm:p-6">
+        ].map(([label, value, detail], index) => (
+          <article key={label} className="pact-metric-card min-h-[132px] bg-[#0b0f0c] p-5 sm:p-6" style={{ animationDelay: `${index * 90}ms` }}>
             <p className="font-label-caps text-[10px] uppercase tracking-[0.16em] text-text-muted">{label}</p>
-            <p className="mt-6 font-display-mono text-[24px] text-white tabular-nums sm:text-[28px]">{value}</p>
+            <p className="mt-6 font-editorial text-[28px] leading-none tracking-[-0.025em] text-white tabular-nums sm:text-[30px]">{value}</p>
             <p className="mt-1 font-body-sans text-[11px] text-text-dim">{detail}</p>
           </article>
         ))}
@@ -210,7 +210,7 @@ function TapeDashboard() {
       <header className="flex flex-col sm:flex-row sm:items-end justify-between gap-4 border-b border-outline-hairline pb-5 animate-enter">
         <div>
           <p className="pact-eyebrow mb-1">Live agreements</p>
-          <h2 className="font-display-mono text-[24px] sm:text-[30px] font-bold text-white tracking-tight">
+          <h2 className="font-editorial text-[28px] font-normal leading-8 tracking-[-0.025em] text-white sm:text-[30px]">
             The Tape <span className="align-middle text-[12px] font-normal text-text-dim">{filtered.length}</span>
           </h2>
           <p className="mt-1 font-body-sans text-[13px] text-text-muted max-w-xl">
@@ -317,7 +317,7 @@ function TapeDashboard() {
       </div>
 
       {/* Semantic Feed Table */}
-      <section aria-label="PACT Contract Feed" className="border border-outline-hairline bg-[#0c0f12] overflow-hidden animate-enter">
+      <section aria-label="PACT Contract Feed" className="pact-tape-panel relative border border-outline-hairline bg-[#0c0f12] overflow-hidden animate-enter">
         {/* Table Header (Desktop >= md) */}
         <div className="hidden md:grid grid-cols-12 gap-4 px-4 py-2.5 border-b border-outline-hairline bg-[#07080a] font-label-caps text-[10px] uppercase tracking-wider text-text-muted">
           <div className="col-span-5">AGREEMENT</div>
@@ -431,8 +431,8 @@ function TapeDashboard() {
               const ageLabel = age < 60 ? 'NOW' : age < 3600 ? `${Math.floor(age / 60)} MIN AGO` : age < 86400 ? `${Math.floor(age / 3600)} HR AGO` : `${Math.floor(age / 86400)}D AGO`
               const status = effectiveStatusLabel(pact.status, pact.offerExpiry, pact.disputeDeadline, BigInt(currentTime))
               return (
-                <Link key={pact.id} href={`/p/${pact.id}`} className="group relative block pl-5">
-                  <span className="absolute left-0 top-1.5 h-2 w-2 rounded-full bg-primary-fixed shadow-[0_0_10px_rgba(200,245,66,0.5)]" aria-hidden="true" />
+                <Link key={pact.id} href={`/p/${pact.id}`} className="pact-pulse-item group relative block pl-5">
+                  <span className="pact-pulse-node absolute left-0 top-1.5 h-2 w-2 rounded-full bg-primary-fixed shadow-[0_0_10px_rgba(200,245,66,0.5)]" aria-hidden="true" />
                   <span className="font-code-hash text-[9px] uppercase tracking-wider text-text-dim">{ageLabel}</span>
                   <p className="mt-1 text-[12px] leading-5 text-text-muted transition-colors group-hover:text-white">
                     Pact #{String(pact.id).padStart(4, '0')} is {status.toLowerCase()} with {formatAmount(pact.amountMaker)} {tokenSymbol(pact.tokenMaker)} committed.

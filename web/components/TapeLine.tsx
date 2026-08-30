@@ -88,7 +88,8 @@ export default function TapeLine({ pact }: { pact: TapeLinePactProps }) {
     <Link
       href={`/p/${pact.id.toString()}`}
       aria-label={`Pact #${pact.id}, kind ${pact.kind}, amount ${pact.amount}, status ${pact.status}${deadlineStatus ? `, deadline ${deadlineStatus.compactFormatted}` : ''}${userAction ? `, action: ${userAction.label}` : ''}`}
-      className={`tape-row block border-b transition-colors focus-visible:ring-2 focus-visible:ring-primary-fixed ${rowHighlight}`}
+      className={`tape-row pact-tape-row-enter block border-b transition-colors focus-visible:ring-2 focus-visible:ring-primary-fixed ${rowHighlight}`}
+      style={{ animationDelay: `${Math.min(pact.id % 8, 7) * 65}ms` }}
     >
       <div className="hidden min-h-[90px] md:grid grid-cols-12 gap-4 px-5 py-4 items-center font-code-hash text-[12px]">
         <div className="col-span-5 min-w-0">
@@ -112,7 +113,7 @@ export default function TapeLine({ pact }: { pact: TapeLinePactProps }) {
             {pact.amount}
           </span>
           <span className="mt-2 block h-1 w-24 overflow-hidden bg-outline-border" aria-hidden="true">
-            <span className="block h-full w-2/3 bg-primary-fixed" />
+            <span className="pact-collateral-progress block h-full w-2/3 origin-left bg-primary-fixed" />
           </span>
         </div>
 

@@ -32,7 +32,7 @@ export default function Navbar() {
               priority
               className="h-8 w-8 object-contain md:h-9 md:w-9"
             />
-            <span data-testid="brand-wordmark" className="hidden font-display-mono text-[16px] font-bold tracking-wider text-primary-fixed sm:inline md:text-[18px]">
+            <span data-testid="brand-wordmark" className="hidden font-brand text-[16px] font-bold tracking-[0.04em] text-primary-fixed sm:inline md:text-[18px]">
               PACT
             </span>
           </Link>

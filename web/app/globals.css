@@ -47,11 +47,13 @@
   --container-inspector: 680px;
 
   --font-code-hash: var(--font-ibm-plex-mono), "SF Mono", Consolas, monospace;
-  --font-display-mono: var(--font-ibm-plex-mono), "SF Mono", Consolas, monospace;
+  --font-display-mono: "DM Mono", var(--font-ibm-plex-mono), "SF Mono", Consolas, monospace;
   --font-headline-mono: var(--font-ibm-plex-mono), "SF Mono", Consolas, monospace;
   --font-body-mono: var(--font-ibm-plex-mono), "SF Mono", Consolas, monospace;
   --font-label-caps: var(--font-ibm-plex-mono), "SF Mono", Consolas, monospace;
   --font-body-sans: var(--font-ibm-plex-sans), "IBM Plex Sans", -apple-system, BlinkMacSystemFont, sans-serif;
+  --font-brand: "Manrope", var(--font-ibm-plex-sans), sans-serif;
+  --font-editorial: "Source Serif 4", Georgia, serif;
 }
 
 /* ─── Base ─── */
@@ -292,6 +294,69 @@ body {
   85%, 100% { transform: translateX(120%); }
 }
 
+@keyframes pact-dashboard-enter {
+  from { opacity: 0; transform: translateY(14px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes pact-scan-line {
+  0% { transform: translateY(-120%); opacity: 0; }
+  8% { opacity: 0.18; }
+  46% { opacity: 0.08; }
+  55%, 100% { transform: translateY(560px); opacity: 0; }
+}
+
+@keyframes pact-collateral-fill {
+  from { transform: scaleX(0); opacity: 0.35; }
+  to { transform: scaleX(1); opacity: 1; }
+}
+
+@keyframes pact-pulse-signal {
+  0%, 100% { transform: scale(0.8); box-shadow: 0 0 0 0 rgba(200, 245, 66, 0); }
+  35% { transform: scale(1.15); box-shadow: 0 0 0 6px rgba(200, 245, 66, 0.08); }
+  55% { transform: scale(1); box-shadow: 0 0 12px rgba(200, 245, 66, 0.65); }
+}
+
+.pact-metric-card {
+  opacity: 0;
+  animation: pact-dashboard-enter 560ms cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+.pact-tape-panel::after {
+  content: '';
+  position: absolute;
+  z-index: 4;
+  top: 0;
+  right: 0;
+  left: 0;
+  height: 70px;
+  pointer-events: none;
+  background: linear-gradient(to bottom, transparent, rgba(200, 245, 66, 0.12), transparent);
+  animation: pact-scan-line 8s linear infinite;
+}
+
+.pact-tape-row-enter {
+  opacity: 0;
+  animation: pact-dashboard-enter 520ms cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+.pact-collateral-progress {
+  transform: scaleX(0);
+  animation: pact-collateral-fill 900ms 420ms cubic-bezier(0.22, 1, 0.36, 1) forwards;
+}
+
+.pact-pulse-item {
+  opacity: 0;
+  animation: pact-dashboard-enter 520ms cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+.pact-pulse-item:nth-child(1) { animation-delay: 180ms; }
+.pact-pulse-item:nth-child(2) { animation-delay: 300ms; }
+.pact-pulse-item:nth-child(3) { animation-delay: 420ms; }
+.pact-pulse-node { animation: pact-pulse-signal 3.6s ease-in-out infinite; }
+.pact-pulse-item:nth-child(2) .pact-pulse-node { animation-delay: 1.2s; }
+.pact-pulse-item:nth-child(3) .pact-pulse-node { animation-delay: 2.4s; }
+
 .mobile-safe-nav {
   height: calc(3.75rem + env(safe-area-inset-bottom, 0px));
   padding-bottom: env(safe-area-inset-bottom, 0px);
@@ -329,11 +394,17 @@ body {
   }
 
   .pact-hero-word,
-  .pact-hero-actions {
+  .pact-hero-actions,
+  .pact-metric-card,
+  .pact-tape-row-enter,
+  .pact-collateral-progress,
+  .pact-pulse-item {
     opacity: 1 !important;
     transform: none !important;
     filter: none !important;
   }
+
+  .pact-tape-panel::after { display: none !important; }
 }
 
 /* ─── Custom Scrollbar for Terminal feel ─── */
