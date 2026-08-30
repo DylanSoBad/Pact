@@ -90,69 +90,34 @@ export default function TapeLine({ pact }: { pact: TapeLinePactProps }) {
       aria-label={`Pact #${pact.id}, kind ${pact.kind}, amount ${pact.amount}, status ${pact.status}${deadlineStatus ? `, deadline ${deadlineStatus.compactFormatted}` : ''}${userAction ? `, action: ${userAction.label}` : ''}`}
       className={`tape-row block border-b transition-colors focus-visible:ring-2 focus-visible:ring-primary-fixed ${rowHighlight}`}
     >
-      {/* Desktop 5-Column Monospace Row (>= md) */}
-      <div className="hidden md:grid grid-cols-12 gap-4 px-4 py-3 items-center font-code-hash text-[12px]">
-        {/* Col 1: Time, Countdown & ID (3 cols) */}
-        <div className="col-span-3 flex items-center gap-2.5">
-          <span className="font-headline-mono text-[13px] font-bold text-white tracking-wider shrink-0">
-            #{String(pact.id).padStart(4, '0')}
-          </span>
-
-          {deadlineStatus ? (
-            <span
-              className={`inline-flex items-center gap-1 px-1.5 py-0.5 text-[10px] font-bold tabular-nums rounded-sm ${deadlineStatus.badgeStyle}`}
-              title={deadlineStatus.ariaLabel}
-            >
-              <span aria-hidden="true">{deadlineStatus.isExpired ? '⌛' : deadlineStatus.isUrgent ? '🔥' : '⏱'}</span>
-              <span>{deadlineStatus.compactFormatted}</span>
-            </span>
-          ) : (
-            <span className="text-[11px] text-text-dim truncate">
-              {pact.time}
-            </span>
-          )}
-
-          {hasUserAction && (
-            <span className="inline-flex items-center gap-1 px-1.5 py-0.5 border border-primary-fixed/60 bg-primary-fixed/20 text-primary-fixed font-bold text-[9px] font-label-caps uppercase tracking-wider rounded-sm animate-pulse">
-              <span>⚡</span>
-              <span>{userAction?.shortLabel}</span>
-            </span>
-          )}
+      <div className="hidden min-h-[90px] md:grid grid-cols-12 gap-4 px-5 py-4 items-center font-code-hash text-[12px]">
+        <div className="col-span-5 min-w-0">
+          <div className="flex items-center gap-2">
+            <span className="text-[10px] text-text-dim">PACT-{String(pact.id).padStart(4, '0')}</span>
+            <span className="text-[9px] uppercase tracking-wider text-text-muted">{pact.kind}</span>
+          </div>
+          <p className="mt-1 truncate font-body-sans text-[13px] font-semibold text-white">Verifiable {pact.kind.toLowerCase()} agreement</p>
+          <p className="mt-1 truncate text-[10px] text-text-dim">{pact.address} · updated {pact.time}</p>
         </div>
 
-        {/* Col 2: Agreement Kind (2 cols) */}
         <div className="col-span-2">
-          <span className="inline-block px-2 py-0.5 border border-outline-border bg-[#0c0f12] text-[10px] font-label-caps uppercase tracking-wider text-text-muted">
-            {pact.kind}
+          <span className={`inline-block px-2 py-1 text-[9px] font-label-caps uppercase tracking-wider ${getStatusStyle(pact.status)}`}>
+            {pact.status}
           </span>
+          {hasUserAction && <span className="mt-2 block text-[9px] font-bold text-primary-fixed">⚡ {userAction?.shortLabel}</span>}
         </div>
 
-        {/* Col 3: Collateral Amount (3 cols, right-aligned) */}
-        <div className="col-span-3 text-right">
+        <div className="col-span-3">
           <span className={`${amountColor} text-[13px] truncate block`} title={pact.amount}>
             {pact.amount}
           </span>
-        </div>
-
-        {/* Col 4: Status Pill (2 cols, centered) */}
-        <div className="col-span-2 flex justify-center">
-          <span className={`px-2 py-0.5 text-[10px] font-label-caps uppercase tracking-wider ${getStatusStyle(pact.status)}`}>
-            {pact.status}
+          <span className="mt-2 block h-1 w-24 overflow-hidden bg-outline-border" aria-hidden="true">
+            <span className="block h-full w-2/3 bg-primary-fixed" />
           </span>
         </div>
 
-        {/* Col 5: Counterparty Address / Action CTA (2 cols, right-aligned) */}
-        <div className="col-span-2 text-right">
-          {hasUserAction ? (
-            <span className="text-primary-fixed font-bold text-[11px] hover:underline inline-flex items-center gap-1">
-              <span>Execute Action</span>
-              <span>→</span>
-            </span>
-          ) : (
-            <span className="text-text-muted text-[11px] hover:text-white transition-colors">
-              {pact.address}
-            </span>
-          )}
+        <div className="col-span-2 text-right text-[10px] text-text-muted">
+          {deadlineStatus ? <span title={deadlineStatus.ariaLabel}>{deadlineStatus.compactFormatted}</span> : <span>{pact.time}</span>}
         </div>
       </div>
 

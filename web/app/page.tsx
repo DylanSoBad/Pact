@@ -151,14 +151,67 @@ function TapeDashboard() {
     settled: pacts.filter((p: PactData) => p.status === 4).length,
   }), [pacts])
 
+  const marketMetrics = useMemo(() => {
+    const list = pacts as PactData[]
+    const active = list.filter(p => p.status >= 1 && p.status <= 3)
+    const terminal = list.filter(p => p.status >= 4)
+    const settled = list.filter(p => p.status === 4)
+    const escrowNotional = active.reduce((total, pact) => total + pact.notionalUSDC, 0n)
+    const closeTimes = settled
+      .map(pact => Number(pact.updatedAt - pact.createdAt))
+      .filter(seconds => Number.isFinite(seconds) && seconds >= 0)
+      .sort((a, b) => a - b)
+    const medianSeconds = closeTimes.length
+      ? closeTimes[Math.floor(closeTimes.length / 2)]
+      : null
+
+    const formatUsd = (raw: bigint) => {
+      const value = Number(raw) / 1_000_000
+      return new Intl.NumberFormat('en-US', {
+        style: 'currency', currency: 'USD', maximumFractionDigits: value >= 1000 ? 0 : 2,
+      }).format(value)
+    }
+    const formatDuration = (seconds: number | null) => {
+      if (seconds === null) return '—'
+      const days = Math.floor(seconds / 86_400)
+      const hours = Math.floor((seconds % 86_400) / 3_600)
+      return days > 0 ? `${days}d ${hours}h` : `${hours}h`
+    }
+
+    return {
+      escrow: formatUsd(escrowNotional),
+      settlementRate: terminal.length ? `${((settled.length / terminal.length) * 100).toFixed(1)}%` : '—',
+      medianClose: formatDuration(medianSeconds),
+      activeCount: active.length,
+      terminalCount: terminal.length,
+    }
+  }, [pacts])
+
   return (
-    <div className="w-full space-y-6">
+    <div className="w-full space-y-9">
+      <section aria-label="Market Statistics" className="grid grid-cols-2 border border-outline-hairline bg-outline-hairline lg:grid-cols-4 gap-px animate-enter">
+        {[
+          ['Total agreements', String(pacts.length), `${activity.open} open offer${activity.open === 1 ? '' : 's'}`],
+          ['Capital in escrow', marketMetrics.escrow, `Across ${marketMetrics.activeCount} active pact${marketMetrics.activeCount === 1 ? '' : 's'}`],
+          ['Settlement rate', marketMetrics.settlementRate, `${marketMetrics.terminalCount} terminal pact${marketMetrics.terminalCount === 1 ? '' : 's'}`],
+          ['Median close', marketMetrics.medianClose, 'From funding to settlement'],
+        ].map(([label, value, detail]) => (
+          <article key={label} className="pact-metric-card min-h-[132px] bg-[#0b0f0c] p-5 sm:p-6">
+            <p className="font-label-caps text-[10px] uppercase tracking-[0.16em] text-text-muted">{label}</p>
+            <p className="mt-6 font-display-mono text-[24px] text-white tabular-nums sm:text-[28px]">{value}</p>
+            <p className="mt-1 font-body-sans text-[11px] text-text-dim">{detail}</p>
+          </article>
+        ))}
+      </section>
+
+      <div className="grid items-start gap-8 lg:grid-cols-12">
+        <div className="min-w-0 space-y-4 lg:col-span-9">
       {/* Header */}
       <header className="flex flex-col sm:flex-row sm:items-end justify-between gap-4 border-b border-outline-hairline pb-5 animate-enter">
         <div>
-          <p className="pact-eyebrow mb-1">Decentralized Escrow & Settlement Feed</p>
+          <p className="pact-eyebrow mb-1">Live agreements</p>
           <h2 className="font-display-mono text-[24px] sm:text-[30px] font-bold text-white tracking-tight">
-            The Tape
+            The Tape <span className="align-middle text-[12px] font-normal text-text-dim">{filtered.length}</span>
           </h2>
           <p className="mt-1 font-body-sans text-[13px] text-text-muted max-w-xl">
             Verifiable economic agreements and collateral commitments on Arc Testnet.
@@ -182,38 +235,6 @@ function TapeDashboard() {
 
       {/* Onboarding Modal */}
       <OnboardingModal open={showOnboarding && !isLoading && pacts.length === 0} onClose={dismissOnboarding} />
-
-      {/* Summary KPI Cards */}
-      <section aria-label="Market Statistics" className="grid grid-cols-2 lg:grid-cols-4 gap-px bg-outline-hairline border border-outline-hairline animate-enter">
-        <div className="bg-[#0c0f12] p-4 flex flex-col justify-between min-h-[90px]">
-          <span className="font-label-caps text-[10px] uppercase tracking-wider text-text-muted">Total Indexed</span>
-          <div className="flex items-baseline justify-between mt-1">
-            <span className="font-display-mono text-[24px] font-bold text-white tabular-nums">{pacts.length}</span>
-            <span className="text-[11px] text-text-dim font-code-hash">On-chain</span>
-          </div>
-        </div>
-        <div className="bg-[#0c0f12] p-4 flex flex-col justify-between min-h-[90px]">
-          <span className="font-label-caps text-[10px] uppercase tracking-wider text-sky-400">Open Offers</span>
-          <div className="flex items-baseline justify-between mt-1">
-            <span className="font-display-mono text-[24px] font-bold text-sky-400 tabular-nums">{activity.open}</span>
-            <span className="text-[11px] text-text-dim font-code-hash">Awaiting Accept</span>
-          </div>
-        </div>
-        <div className="bg-[#0c0f12] p-4 flex flex-col justify-between min-h-[90px]">
-          <span className="font-label-caps text-[10px] uppercase tracking-wider text-primary-fixed">Active & Locked</span>
-          <div className="flex items-baseline justify-between mt-1">
-            <span className="font-display-mono text-[24px] font-bold text-primary-fixed tabular-nums">{activity.inProgress}</span>
-            <span className="text-[11px] text-text-dim font-code-hash">In Escrow</span>
-          </div>
-        </div>
-        <div className="bg-[#0c0f12] p-4 flex flex-col justify-between min-h-[90px]">
-          <span className="font-label-caps text-[10px] uppercase tracking-wider text-emerald-400">Settled Deals</span>
-          <div className="flex items-baseline justify-between mt-1">
-            <span className="font-display-mono text-[24px] font-bold text-emerald-400 tabular-nums">{activity.settled}</span>
-            <span className="text-[11px] text-text-dim font-code-hash">Completed</span>
-          </div>
-        </div>
-      </section>
 
       {/* Filter Toolbar & Live Telemetry */}
       <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-3 animate-enter">
@@ -299,11 +320,10 @@ function TapeDashboard() {
       <section aria-label="PACT Contract Feed" className="border border-outline-hairline bg-[#0c0f12] overflow-hidden animate-enter">
         {/* Table Header (Desktop >= md) */}
         <div className="hidden md:grid grid-cols-12 gap-4 px-4 py-2.5 border-b border-outline-hairline bg-[#07080a] font-label-caps text-[10px] uppercase tracking-wider text-text-muted">
-          <div className="col-span-3">TIME / CONTRACT ID</div>
-          <div className="col-span-2">AGREEMENT TYPE</div>
-          <div className="col-span-3 text-right">COLLATERAL AMOUNT</div>
-          <div className="col-span-2 text-center">STATUS</div>
-          <div className="col-span-2 text-right">MAKER</div>
+          <div className="col-span-5">AGREEMENT</div>
+          <div className="col-span-2">STATUS</div>
+          <div className="col-span-3">COLLATERAL</div>
+          <div className="col-span-2 text-right">MATURITY</div>
         </div>
 
         {/* Table Header (Mobile < md) */}
@@ -398,6 +418,35 @@ function TapeDashboard() {
           )}
         </div>
       </section>
+        </div>
+
+        <aside aria-label="Protocol pulse" className="border-l border-outline-hairline pl-5 lg:col-span-3 lg:sticky lg:top-24">
+          <div className="flex items-center justify-between">
+            <p className="font-label-caps text-[11px] font-bold uppercase tracking-[0.12em] text-primary-fixed">Protocol pulse</p>
+            <span className={`h-2 w-2 rounded-full ${sseConnected ? 'bg-primary-fixed live-dot' : 'bg-amber-400'}`} aria-hidden="true" />
+          </div>
+          <div className="mt-5 space-y-6">
+            {pacts.slice(0, 3).map((pact: PactData) => {
+              const age = Math.max(0, currentTime - Number(pact.updatedAt))
+              const ageLabel = age < 60 ? 'NOW' : age < 3600 ? `${Math.floor(age / 60)} MIN AGO` : age < 86400 ? `${Math.floor(age / 3600)} HR AGO` : `${Math.floor(age / 86400)}D AGO`
+              const status = effectiveStatusLabel(pact.status, pact.offerExpiry, pact.disputeDeadline, BigInt(currentTime))
+              return (
+                <Link key={pact.id} href={`/p/${pact.id}`} className="group relative block pl-5">
+                  <span className="absolute left-0 top-1.5 h-2 w-2 rounded-full bg-primary-fixed shadow-[0_0_10px_rgba(200,245,66,0.5)]" aria-hidden="true" />
+                  <span className="font-code-hash text-[9px] uppercase tracking-wider text-text-dim">{ageLabel}</span>
+                  <p className="mt-1 text-[12px] leading-5 text-text-muted transition-colors group-hover:text-white">
+                    Pact #{String(pact.id).padStart(4, '0')} is {status.toLowerCase()} with {formatAmount(pact.amountMaker)} {tokenSymbol(pact.tokenMaker)} committed.
+                  </p>
+                </Link>
+              )
+            })}
+            {!isLoading && pacts.length === 0 && <p className="text-[12px] leading-5 text-text-dim">Waiting for the first indexed agreement.</p>}
+          </div>
+          <Link href="/new" className="pact-button-primary mt-8 w-full justify-between px-5">
+            Create a pact <span aria-hidden="true">↗</span>
+          </Link>
+        </aside>
+      </div>
 
       {/* Institutional Settlement Lifecycle Explainer */}
       <section id="how-it-works" className="mt-8 pt-6 border-t border-outline-hairline scroll-mt-24">
@@ -451,7 +500,7 @@ export default function Home() {
   return (
     <div className="w-full">
       <Hero />
-      <div id="live-pacts" className="mx-auto w-full max-w-terminal px-3 py-5 sm:px-6 sm:py-8 pb-16 sm:pb-12 space-y-6 scroll-mt-16 sm:scroll-mt-20">
+      <div id="live-pacts" className="pact-tape-surface mx-auto w-full max-w-[1440px] px-3 py-8 sm:px-8 sm:py-12 lg:px-14 pb-16 sm:pb-16 space-y-6 scroll-mt-16 sm:scroll-mt-20">
         <ErrorBoundary>
           <TapeDashboard />
         </ErrorBoundary>

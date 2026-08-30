@@ -33,17 +33,19 @@ function StaggeredWords({ text, accent = '', start = 0, step = 70, className = '
   const words = text.split(' ')
 
   return (
-    <span aria-label={text} className={className}>
-      {words.map((word, index) => (
-        <span
-          key={`${word}-${index}`}
-          aria-hidden="true"
-          className={`pact-hero-word inline-block ${word === accent ? 'text-primary-fixed' : ''}`}
-          style={{ animationDelay: `${start + index * step}ms` }}
-        >
-          {word}{index < words.length - 1 ? '\u00a0' : ''}
-        </span>
-      ))}
+    <span className={className}>
+      <span className="sr-only">{text}</span>
+      <span aria-hidden="true">
+        {words.map((word, index) => (
+          <span
+            key={`${word}-${index}`}
+            className={`pact-hero-word inline-block ${word === accent ? 'text-primary-fixed' : ''}`}
+            style={{ animationDelay: `${start + index * step}ms` }}
+          >
+            {word}{index < words.length - 1 ? '\u00a0' : ''}
+          </span>
+        ))}
+      </span>
     </span>
   )
 }

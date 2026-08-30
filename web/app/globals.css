@@ -264,6 +264,34 @@ body {
 
 .pact-network-node { animation: pact-node-pulse 5.5s ease-in-out infinite; }
 
+.pact-tape-surface {
+  background-color: #070a08;
+  background-image:
+    linear-gradient(rgba(200, 245, 66, 0.035) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(200, 245, 66, 0.035) 1px, transparent 1px);
+  background-size: 42px 42px;
+}
+
+.pact-metric-card {
+  position: relative;
+  overflow: hidden;
+  transition: background-color 180ms ease, transform 180ms ease;
+}
+
+.pact-metric-card::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  transform: translateX(-120%);
+  background: linear-gradient(100deg, transparent 30%, rgba(200, 245, 66, 0.055), transparent 70%);
+  animation: pact-metric-sweep 9s ease-in-out infinite;
+}
+
+@keyframes pact-metric-sweep {
+  0%, 62% { transform: translateX(-120%); }
+  85%, 100% { transform: translateX(120%); }
+}
+
 .mobile-safe-nav {
   height: calc(3.75rem + env(safe-area-inset-bottom, 0px));
   padding-bottom: env(safe-area-inset-bottom, 0px);

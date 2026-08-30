@@ -7,13 +7,12 @@ describe('Hero Component', () => {
   it('renders semantic H1 headline and eyebrow', () => {
     render(<Hero />)
 
-    const heading = screen.getByRole('heading', { level: 1 })
+    const heading = screen.getByRole('heading', { level: 1, name: 'Agreements, Made Unbreakable.' })
     expect(heading).toBeDefined()
-    expect(heading.textContent).toBe('Agreements,\u00a0Made\u00a0Unbreakable.')
 
     expect(screen.getByText('INSTITUTIONAL ESCROW · ARC TESTNET')).toBeDefined()
     expect(
-      screen.getByLabelText(
+      screen.getByText(
         'Create verifiable economic agreements, lock exact collateral on-chain, and settle through transparent rules on Arc.'
       )
     ).toBeDefined()
