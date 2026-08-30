@@ -91,7 +91,7 @@ export default function RootLayout({
             </a>
             <Navbar />
             <div className="flex-1 flex flex-col w-full">
-              <main id="main-content" className="mx-auto w-full max-w-terminal flex-1 px-3 py-5 sm:px-6 sm:py-8 pb-16 sm:pb-12">
+              <main id="main-content" className="flex-1 flex flex-col w-full">
                 {children}
               </main>
               <SiteFooter />

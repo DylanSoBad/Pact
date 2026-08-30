@@ -3,6 +3,7 @@
 import { useState, useEffect, useMemo, useCallback } from 'react'
 import { useInfiniteQuery } from '@tanstack/react-query'
 import Link from 'next/link'
+import Hero from '../components/Hero'
 import TapeLine from '../components/TapeLine'
 import TableSkeleton from '../components/TableSkeleton'
 import NetworkStatusBanner from '../components/NetworkStatusBanner'
@@ -156,9 +157,9 @@ function TapeDashboard() {
       <header className="flex flex-col sm:flex-row sm:items-end justify-between gap-4 border-b border-outline-hairline pb-5 animate-enter">
         <div>
           <p className="pact-eyebrow mb-1">Decentralized Escrow & Settlement Feed</p>
-          <h1 className="font-display-mono text-[24px] sm:text-[30px] font-bold text-white tracking-tight">
+          <h2 className="font-display-mono text-[24px] sm:text-[30px] font-bold text-white tracking-tight">
             The Tape
-          </h1>
+          </h2>
           <p className="mt-1 font-body-sans text-[13px] text-text-muted max-w-xl">
             Verifiable economic agreements and collateral commitments on Arc Testnet.
           </p>
@@ -448,8 +449,13 @@ function TapeDashboard() {
 
 export default function Home() {
   return (
-    <ErrorBoundary>
-      <TapeDashboard />
-    </ErrorBoundary>
+    <div className="w-full">
+      <Hero />
+      <div id="live-pacts" className="mx-auto w-full max-w-terminal px-3 py-5 sm:px-6 sm:py-8 pb-16 sm:pb-12 space-y-6 scroll-mt-16 sm:scroll-mt-20">
+        <ErrorBoundary>
+          <TapeDashboard />
+        </ErrorBoundary>
+      </div>
+    </div>
   )
 }

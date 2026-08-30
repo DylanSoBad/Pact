@@ -289,25 +289,33 @@ export default function PactDetailPage({ params }: { params: Promise<{ id: strin
   }
 
   if (loading) {
-    return <PageSkeleton variant="detail" />
+    return (
+      <div className="mx-auto w-full max-w-terminal px-3 py-5 sm:px-6 sm:py-8 pb-16 sm:pb-12">
+        <PageSkeleton variant="detail" />
+      </div>
+    )
   }
 
   if (!protocolAddress) {
     return (
-      <div className="border border-status-warning/50 bg-[#0c0f12] p-8">
-        <h1 className="font-display-mono text-xl font-bold text-white">Protocol Unavailable</h1>
-        <p className="mt-2 text-[13px] text-text-muted">No verified PACT protocol address configured for this network.</p>
-        <Link href="/" className="mt-4 inline-block text-primary-fixed underline text-[12px] font-code-hash">← Return to overview</Link>
+      <div className="mx-auto w-full max-w-terminal px-3 py-5 sm:px-6 sm:py-8 pb-16 sm:pb-12">
+        <div className="border border-status-warning/50 bg-[#0c0f12] p-8">
+          <h1 className="font-display-mono text-xl font-bold text-white">Protocol Unavailable</h1>
+          <p className="mt-2 text-[13px] text-text-muted">No verified PACT protocol address configured for this network.</p>
+          <Link href="/" className="mt-4 inline-block text-primary-fixed underline text-[12px] font-code-hash">← Return to overview</Link>
+        </div>
       </div>
     )
   }
 
   if (!pact) {
     return (
-      <div className="border border-outline-border bg-[#0c0f12] p-8 text-center">
-        <h1 className="font-display-mono text-xl font-bold text-white">Pact #{String(id).padStart(4, '0')} Not Found</h1>
-        <p className="mt-2 text-[13px] text-text-muted">This pact does not exist on the current Arc Testnet contract.</p>
-        <Link href="/" className="mt-4 inline-block text-primary-fixed underline text-[12px] font-code-hash">← Return to overview</Link>
+      <div className="mx-auto w-full max-w-terminal px-3 py-5 sm:px-6 sm:py-8 pb-16 sm:pb-12">
+        <div className="border border-outline-border bg-[#0c0f12] p-8 text-center">
+          <h1 className="font-display-mono text-xl font-bold text-white">Pact #{String(id).padStart(4, '0')} Not Found</h1>
+          <p className="mt-2 text-[13px] text-text-muted">This pact does not exist on the current Arc Testnet contract.</p>
+          <Link href="/" className="mt-4 inline-block text-primary-fixed underline text-[12px] font-code-hash">← Return to overview</Link>
+        </div>
       </div>
     )
   }
@@ -347,7 +355,7 @@ export default function PactDetailPage({ params }: { params: Promise<{ id: strin
   }
 
   return (
-    <div className="w-full space-y-6 pb-20 md:pb-8">
+    <div className="mx-auto w-full max-w-terminal px-3 py-5 sm:px-6 sm:py-8 pb-16 sm:pb-12 space-y-6">
       
       {/* ========================================================================= */}
       {/* 1. HERO HEADER & STATUS BADGE */}

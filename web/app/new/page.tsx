@@ -416,7 +416,8 @@ export default function NewPactPage() {
   // Success Confirmation Screen
   if (phase === 'done') {
     return (
-      <div className="mx-auto max-w-[640px] py-8">
+      <div className="mx-auto w-full max-w-terminal px-3 py-5 sm:px-6 sm:py-8 pb-16 sm:pb-12">
+        <div className="mx-auto max-w-[640px] py-8">
         <div className="border border-primary-fixed/40 bg-[#0c0f12] p-6 sm:p-10 text-center animate-enter shadow-2xl">
           <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center bg-primary-fixed text-black font-display-mono text-2xl font-bold rounded-[2px]">
             ✓
@@ -470,6 +471,7 @@ export default function NewPactPage() {
           </div>
         </div>
       </div>
+      </div>
     )
   }
 
@@ -504,7 +506,8 @@ export default function NewPactPage() {
   }
 
   return (
-    <div className="mx-auto w-full max-w-[880px] space-y-6">
+    <div className="mx-auto w-full max-w-terminal px-3 py-5 sm:px-6 sm:py-8 pb-16 sm:pb-12">
+      <div className="mx-auto w-full max-w-[880px] space-y-6">
       {/* Testnet / Network Notice Banner */}
       <div className="border border-primary-fixed/30 bg-primary-fixed/[0.04] p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3 animate-enter">
         <div className="flex items-center gap-2.5">
@@ -1433,6 +1436,7 @@ export default function NewPactPage() {
           </section>
         )}
       </form>
+    </div>
     </div>
   )
 }

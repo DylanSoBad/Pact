@@ -220,6 +220,50 @@ body {
 .animate-enter { animation: enter-smooth 220ms ease-out both; }
 .animate-enter-delay { animation: enter-smooth 280ms 50ms ease-out both; }
 
+@keyframes pact-video-reveal {
+  from { opacity: 0; transform: scale(1.015); }
+  to { opacity: 1; transform: scale(1); }
+}
+
+@keyframes pact-word-enter {
+  from { opacity: 0; transform: translateY(22px); filter: blur(5px); }
+  to { opacity: 1; transform: translateY(0); filter: blur(0); }
+}
+
+@keyframes pact-node-pulse {
+  0%, 100% { transform: scale(0.85); filter: brightness(0.8); }
+  50% { transform: scale(1.35); filter: brightness(1.35); }
+}
+
+@keyframes pact-grid-drift {
+  from { background-position: 0 0; }
+  to { background-position: 48px 32px; }
+}
+
+.pact-hero-video { animation: pact-video-reveal 900ms ease-out both; }
+
+.pact-hero-grid {
+  opacity: 0.17;
+  background-image: linear-gradient(rgba(200, 245, 66, 0.09) 1px, transparent 1px), linear-gradient(90deg, rgba(200, 245, 66, 0.07) 1px, transparent 1px);
+  background-size: 48px 32px;
+  mask-image: linear-gradient(to bottom, rgba(0, 0, 0, 0.65), transparent 72%);
+  animation: pact-grid-drift 18s linear infinite;
+}
+
+.pact-hero-word {
+  opacity: 0;
+  animation: pact-word-enter 700ms cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+.pact-hero-copy .pact-hero-word { animation-duration: 560ms; }
+
+.pact-hero-actions {
+  opacity: 0;
+  animation: pact-word-enter 600ms 1800ms cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+.pact-network-node { animation: pact-node-pulse 5.5s ease-in-out infinite; }
+
 .mobile-safe-nav {
   height: calc(3.75rem + env(safe-area-inset-bottom, 0px));
   padding-bottom: env(safe-area-inset-bottom, 0px);
@@ -254,6 +298,13 @@ body {
   .pact-skeleton {
     animation: none !important;
     transition: none !important;
+  }
+
+  .pact-hero-word,
+  .pact-hero-actions {
+    opacity: 1 !important;
+    transform: none !important;
+    filter: none !important;
   }
 }
 

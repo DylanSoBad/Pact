@@ -315,48 +315,50 @@ export default function MePage() {
   // Disconnected State
   if (!isConnected) {
     return (
-      <div className="mx-auto w-full max-w-[720px] py-10">
-        <div className="border border-outline-border bg-[#0c0f12] p-6 sm:p-10 text-center animate-enter">
-          <div className="mx-auto mb-4 flex h-12 w-12 items-center justify-center border border-outline-border bg-[#12161b] text-primary-fixed">
-            <span className="material-symbols-outlined text-[24px]">lock</span>
-          </div>
-          <p className="pact-eyebrow mb-2">Executive Escrow Command Center</p>
-          <h1 className="font-display-mono text-[24px] sm:text-[28px] font-bold text-white tracking-tight">
-            Connect Your Wallet
-          </h1>
-          <p className="mt-3 max-w-md mx-auto font-body-sans text-[13px] leading-6 text-text-muted">
-            Connect your Arc Network wallet to access your executive command center: inspect active capital at stake, withdraw claimable credits, and prioritize pending commitments.
-          </p>
-          <button
-            type="button"
-            onClick={() => openModal(true)}
-            className="pact-button-primary mt-6 min-h-[44px] px-6 text-[12px] font-bold uppercase tracking-wider"
-          >
-            Connect Wallet
-          </button>
+      <div className="mx-auto w-full max-w-terminal px-3 py-5 sm:px-6 sm:py-8 pb-16 sm:pb-12">
+        <div className="mx-auto w-full max-w-[720px] py-10">
+          <div className="border border-outline-border bg-[#0c0f12] p-6 sm:p-10 text-center animate-enter">
+            <div className="mx-auto mb-4 flex h-12 w-12 items-center justify-center border border-outline-border bg-[#12161b] text-primary-fixed">
+              <span className="material-symbols-outlined text-[24px]">lock</span>
+            </div>
+            <p className="pact-eyebrow mb-2">Executive Escrow Command Center</p>
+            <h1 className="font-display-mono text-[24px] sm:text-[28px] font-bold text-white tracking-tight">
+              Connect Your Wallet
+            </h1>
+            <p className="mt-3 max-w-md mx-auto font-body-sans text-[13px] leading-6 text-text-muted">
+              Connect your Arc Network wallet to access your executive command center: inspect active capital at stake, withdraw claimable credits, and prioritize pending commitments.
+            </p>
+            <button
+              type="button"
+              onClick={() => openModal(true)}
+              className="pact-button-primary mt-6 min-h-[44px] px-6 text-[12px] font-bold uppercase tracking-wider"
+            >
+              Connect Wallet
+            </button>
 
-          <div className="mt-8 pt-6 border-t border-outline-hairline text-left">
-            <h2 className="font-headline-mono text-[12px] font-bold uppercase tracking-wider text-white mb-2">
-              Executive Command Features:
-            </h2>
-            <ul className="grid gap-2 sm:grid-cols-2 text-[12px] font-body-sans text-text-muted">
-              <li className="flex items-center gap-2">
-                <span className="text-primary-fixed">✓</span>
-                Live capital at stake across Maker & Taker roles
-              </li>
-              <li className="flex items-center gap-2">
-                <span className="text-primary-fixed">✓</span>
-                Instant pull-payment credits withdrawal
-              </li>
-              <li className="flex items-center gap-2">
-                <span className="text-primary-fixed">✓</span>
-                Deadline-prioritized Action Center
-              </li>
-              <li className="flex items-center gap-2">
-                <span className="text-primary-fixed">✓</span>
-                Verified on-chain clearance track record
-              </li>
-            </ul>
+            <div className="mt-8 pt-6 border-t border-outline-hairline text-left">
+              <h2 className="font-headline-mono text-[12px] font-bold uppercase tracking-wider text-white mb-2">
+                Executive Command Features:
+              </h2>
+              <ul className="grid gap-2 sm:grid-cols-2 text-[12px] font-body-sans text-text-muted">
+                <li className="flex items-center gap-2">
+                  <span className="text-primary-fixed">✓</span>
+                  Live capital at stake across Maker & Taker roles
+                </li>
+                <li className="flex items-center gap-2">
+                  <span className="text-primary-fixed">✓</span>
+                  Instant pull-payment credits withdrawal
+                </li>
+                <li className="flex items-center gap-2">
+                  <span className="text-primary-fixed">✓</span>
+                  Deadline-prioritized Action Center
+                </li>
+                <li className="flex items-center gap-2">
+                  <span className="text-primary-fixed">✓</span>
+                  Verified on-chain clearance track record
+                </li>
+              </ul>
+            </div>
           </div>
         </div>
       </div>
@@ -364,7 +366,7 @@ export default function MePage() {
   }
 
   return (
-    <div className="w-full space-y-6">
+    <div className="mx-auto w-full max-w-terminal px-3 py-5 sm:px-6 sm:py-8 pb-16 sm:pb-12 space-y-6">
       {/* Portfolio Header & Wallet Identity */}
       <header className="flex flex-col sm:flex-row sm:items-end justify-between gap-4 border-b border-outline-hairline pb-5 animate-enter">
         <div>
