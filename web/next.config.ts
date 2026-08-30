@@ -16,6 +16,7 @@ const csp = [
   "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
   "font-src 'self' data: https://fonts.gstatic.com",
   "img-src 'self' data: blob: https:",
+  "media-src 'self' https://cdn.sceneai.art",
   `connect-src 'self' https://rpc.testnet.arc.network https://*.walletconnect.com wss://*.walletconnect.com ${configuredConnections.join(' ')}`.trim(),
   "frame-src 'self' https://verify.walletconnect.com https://verify.walletconnect.org",
   "worker-src 'self' blob:",
