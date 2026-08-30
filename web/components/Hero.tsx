@@ -1,7 +1,7 @@
 import Link from 'next/link'
 import { ArrowDown, ArrowRight } from 'lucide-react'
 
-export const HERO_VIDEO_URL = 'https://cdn.sceneai.art/Hero%20section%20video%20file%20(2)/1aafa16f-30a9-48c5-8964-78cffbad914e.mp4'
+export const HERO_VIDEO_URL = 'https://cdn.sceneai.art/Hero%20Section%20Video/a8132a81-b526-4f91-8095-003ce931ecdd.mp4'
 
 interface TelemetryMarker {
   id: string
