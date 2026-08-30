@@ -357,6 +357,12 @@ body {
 .pact-pulse-item:nth-child(2) .pact-pulse-node { animation-delay: 1.2s; }
 .pact-pulse-item:nth-child(3) .pact-pulse-node { animation-delay: 2.4s; }
 
+.pact-intro-overlay { animation: pact-dashboard-enter 420ms cubic-bezier(0.22, 1, 0.36, 1) both; }
+.pact-explainer-card {
+  opacity: 0;
+  animation: pact-dashboard-enter 520ms 120ms cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
 .mobile-safe-nav {
   height: calc(3.75rem + env(safe-area-inset-bottom, 0px));
   padding-bottom: env(safe-area-inset-bottom, 0px);
@@ -403,6 +409,9 @@ body {
     transform: none !important;
     filter: none !important;
   }
+
+  .pact-intro-overlay,
+  .pact-explainer-card { opacity: 1 !important; transform: none !important; }
 
   .pact-tape-panel::after { display: none !important; }
 }

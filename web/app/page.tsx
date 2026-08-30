@@ -448,57 +448,71 @@ function TapeDashboard() {
         </aside>
       </div>
 
-      {/* Institutional Settlement Lifecycle Explainer */}
-      <section id="how-it-works" className="mt-8 pt-6 border-t border-outline-hairline scroll-mt-24">
-        <div className="mb-4">
-          <p className="pact-eyebrow mb-1">Architecture & Settlement Flow</p>
-          <h2 className="font-display-mono text-[18px] font-bold text-white">
-            How PACT Works
-          </h2>
-        </div>
-        <div className="grid gap-3 sm:grid-cols-3">
-          <article className="border border-outline-hairline bg-[#0c0f12] p-4 flex flex-col justify-between">
-            <div>
-              <span className="font-display-mono text-[12px] font-bold text-primary-fixed">01</span>
-              <h3 className="mt-2 font-headline-mono text-[13px] font-bold uppercase tracking-wider text-white">
-                Anchor Written Terms
-              </h3>
-              <p className="mt-2 font-body-sans text-[12px] leading-5 text-text-muted">
-                Specify deal type, counterparties, deadlines, and plaintext terms. A cryptographic SHA-256 digest anchors the exact agreement on-chain.
-              </p>
-            </div>
-          </article>
-          <article className="border border-outline-hairline bg-[#0c0f12] p-4 flex flex-col justify-between">
-            <div>
-              <span className="font-display-mono text-[12px] font-bold text-primary-fixed">02</span>
-              <h3 className="mt-2 font-headline-mono text-[13px] font-bold uppercase tracking-wider text-white">
-                Exact Collateral Lock
-              </h3>
-              <p className="mt-2 font-body-sans text-[12px] leading-5 text-text-muted">
-                Maker and counterparty authorize and lock the exact escrow amount via permit or allowance. PACT never requests unlimited token access.
-              </p>
-            </div>
-          </article>
-          <article className="border border-outline-hairline bg-[#0c0f12] p-4 flex flex-col justify-between">
-            <div>
-              <span className="font-display-mono text-[12px] font-bold text-primary-fixed">03</span>
-              <h3 className="mt-2 font-headline-mono text-[13px] font-bold uppercase tracking-wider text-white">
-                Settlement & Dispute Bond
-              </h3>
-              <p className="mt-2 font-body-sans text-[12px] leading-5 text-text-muted">
-                Funds are settled on completion or refunded on expiration. A 5% bonded dispute mechanism protects against frivolous contestation.
-              </p>
-            </div>
-          </article>
-        </div>
-      </section>
     </div>
+  )
+}
+
+function ProtocolIntro() {
+  const [open, setOpen] = useState(false)
+
+  useEffect(() => {
+    if (sessionStorage.getItem('pact-protocol-intro-seen') !== 'true') setOpen(true)
+  }, [])
+
+  useEffect(() => {
+    if (!open) return
+    const previous = document.body.style.overflow
+    document.body.style.overflow = 'hidden'
+    return () => { document.body.style.overflow = previous }
+  }, [open])
+
+  const close = (goToFeatures = false) => {
+    sessionStorage.setItem('pact-protocol-intro-seen', 'true')
+    setOpen(false)
+    if (goToFeatures) requestAnimationFrame(() => document.getElementById('live-pacts')?.scrollIntoView({ behavior: 'smooth' }))
+  }
+
+  if (!open) return null
+
+  return (
+    <section role="dialog" aria-modal="true" aria-labelledby="protocol-intro-title" className="pact-intro-overlay fixed inset-0 z-[100] overflow-y-auto bg-[#070a08] text-white">
+      <div className="pact-tape-surface flex min-h-full items-center px-4 py-10 sm:px-8 lg:px-14">
+        <div className="mx-auto w-full max-w-[1368px] border-y border-outline-hairline py-7">
+          <button type="button" onClick={() => close(false)} aria-label="Close protocol introduction" className="absolute right-5 top-5 inline-flex h-11 w-11 items-center justify-center border border-outline-border bg-[#0c0f12] text-[22px] text-text-muted transition-colors hover:border-primary-fixed hover:text-primary-fixed focus-visible:outline focus-visible:outline-2 focus-visible:outline-primary-fixed sm:right-8 sm:top-8">
+            <span aria-hidden="true">×</span>
+          </button>
+          <div className="pr-14">
+            <p className="pact-eyebrow mb-1">Architecture & Settlement Flow</p>
+            <h1 id="protocol-intro-title" className="font-editorial text-[30px] font-normal tracking-[-0.025em]">How PACT Works</h1>
+            <p className="mt-2 max-w-2xl text-[12px] leading-5 text-text-muted">Three steps turn written terms into a verifiable, collateral-backed settlement on Arc.</p>
+          </div>
+          <div className="mt-7 grid gap-3 md:grid-cols-3">
+            {[
+              ['01', 'Anchor Written Terms', 'Specify deal type, counterparties, deadlines, and plaintext terms. A cryptographic SHA-256 digest anchors the exact agreement on-chain.'],
+              ['02', 'Exact Collateral Lock', 'Maker and counterparty authorize and lock the exact escrow amount via permit or allowance. PACT never requests unlimited token access.'],
+              ['03', 'Settlement & Dispute Bond', 'Funds are settled on completion or refunded on expiration. A 5% bonded dispute mechanism protects against frivolous contestation.'],
+            ].map(([number, title, copy], index) => (
+              <article key={number} className="pact-explainer-card min-h-[154px] border border-outline-hairline bg-[#0c0f12] p-5" style={{ animationDelay: `${160 + index * 100}ms` }}>
+                <span className="font-display-mono text-[12px] font-bold text-primary-fixed">{number}</span>
+                <h2 className="mt-3 font-headline-mono text-[13px] font-bold uppercase tracking-wider">{title}</h2>
+                <p className="mt-3 font-body-sans text-[12px] leading-5 text-text-muted">{copy}</p>
+              </article>
+            ))}
+          </div>
+          <div className="mt-7 flex flex-col-reverse gap-3 sm:flex-row sm:justify-end">
+            <button type="button" onClick={() => close(false)} className="pact-button-secondary min-h-[48px] px-6">View introduction hero</button>
+            <button type="button" onClick={() => close(true)} className="pact-button-primary min-h-[48px] px-7">Skip to features <span aria-hidden="true">↓</span></button>
+          </div>
+        </div>
+      </div>
+    </section>
   )
 }
 
 export default function Home() {
   return (
     <div className="w-full">
+      <ProtocolIntro />
       <Hero />
       <div id="live-pacts" className="pact-tape-surface mx-auto w-full max-w-[1440px] px-3 py-8 sm:px-8 sm:py-12 lg:px-14 pb-16 sm:pb-16 space-y-6 scroll-mt-16 sm:scroll-mt-20">
         <ErrorBoundary>
