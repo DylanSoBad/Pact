@@ -363,6 +363,56 @@ body {
   animation: pact-dashboard-enter 520ms 120ms cubic-bezier(0.22, 1, 0.36, 1) both;
 }
 
+/* ─── Continuous PACT Settlement Signal & Rail ─── */
+@keyframes pact-signal-flow {
+  0% { transform: translateY(-100%); opacity: 0; }
+  15% { opacity: 1; }
+  85% { opacity: 1; }
+  100% { transform: translateY(200%); opacity: 0; }
+}
+
+@keyframes pact-node-glow {
+  0%, 100% { box-shadow: 0 0 0 1px rgba(200, 245, 66, 0.3), 0 0 12px rgba(200, 245, 66, 0.4); }
+  50% { box-shadow: 0 0 0 2px rgba(200, 245, 66, 0.6), 0 0 20px rgba(200, 245, 66, 0.8); }
+}
+
+.pact-signal-line {
+  position: relative;
+  overflow: hidden;
+}
+
+.pact-signal-line::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 48px;
+  background: linear-gradient(180deg, transparent, var(--color-primary-fixed), transparent);
+  animation: pact-signal-flow 3.5s cubic-bezier(0.4, 0, 0.2, 1) infinite;
+  pointer-events: none;
+}
+
+.pact-node-active {
+  animation: pact-node-glow 2.5s ease-in-out infinite;
+}
+
+.pact-role-pane {
+  transition: opacity 220ms ease-out, transform 220ms ease-out;
+}
+
+.pact-security-card {
+  position: relative;
+  background-color: #0c0f12;
+  border: 1px solid var(--color-outline-hairline);
+  transition: border-color 160ms ease, background-color 160ms ease;
+}
+
+.pact-security-card:hover {
+  border-color: var(--color-outline-border);
+  background-color: #10141a;
+}
+
 .mobile-safe-nav {
   height: calc(3.75rem + env(safe-area-inset-bottom, 0px));
   padding-bottom: env(safe-area-inset-bottom, 0px);
@@ -394,7 +444,8 @@ body {
   .animate-enter-delay,
   .live-dot,
   .tape-row,
-  .pact-skeleton {
+  .pact-skeleton,
+  .pact-node-active {
     animation: none !important;
     transition: none !important;
   }
@@ -404,16 +455,19 @@ body {
   .pact-metric-card,
   .pact-tape-row-enter,
   .pact-collateral-progress,
-  .pact-pulse-item {
+  .pact-pulse-item,
+  .pact-role-pane {
     opacity: 1 !important;
     transform: none !important;
     filter: none !important;
+    transition: none !important;
   }
 
   .pact-intro-overlay,
   .pact-explainer-card { opacity: 1 !important; transform: none !important; }
 
-  .pact-tape-panel::after { display: none !important; }
+  .pact-tape-panel::after,
+  .pact-signal-line::after { display: none !important; }
 }
 
 /* ─── Custom Scrollbar for Terminal feel ─── */

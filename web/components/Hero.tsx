@@ -196,6 +196,15 @@ export default function Hero() {
             NON-CUSTODIAL · EXACT ERC-20 APPROVALS · ON-CHAIN TERMS HASH
           </p>
         </div>
+
+        {/* Continuous Settlement Signal Origin */}
+        <div
+          aria-hidden="true"
+          className="pointer-events-none flex flex-col items-center pt-6 opacity-80"
+        >
+          <span className="h-2 w-2 rounded-[1px] border border-primary-fixed bg-primary-fixed pact-node-active" />
+          <span className="pact-signal-line h-8 w-px bg-primary-fixed/40" />
+        </div>
       </div>
     </section>
   )
